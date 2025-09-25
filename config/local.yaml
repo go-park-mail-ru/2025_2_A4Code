@@ -1,0 +1,5 @@
+env: "local"
+storage_path: ""
+http_server:
+  address: "localhost:8080"
+
