@@ -15,10 +15,6 @@ var SECRET = []byte("secret")
 
 type Handlers struct{}
 
-func (handler *Handlers) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-
-}
-
 func New() *Handlers {
 	return &Handlers{}
 }
