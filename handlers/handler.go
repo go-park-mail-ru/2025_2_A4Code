@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	test_data "2025_2_a4code/handlers/test-data"
 	"2025_2_a4code/models"
 	"encoding/json"
 	"fmt"
@@ -14,11 +15,15 @@ var SECRET = []byte("secret")
 
 type Handlers struct{}
 
+func (handler *Handlers) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+
+}
+
 func New() *Handlers {
 	return &Handlers{}
 }
 
-func (handlers *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
+func (handler *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
 		return
@@ -73,7 +78,7 @@ func (handlers *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (handlers *Handlers) HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
+func (handler *Handlers) HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session_id")
 
 	if err != nil {
@@ -116,10 +121,33 @@ func (handlers *Handlers) HealthCheckHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	err = json.NewEncoder(w).Encode(map[string]any{
 		"status": "200",
 		"body": struct {
 			Message string `json:"message"`
 		}{"Hello, " + login},
 	})
+	if err != nil {
+		// ошибка
+		return
+	}
+}
+
+func (handler *Handlers) MainPageHandler(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	res := test_data.New()
+
+	w.Header().Set("Content-Type", "application/json")
+	err := json.NewEncoder(w).Encode(&res)
+
+	if err != nil {
+		http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
+		return
+	}
+
 }
