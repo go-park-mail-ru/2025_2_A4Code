@@ -13,6 +13,8 @@ func main() {
 
 	http.HandleFunc("/", h.HealthCheckHandler)
 	http.HandleFunc("/login", h.LoginHandler)
+	http.HandleFunc("/inbox", h.MainPageHandler)
+	http.HandleFunc("/signup", h.SignupHandler)
 
 	err := http.ListenAndServe(":"+cfg.AppConfig.Port, nil)
 

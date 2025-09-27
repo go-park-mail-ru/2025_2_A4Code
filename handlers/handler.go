@@ -131,7 +131,7 @@ func (handler *Handlers) HealthCheckHandler(w http.ResponseWriter, r *http.Reque
 
 func (handler *Handlers) MainPageHandler(w http.ResponseWriter, r *http.Request) {
 
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodGet {
 		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
 		return
 	}
@@ -145,5 +145,77 @@ func (handler *Handlers) MainPageHandler(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
 		return
 	}
+
+}
+
+func (handler *Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var credentials models.RegisteredUser
+	if err := json.NewDecoder(r.Body).Decode(&credentials); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	data := test_data.NewData()
+
+	// проверка логина
+	for _, user := range data {
+		if credentials.Login == user["login"] {
+			http.Error(w, "Пользователь с таким логином уже существует", http.StatusUnauthorized)
+			return
+		}
+	}
+
+	newUser := map[string]string{
+		"login":       credentials.Login,
+		"password":    credentials.Password,
+		"username":    credentials.Username,
+		"dateofbirth": credentials.DateOfBirth,
+		"gender":      credentials.Gender,
+	}
+
+	//записываем в мап
+	data = append(data, newUser)
+
+	// создаем токен
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"login": credentials.Login,
+	})
+
+	// подписываем
+	session, err := token.SignedString(SECRET)
+
+	if err != nil {
+		http.Error(w, "Ошибка регистрации", http.StatusInternalServerError)
+		return
+	}
+
+	cookie := &http.Cookie{
+		Name:     "session_id",
+		Value:    session,
+		MaxAge:   3600,
+		HttpOnly: true,
+	}
+
+	// ставим куки
+	http.SetCookie(w, cookie)
+
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(map[string]any{
+		"status": "200",
+		"body": struct {
+			Message string `json:"message"`
+		}{"Пользователь зарегистрирован"},
+	})
+
+	// res := test_data.New()
+
+	// w.Header().Set("Content-Type", "application/json")
+	// err := json.NewEncoder(w).Encode(&res)
 
 }
