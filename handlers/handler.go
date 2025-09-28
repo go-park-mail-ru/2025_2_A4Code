@@ -12,6 +12,7 @@ import (
 )
 
 var SECRET = []byte("secret")
+var users test_data.TestDataSignup
 
 type Handlers struct{}
 
@@ -32,7 +33,15 @@ func (handler *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// проверка логина и пароля
-	if credentials.Login != "admin" || credentials.Password != "admin" {
+	found := false
+	for _, user := range users {
+		if credentials.Login == user["login"] && credentials.Password == user["password"] {
+			found = true
+			break
+		}
+	}
+
+	if !found {
 		http.Error(w, "Неверный логин или пароль", http.StatusUnauthorized)
 		return
 	}
@@ -161,10 +170,8 @@ func (handler *Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := test_data.NewData()
-
 	// проверка логина
-	for _, user := range data {
+	for _, user := range users {
 		if credentials.Login == user["login"] {
 			http.Error(w, "Пользователь с таким логином уже существует", http.StatusUnauthorized)
 			return
@@ -180,7 +187,7 @@ func (handler *Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//записываем в мап
-	data = append(data, newUser)
+	users = append(users, newUser)
 
 	// создаем токен
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
