@@ -145,10 +145,13 @@ func (handler *Handlers) InboxHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TODO: Определение пользователя и выдача его списка писем
+
+	// Тестовые данные в виде map[string]interface{}
 	res := td.New()
 
+	// Отправляем ответ
 	w.Header().Set("Content-Type", "application/json")
-
 	err := json.NewEncoder(w).Encode(&res)
 	if err != nil {
 		http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
