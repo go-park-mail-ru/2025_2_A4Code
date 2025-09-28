@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	test_data "2025_2_a4code/handlers/test-data"
+	td "2025_2_a4code/handlers/test-data"
 	"2025_2_a4code/models"
 	"encoding/json"
 	"fmt"
@@ -12,7 +12,7 @@ import (
 )
 
 var SECRET = []byte("secret")
-var users test_data.TestDataSignup
+var users td.TestDataSignup
 
 type Handlers struct{}
 
@@ -22,7 +22,7 @@ func New() *Handlers {
 
 func (handler *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
+		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -138,18 +138,18 @@ func (handler *Handlers) HealthCheckHandler(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (handler *Handlers) MainPageHandler(w http.ResponseWriter, r *http.Request) {
+func (handler *Handlers) InboxHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodGet {
-		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
+		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
 		return
 	}
 
-	res := test_data.New()
+	res := td.New()
 
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(&res)
 
+	err := json.NewEncoder(w).Encode(&res)
 	if err != nil {
 		http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
 		return
@@ -160,7 +160,7 @@ func (handler *Handlers) MainPageHandler(w http.ResponseWriter, r *http.Request)
 func (handler *Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
+		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -220,7 +220,7 @@ func (handler *Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
 		}{"Пользователь зарегистрирован"},
 	})
 
-	// res := test_data.New()
+	// res := td.New()
 
 	// w.Header().Set("Content-Type", "application/json")
 	// err := json.NewEncoder(w).Encode(&res)

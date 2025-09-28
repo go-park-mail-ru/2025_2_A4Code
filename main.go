@@ -29,10 +29,14 @@ func main() {
 
 	http.Handle("/", corsMiddleware(http.HandlerFunc(h.HealthCheckHandler)))
 	http.Handle("/login", corsMiddleware(http.HandlerFunc(h.LoginHandler)))
-	http.Handle("/inbox", corsMiddleware(http.HandlerFunc(h.MainPageHandler)))
+	http.Handle("/inbox", corsMiddleware(http.HandlerFunc(h.InboxHandler)))
 	http.Handle("/signup", corsMiddleware(http.HandlerFunc(h.SignupHandler)))
 
 	err := http.ListenAndServe(":"+cfg.AppConfig.Port, nil)
+
+	// Для локального тестирования
+	//err := http.ListenAndServe(":8080", nil)
+
 	if err != nil {
 		panic(err)
 	}
