@@ -49,6 +49,7 @@ func (handler *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	// создаем токен
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"login": credentials.Login,
+		"exp":   time.Now().Add(time.Hour * 24).Unix(),
 	})
 
 	// подписываем
@@ -64,6 +65,7 @@ func (handler *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    session,
 		MaxAge:   3600,
 		HttpOnly: true,
+		Path:     "/",
 	}
 
 	// ставим куки
@@ -111,18 +113,18 @@ func (handler *Handlers) HealthCheckHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// извлекаем логин
-	login, ok := claims["login"].(string)
-	if !ok {
-		http.Error(w, "Логин не найден в токене", http.StatusBadRequest)
-		return
-	}
-
 	if exp, ok := claims["exp"].(float64); !ok {
 		if time.Now().Unix() > int64(exp) {
 			http.Error(w, "Токен просрочен", http.StatusUnauthorized)
 			return
 		}
+	}
+
+	// извлекаем логин
+	login, ok := claims["login"].(string)
+	if !ok {
+		http.Error(w, "Логин не найден в токене", http.StatusBadRequest)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -192,6 +194,7 @@ func (handler *Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
 	// создаем токен
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"login": credentials.Login,
+		"exp":   time.Now().Add(24 * time.Hour).Unix(),
 	})
 
 	// подписываем
@@ -207,6 +210,7 @@ func (handler *Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
 		Value:    session,
 		MaxAge:   3600,
 		HttpOnly: true,
+		Path:     "/",
 	}
 
 	// ставим куки
@@ -219,10 +223,27 @@ func (handler *Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
 			Message string `json:"message"`
 		}{"Пользователь зарегистрирован"},
 	})
+}
 
-	// res := test_data.New()
+func (handler *Handlers) LogoutHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
+		return
+	}
 
-	// w.Header().Set("Content-Type", "application/json")
-	// err := json.NewEncoder(w).Encode(&res)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_id",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+	})
 
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status": "200",
+		"body": struct {
+			Message string `json:"message"`
+		}{"Logged out"},
+	})
 }

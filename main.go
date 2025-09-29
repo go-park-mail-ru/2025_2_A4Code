@@ -31,6 +31,7 @@ func main() {
 	http.Handle("/login", corsMiddleware(http.HandlerFunc(h.LoginHandler)))
 	http.Handle("/inbox", corsMiddleware(http.HandlerFunc(h.MainPageHandler)))
 	http.Handle("/signup", corsMiddleware(http.HandlerFunc(h.SignupHandler)))
+	http.Handle("/logout", corsMiddleware(http.HandlerFunc(h.LogoutHandler)))
 
 	err := http.ListenAndServe(":"+cfg.AppConfig.Port, nil)
 	if err != nil {
