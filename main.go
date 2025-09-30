@@ -1,7 +1,6 @@
 package main
 
 import (
-	"2025_2_a4code/config"
 	"2025_2_a4code/handlers"
 	"net/http"
 )
@@ -23,7 +22,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 func main() {
-	cfg := config.GetConfig()
+	//cfg := config.GetConfig()
 
 	h := handlers.New()
 
@@ -32,11 +31,12 @@ func main() {
 	http.Handle("/inbox", corsMiddleware(http.HandlerFunc(h.InboxHandler)))
 	http.Handle("/signup", corsMiddleware(http.HandlerFunc(h.SignupHandler)))
 	http.Handle("/logout", corsMiddleware(http.HandlerFunc(h.LogoutHandler)))
+	http.Handle("/me", corsMiddleware(http.HandlerFunc(h.MeHandler)))
 
-	err := http.ListenAndServe(":"+cfg.AppConfig.Port, nil)
+	//err := http.ListenAndServe(":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
-	//err := http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(":8080", nil)
 
 	if err != nil {
 		panic(err)

@@ -1,16 +1,16 @@
-package test_data
+package mock_data
 
 import (
 	"fmt"
 )
 
-//type TestData struct {
+//type MockDataInbox struct {
 //	resp map[string]interface{}
 //}
 
-type TestData map[string]interface{}
+type MockDataInbox map[string]interface{}
 
-func New() TestData {
+func New() MockDataInbox {
 	messages := make([]map[string]interface{}, 10)
 
 	senders := []map[string]string{

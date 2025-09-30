@@ -1,10 +1,10 @@
 package handlers
 
 import (
-	td "2025_2_a4code/handlers/test-data"
+	md "2025_2_a4code/handlers/mock-data"
+	ua "2025_2_a4code/internal/lib/user-actions"
 	"2025_2_a4code/models"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -12,7 +12,7 @@ import (
 )
 
 var SECRET = []byte("secret")
-var users td.TestDataSignup
+var users md.MockDataSignup
 
 type Handlers struct{}
 
@@ -86,57 +86,9 @@ func (handler *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *Handlers) HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("session_id")
-
+	_, err := ua.CheckSession(r, SECRET)
 	if err != nil {
-		http.Error(w, "Сессия не найдена", http.StatusUnauthorized)
-		return
-	}
-
-	token, err := jwt.Parse(cookie.Value, func(token *jwt.Token) (interface{}, error) {
-		// проверяем метод подписи
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("неожиданный метод подписи: %v", token.Header["alg"])
-		}
-		return SECRET, nil
-	})
-
-	if err != nil || !token.Valid {
-		http.Error(w, "Неверный токен", http.StatusUnauthorized)
-		return
-	}
-
-	// Извлекаем claims
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		http.Error(w, "Ошибка при чтении данных токена", http.StatusInternalServerError)
-		return
-	}
-
-	if exp, ok := claims["exp"].(float64); !ok {
-		if time.Now().Unix() > int64(exp) {
-			http.Error(w, "Токен просрочен", http.StatusUnauthorized)
-			return
-		}
-	}
-
-	// извлекаем логин
-	login, ok := claims["login"].(string)
-	if !ok {
-		http.Error(w, "Логин не найден в токене", http.StatusBadRequest)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(map[string]any{
-		"status": "200",
-		"body": struct {
-			Message string `json:"message"`
-		}{"Hello, " + login},
-	})
-	if err != nil {
-		// ошибка
-		return
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 	}
 }
 
@@ -147,14 +99,18 @@ func (handler *Handlers) InboxHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Определение пользователя и выдача его списка писем
+	// TODO: Выдача списка писем конкретного пользователя
+	_, err := ua.GetCurrentUserData(r, SECRET, users)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+	}
 
 	// Тестовые данные в виде map[string]interface{}
-	res := td.New()
+	res := md.New()
 
 	// Отправляем ответ
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(&res)
+	err = json.NewEncoder(w).Encode(&res)
 	if err != nil {
 		http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
 		return
@@ -230,7 +186,7 @@ func (handler *Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
 
 func (handler *Handlers) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
+		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -249,4 +205,25 @@ func (handler *Handlers) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 			Message string `json:"message"`
 		}{"Logged out"},
 	})
+}
+
+func (handler *Handlers) MeHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
+	}
+
+	user, err := ua.GetCurrentUserData(r, SECRET, users)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+	}
+
+	// Отправляем ответ
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(map[string]any{
+		"status": "200",
+		"body":   user,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

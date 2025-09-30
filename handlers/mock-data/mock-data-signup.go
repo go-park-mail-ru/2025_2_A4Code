@@ -1,8 +1,8 @@
-package test_data
+package mock_data
 
-type TestDataSignup []map[string]string
+type MockDataSignup []map[string]string
 
-func NewData() TestDataSignup {
+func NewData() MockDataSignup {
 
 	users := []map[string]string{
 		{"login": "admin", "password": "kwdhcslkanwddj", "username": "Admin User", "dateofbirth": "12/09/2005", "gender": "male"},
