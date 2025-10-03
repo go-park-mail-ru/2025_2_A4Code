@@ -1,86 +1,73 @@
 ```mermaid
 erDiagram
     PROFILE {
-        _ Id PK
-        _ Login "AK"
-        _ PasswordHash
-        _ Name
-        _ Surname
-        _ Patronymic
-        _ Gender
-        _ Birthday
-        _ AvatarId FK
-        _ PhoneNumber "AK"
-        _ AuthVersion
+        Id PK
+        Login "AK"
+        PasswordHash
+        Name
+        Surname
+        Patronymic
+        Gender
+        Birthday
+        AvatarId FK
+        PhoneNumber "AK"
+        AuthVersion
     }
     MESSAGE {
-        _ Id PK
-        _ Topic
-        _ Text
-        _ DateOfDispatch
-        _ SenderId FK
-        _ ThreadId FK
-        _ IsRead
+        Id PK
+        Topic
+        Text
+        DateOfDispatch
+        SenderId FK
+        ThreadId FK
+        IsRead
     }
     THREAD {
-        _ Id PK
-        _ RootEmailId FK
+        Id PK
+        RootMessageId FK
     }
     RECIPIENT {
-        _ Id PK
-        _ MessageId FK
-        _ Address
+        Id PK
+        MessageId FK
+        Address
     }
     FILE {
-        _ Id PK
-        _ FileType
-        _ Size
-        _ StoragePath
+        Id PK
+        FileType
+        Size
+        StoragePath
     }
     MESSAGEFILE {
-        _ Id PK
-        _ MessageId FK
-        _ FileId FK
+        Id PK
+        MessageId FK
+        FileId FK
     }
     PROFILEMESSAGE {
-        _ ProfileId PK "FK"
-        _ MessageId PK "FK"
-        _ ReadStatus
-        _ DeletedStatus
-        _ DraftStatus
+        ProfileId PK "FK"
+        MessageId PK "FK"
+        ReadStatus
+        DeletedStatus
+        DraftStatus
     }
     FOLDER {
-        _ Id PK
-        _ ProfileId FK "AK"
-        _ Name "AK"
-        _ Type  " 'custom', 'inbox', 'sent', 'trash', etc. "
+        Id PK
+        ProfileId FK "AK"
+        Name "AK"
+        Type  " 'custom', 'inbox', 'sent', 'trash', etc. "
     }
     FOLDERMESSAGE {
-        _ FolderId PK "FK"
-        _ MessageId PK "FK"
+        FolderId PK "FK"
+        MessageId PK "FK"
     }
     SETTINGS {
-        _ Id PK
-        _ ProfileId FK "AK"
-        _ NotificationTolerance
-        _ Language
-        _ Theme
-        _ Signature
-    }
-    SESSION {
-        _ Id PK
-        _ ProfileId FK
-        _ CreationDate
-        _ Device
-        _ LifeTime
-        _ CsrfToken
-        _ RefreshToken
-        _ IpAddress
-        _ UserAgent
-        _ Revoked
+        Id PK
+        ProfileId FK "AK"
+        NotificationTolerance
+        Language
+        Theme
+        Signature
     }
 
-    PROFILE ||--o{ SESSION : "owns"
     PROFILE ||--o| SETTINGS : "has"
     PROFILE ||--o{ FOLDER : "owns"
     FOLDER ||--o{ FOLDERMESSAGE : "contains"
