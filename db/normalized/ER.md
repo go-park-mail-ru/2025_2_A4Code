@@ -1,17 +1,25 @@
 ```mermaid
 erDiagram
+    BASEPROFILE{
+        _ Id PK
+        _ Username
+        _ Domain
+        _ CreatedAt
+        _ UpdatedAt
+    }
     PROFILE {
         _ Id PK
-        _ Login "AK"
-        _ PasswordHash
+        _ BaseProfileId FK
         _ Name
         _ Surname
         _ Patronymic
         _ Gender
         _ Birthday
-        _ AvatarId FK
+        _ ImagePath
         _ PhoneNumber "AK"
         _ AuthVersion
+        _ CreatedAt
+        _ UpdatedAt
     }
     MESSAGE {
         _ Id PK
@@ -21,26 +29,23 @@ erDiagram
         _ SenderId FK
         _ ThreadId FK
         _ IsRead
+        _ CreatedAt
+        _ UpdatedAt
     }
     THREAD {
         _ Id PK
-        _ RootEmailId FK
-    }
-    RECIPIENT {
-        _ Id PK
-        _ MessageId FK
-        _ Address
+        _ RootMessageId FK
+        _ CreatedAt
+        _ UpdatedAt
     }
     FILE {
         _ Id PK
         _ FileType
         _ Size
         _ StoragePath
-    }
-    MESSAGEFILE {
-        _ Id PK
         _ MessageId FK
-        _ FileId FK
+        _ CreatedAt
+        _ UpdatedAt
     }
     PROFILEMESSAGE {
         _ ProfileId PK "FK"
@@ -48,16 +53,10 @@ erDiagram
         _ ReadStatus
         _ DeletedStatus
         _ DraftStatus
-    }
-    FOLDER {
-        _ Id PK
-        _ ProfileId FK "AK"
-        _ Name "AK"
-        _ Type  " 'custom', 'inbox', 'sent', 'trash', etc. "
-    }
-    FOLDERMESSAGE {
-        _ FolderId PK "FK"
-        _ MessageId PK "FK"
+        _ FolderName "AK"
+        _ FolderType  "'inbox', 'sent', 'trash', etc. "
+        _ CreatedAt
+        _ UpdatedAt
     }
     SETTINGS {
         _ Id PK
@@ -66,30 +65,14 @@ erDiagram
         _ Language
         _ Theme
         _ Signature
-    }
-    SESSION {
-        _ Id PK
-        _ ProfileId FK
-        _ CreationDate
-        _ Device
-        _ LifeTime
-        _ CsrfToken
-        _ RefreshToken
-        _ IpAddress
-        _ UserAgent
-        _ Revoked
+        _ CreatedAt
+        _ UpdatedAt
     }
 
-    PROFILE ||--o{ SESSION : "owns"
-    PROFILE ||--o| SETTINGS : "has"
-    PROFILE ||--o{ FOLDER : "owns"
-    FOLDER ||--o{ FOLDERMESSAGE : "contains"
-    MESSAGE ||--o{ FOLDERMESSAGE : "locatedIn"
+    BASEPROFILE ||--o| SETTINGS : "has"
     MESSAGE ||--o{ PROFILEMESSAGE : "relatedTo"
-    PROFILE ||--o{ PROFILEMESSAGE : "receivedBy"
-    MESSAGE ||--o{ MESSAGEFILE : "attaches"
-    FILE ||--o{ MESSAGEFILE : "attachedTo"
-    PROFILE ||--o| FILE : "hasAvatar"
-    MESSAGE ||--o{ RECIPIENT : "hasRecipient"
+    BASEPROFILE ||--o{ PROFILEMESSAGE : "receivedBy"
+    MESSAGE ||--o{ FILE : "attachedTo"
     THREAD ||--o{ MESSAGE : "groups"
+    PROFILE ||--|| BASEPROFILE : "extends"
 ```
