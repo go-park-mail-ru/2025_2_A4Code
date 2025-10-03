@@ -31,6 +31,13 @@ erDiagram
         _ CreatedAt
         _ UpdatedAt
     }
+    MESSAGE_RECIPIENT {
+        _ MessageId PK "FK"
+        _ RecipientBaseProfileId PK "FK"
+        _ RecipientType "ENUM('to', 'cc', 'bcc')"
+        _ CreatedAt
+        _ UpdatedAt
+    }
     THREAD {
         _ Id PK
         _ RootMessageId FK
@@ -72,6 +79,8 @@ erDiagram
     PROFILE ||--o{ PROFILEMESSAGE : "receivedBy"
     MESSAGE ||--o{ FILE : "attachedTo"
     THREAD ||--o{ MESSAGE : "groups"
-    PROFILE ||--|| BASEPROFILE : "extends"
-    BASEPROFILE ||--o{ MESSAGE : "SendsAs"
+    PROFILE }o--|| BASEPROFILE : "extends"
+    BASEPROFILE ||--o{ MESSAGE : "sendsAs"
+    MESSAGE ||--o{ MESSAGE_RECIPIENT : "hasRecipients"
+    BASEPROFILE ||--o{ MESSAGE_RECIPIENT : "receives"
 ```
