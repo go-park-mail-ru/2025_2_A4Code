@@ -106,7 +106,7 @@ DECLARE
     m3 INTEGER;
     m4 INTEGER;
 BEGIN
-    -- Вставка в base_profile (предполагая, что base_profile имеет 4 записи, аналогично profile)
+    -- Вставка в base_profile 
     INSERT INTO base_profile (username, domain)
     VALUES ('alexey', 'mailhub.su') RETURNING id INTO bp1;
     
@@ -132,13 +132,13 @@ BEGIN
     INSERT INTO profile (base_profile_id, password_hash, name, surname, patronymic, gender, birthday, phone_number)
     VALUES (bp4, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'Anna', 'Mihonina', 'Aleksandrovna', 'Female', '2003-08-20', '+79099499090') RETURNING id INTO p4;
     
-    -- Вставка в thread (добавляем четвертый thread)
+    -- Вставка в thread 
     INSERT INTO thread (root_message_id) VALUES (NULL) RETURNING id INTO t1;
     INSERT INTO thread (root_message_id) VALUES (NULL) RETURNING id INTO t2;
     INSERT INTO thread (root_message_id) VALUES (NULL) RETURNING id INTO t3;
     INSERT INTO thread (root_message_id) VALUES (NULL) RETURNING id INTO t4;
     
-    -- Вставка в message (исправлен topic для четвертого и sender_base_profile_id)
+    -- Вставка в message 
     INSERT INTO message (topic, text, sender_base_profile_id, thread_id)
     VALUES ('Topic1 Lorem ipsum.', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.', bp1, t1) RETURNING id INTO m1;
     
@@ -157,7 +157,7 @@ BEGIN
     UPDATE thread SET root_message_id = m3 WHERE id = t3;
     UPDATE thread SET root_message_id = m4 WHERE id = t4;
     
-    -- Вставка в profile_message (исправлены связи для согласованности)
+    -- Вставка в profile_message
     INSERT INTO profile_message (profile_id, message_id) VALUES (p1, m1);
     INSERT INTO profile_message (profile_id, message_id) VALUES (p2, m1);
     INSERT INTO profile_message (profile_id, message_id) VALUES (p1, m2);
