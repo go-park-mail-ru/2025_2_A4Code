@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS profile (
     name TEXT CHECK (LENGTH(name) <= 50),
     surname TEXT CHECK (LENGTH(surname) <= 50),
     patronymic TEXT CHECK (LENGTH(patronymic) <= 50),
-    gender TEXT CHECK (gender IN ('Male', 'Female', 'Other')),
+    gender TEXT CHECK (gender IN ('Male', 'Female')),
     birthday DATE,
     image_path TEXT CHECK (LENGTH(image_path) <= 200),
     phone_number TEXT UNIQUE CHECK (LENGTH(phone_number) <= 20),
