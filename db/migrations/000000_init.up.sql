@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     profile_id INTEGER NOT NULL UNIQUE REFERENCES profile(id) ON DELETE CASCADE,
     notification_tolerance INTEGER NOT NULL DEFAULT 0 CHECK (notification_tolerance >= 0),
-    language TEXT NOT NULL DEFAULT 'en' CHECK (LENGTH(language) <= 10),
+    language TEXT NOT NULL DEFAULT 'ru' CHECK (LENGTH(language) <= 10),
     theme TEXT NOT NULL DEFAULT 'light' CHECK (LENGTH(theme) <= 50),
     signature TEXT CHECK (LENGTH(signature) <= 500),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
