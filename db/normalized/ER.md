@@ -1,5 +1,6 @@
 ```mermaid
 erDiagram
+    BASEPRO
     PROFILE {
         Id PK
         Login "AK"
@@ -9,9 +10,25 @@ erDiagram
         Patronymic
         Gender
         Birthday
-        AvatarId FK
+        ImagePath FK
         PhoneNumber "AK"
         AuthVersion
+        CreatedAt
+        UpdatedAt
+    }
+        FOREINPROFILE {
+        Id PK
+        Login "AK"
+        Name
+        Surname
+        Patronymic
+        Gender
+        Birthday
+        AvatarId FK
+        PhoneNumber "AK"
+        AuthVersion 
+        CreatedAt
+        UpdatedAt
     }
     MESSAGE {
         Id PK
@@ -21,26 +38,23 @@ erDiagram
         SenderId FK
         ThreadId FK
         IsRead
+        CreatedAt
+        UpdatedAt
     }
     THREAD {
         Id PK
         RootMessageId FK
-    }
-    RECIPIENT {
-        Id PK
-        MessageId FK
-        Address
+        CreatedAt
+        UpdatedAt
     }
     FILE {
         Id PK
         FileType
         Size
         StoragePath
-    }
-    MESSAGEFILE {
-        Id PK
-        MessageId FK
-        FileId FK
+        MessageId
+        CreatedAt
+        UpdatedAt
     }
     PROFILEMESSAGE {
         ProfileId PK "FK"
@@ -48,16 +62,22 @@ erDiagram
         ReadStatus
         DeletedStatus
         DraftStatus
+        CreatedAt
+        UpdatedAt
     }
     FOLDER {
         Id PK
         ProfileId FK "AK"
         Name "AK"
         Type  " 'custom', 'inbox', 'sent', 'trash', etc. "
+        CreatedAt
+        UpdatedAt
     }
     FOLDERMESSAGE {
         FolderId PK "FK"
         MessageId PK "FK"
+        CreatedAt
+        UpdatedAt
     }
     SETTINGS {
         Id PK
@@ -66,6 +86,8 @@ erDiagram
         Language
         Theme
         Signature
+        CreatedAt
+        UpdatedAt
     }
 
     PROFILE ||--o| SETTINGS : "has"
