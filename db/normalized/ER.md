@@ -28,7 +28,6 @@ erDiagram
         _ DateOfDispatch
         _ SenderId FK
         _ ThreadId FK
-        _ IsRead
         _ CreatedAt
         _ UpdatedAt
     }
@@ -54,7 +53,6 @@ erDiagram
         _ DeletedStatus
         _ DraftStatus
         _ FolderName "AK"
-        _ FolderType  "'inbox', 'sent', 'trash', etc. "
         _ CreatedAt
         _ UpdatedAt
     }
@@ -69,9 +67,9 @@ erDiagram
         _ UpdatedAt
     }
 
-    BASEPROFILE ||--o| SETTINGS : "has"
+    PROFILE ||--o| SETTINGS : "has"
     MESSAGE ||--o{ PROFILEMESSAGE : "relatedTo"
-    BASEPROFILE ||--o{ PROFILEMESSAGE : "receivedBy"
+    PROFILE ||--o{ PROFILEMESSAGE : "receivedBy"
     MESSAGE ||--o{ FILE : "attachedTo"
     THREAD ||--o{ MESSAGE : "groups"
     PROFILE ||--|| BASEPROFILE : "extends"
