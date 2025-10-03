@@ -26,7 +26,7 @@ erDiagram
         _ Topic
         _ Text
         _ DateOfDispatch
-        _ SenderId FK
+        _ SenderBaseProfileId FK
         _ ThreadId FK
         _ CreatedAt
         _ UpdatedAt
@@ -52,7 +52,7 @@ erDiagram
         _ ReadStatus
         _ DeletedStatus
         _ DraftStatus
-        _ FolderName "AK"
+        _ FolderName 
         _ CreatedAt
         _ UpdatedAt
     }
@@ -73,4 +73,5 @@ erDiagram
     MESSAGE ||--o{ FILE : "attachedTo"
     THREAD ||--o{ MESSAGE : "groups"
     PROFILE ||--|| BASEPROFILE : "extends"
+    BASEPROFILE ||--o{ MESSAGE : "SendsAs"
 ```
