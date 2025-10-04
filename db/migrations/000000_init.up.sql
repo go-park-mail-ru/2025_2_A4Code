@@ -7,8 +7,7 @@ CREATE TABLE IF NOT EXISTS base_profile (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (username),
-    UNIQUE (username, domain)  -- Уникальная пара для email-like идентификатора
-);
+    UNIQUE (username, domain)
 
 -- Триггер для updated_at в base_profile
 CREATE OR REPLACE FUNCTION update_updated_at()
@@ -28,12 +27,12 @@ CREATE TABLE IF NOT EXISTS profile (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     base_profile_id INTEGER NOT NULL UNIQUE REFERENCES base_profile(id) ON DELETE CASCADE,
     password_hash TEXT NOT NULL CHECK (LENGTH(password_hash) BETWEEN 1 AND 200),
-    name TEXT CHECK (LENGTH(name) <= 50),  -- Мин не обязателен, если имя опционально
-    surname TEXT CHECK (LENGTH(surname) <= 50),
-    patronymic TEXT CHECK (LENGTH(patronymic) <= 50),
+    name TEXT CHECK (LENGTH(name) BETWEEN 1 AND 50),  
+    surname TEXT CHECK (LENGTH(surname) BETWEEN 1 AND 200),
+    patronymic TEXT CHECK (LENGTH(patronymic) BETWEEN 1 AND 200),
     gender TEXT CHECK (gender IN ('Male', 'Female')),
     birthday DATE,
-    image_path TEXT CHECK (LENGTH(image_path) <= 200),
+    image_path TEXT CHECK (LENGTH(image_path) BETWEEN 1 AND 200),
     phone_number TEXT UNIQUE CHECK (LENGTH(phone_number) BETWEEN 1 AND 20),
     auth_version INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
