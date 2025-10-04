@@ -93,7 +93,7 @@ erDiagram
 erDiagram
     BASEPROFILE {
         _ Id PK
-        _ Username
+        _ Username "AK"
         _ Domain
         _ CreatedAt
         _ UpdatedAt
@@ -173,6 +173,8 @@ erDiagram
 ### BASEPROFILE
 ```text
 {Id} → {Username, Domain, CreatedAt, UpdatedAt}
+{Username} → {Id, Domain, CreatedAt, UpdatedAt}  
+{Username, Domain} → {Id, CreatedAt, UpdatedAt} 
 ```
 PROFILE
 ```text

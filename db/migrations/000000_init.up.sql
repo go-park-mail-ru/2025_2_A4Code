@@ -2,28 +2,48 @@
 -- Создание таблицы базовых профилей (base_profile)
 CREATE TABLE IF NOT EXISTS base_profile (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    username TEXT NOT NULL CHECK (LENGTH(username) <= 50),
-    domain TEXT NOT NULL CHECK (LENGTH(domain) <= 50),
+    username TEXT NOT NULL CHECK (LENGTH(username) BETWEEN 1 AND 50),
+    domain TEXT NOT NULL CHECK (LENGTH(domain) BETWEEN 1 AND 50),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (username),
+    UNIQUE (username, domain)  -- Уникальная пара для email-like идентификатора
 );
+
+-- Триггер для updated_at в base_profile
+CREATE OR REPLACE FUNCTION update_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER base_profile_update_trigger
+BEFORE UPDATE ON base_profile
+FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 
 -- Создание таблицы профилей (profile)
 CREATE TABLE IF NOT EXISTS profile (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     base_profile_id INTEGER NOT NULL UNIQUE REFERENCES base_profile(id) ON DELETE CASCADE,
-    password_hash TEXT NOT NULL CHECK (LENGTH(password_hash) <= 200),
-    name TEXT CHECK (LENGTH(name) <= 50),
+    password_hash TEXT NOT NULL CHECK (LENGTH(password_hash) BETWEEN 1 AND 200),
+    name TEXT CHECK (LENGTH(name) <= 50),  -- Мин не обязателен, если имя опционально
     surname TEXT CHECK (LENGTH(surname) <= 50),
     patronymic TEXT CHECK (LENGTH(patronymic) <= 50),
     gender TEXT CHECK (gender IN ('Male', 'Female')),
     birthday DATE,
     image_path TEXT CHECK (LENGTH(image_path) <= 200),
-    phone_number TEXT UNIQUE CHECK (LENGTH(phone_number) <= 20),
+    phone_number TEXT UNIQUE CHECK (LENGTH(phone_number) BETWEEN 1 AND 20),
     auth_version INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Триггер для updated_at в profile
+CREATE TRIGGER profile_update_trigger
+BEFORE UPDATE ON profile
+FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 
 -- Создание таблицы цепочек сообщений (thread) без foreign key сначала
 CREATE TABLE IF NOT EXISTS thread (
@@ -33,10 +53,16 @@ CREATE TABLE IF NOT EXISTS thread (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Триггер для updated_at в thread
+CREATE TRIGGER thread_update_trigger
+BEFORE UPDATE ON thread
+FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
+
 -- Создание таблицы сообщений (message)
+-- DateOfDispatch - бизнес-время отправки (может отличаться от created_at, напр. для черновиков)
 CREATE TABLE IF NOT EXISTS message (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    topic TEXT CHECK (LENGTH(topic) <= 200),
+    topic TEXT CHECK (LENGTH(topic) BETWEEN 1 AND 200),
     text TEXT,
     date_of_dispatch TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     sender_base_profile_id INTEGER NOT NULL REFERENCES base_profile(id) ON DELETE NO ACTION,
@@ -44,6 +70,11 @@ CREATE TABLE IF NOT EXISTS message (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Триггер для updated_at в message
+CREATE TRIGGER message_update_trigger
+BEFORE UPDATE ON message
+FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 
 -- Добавление foreign key в thread после создания message
 ALTER TABLE thread
@@ -53,13 +84,18 @@ FOREIGN KEY (root_message_id) REFERENCES message(id) ON DELETE SET NULL;
 -- Создание таблицы файлов (file)
 CREATE TABLE IF NOT EXISTS file (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    file_type TEXT NOT NULL CHECK (LENGTH(file_type) <= 100),
+    file_type TEXT NOT NULL CHECK (LENGTH(file_type) BETWEEN 1 AND 100),
     size BIGINT NOT NULL CHECK (size >= 0),
-    storage_path TEXT NOT NULL CHECK (LENGTH(storage_path) <= 200),
+    storage_path TEXT NOT NULL CHECK (LENGTH(storage_path) BETWEEN 1 AND 200),
     message_id INTEGER NOT NULL REFERENCES message(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Триггер для updated_at в file
+CREATE TRIGGER file_update_trigger
+BEFORE UPDATE ON file
+FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 
 -- Создание таблицы связи профилей и сообщений (profile_message)
 CREATE TABLE IF NOT EXISTS profile_message (
@@ -68,23 +104,33 @@ CREATE TABLE IF NOT EXISTS profile_message (
     read_status BOOLEAN NOT NULL DEFAULT FALSE,
     deleted_status BOOLEAN NOT NULL DEFAULT FALSE,
     draft_status BOOLEAN NOT NULL DEFAULT FALSE,
-    folder_name TEXT NOT NULL DEFAULT 'Inbox' CHECK (LENGTH(folder_name) <= 100),
+    folder_name TEXT NOT NULL DEFAULT 'Inbox' CHECK (LENGTH(folder_name) BETWEEN 1 AND 100),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (profile_id, message_id)
 );
+
+-- Триггер для updated_at в profile_message
+CREATE TRIGGER profile_message_update_trigger
+BEFORE UPDATE ON profile_message
+FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 
 -- Создание таблицы настроек (settings)
 CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     profile_id INTEGER NOT NULL UNIQUE REFERENCES profile(id) ON DELETE CASCADE,
     notification_tolerance INTEGER NOT NULL DEFAULT 0 CHECK (notification_tolerance >= 0),
-    language TEXT NOT NULL DEFAULT 'ru' CHECK (LENGTH(language) <= 10),
-    theme TEXT NOT NULL DEFAULT 'light' CHECK (LENGTH(theme) <= 50),
+    language TEXT NOT NULL DEFAULT 'ru' CHECK (LENGTH(language) BETWEEN 1 AND 10),
+    theme TEXT NOT NULL DEFAULT 'light' CHECK (LENGTH(theme) BETWEEN 1 AND 50),
     signature TEXT CHECK (LENGTH(signature) <= 500),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Триггер для updated_at в settings
+CREATE TRIGGER settings_update_trigger
+BEFORE UPDATE ON settings
+FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 
 -- Вставка начальных данных 
 DO $$
@@ -108,16 +154,16 @@ DECLARE
 BEGIN
     -- Вставка в base_profile 
     INSERT INTO base_profile (username, domain)
-    VALUES ('alexey', 'mailhub.su') RETURNING id INTO bp1;
+    VALUES ('alexey', 'a4mail.ru') RETURNING id INTO bp1;
     
     INSERT INTO base_profile (username, domain)
-    VALUES ('antonina', 'mailhub.su') RETURNING id INTO bp2;
+    VALUES ('antonina', 'a4mail.ru') RETURNING id INTO bp2;
     
     INSERT INTO base_profile (username, domain)
-    VALUES ('andrey', 'mailhub.su') RETURNING id INTO bp3;
+    VALUES ('andrey', 'a4mail.ru') RETURNING id INTO bp3;
     
     INSERT INTO base_profile (username, domain)
-    VALUES ('anna', 'mailhub.su') RETURNING id INTO bp4;
+    VALUES ('anna', 'a4mail.ru') RETURNING id INTO bp4;
     
     -- Вставка в profile
     INSERT INTO profile (base_profile_id, password_hash, name, surname, patronymic, gender, birthday, phone_number)
