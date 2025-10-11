@@ -26,7 +26,7 @@ FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 CREATE TABLE IF NOT EXISTS profile (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     base_profile_id INTEGER NOT NULL UNIQUE REFERENCES base_profile(id) ON DELETE CASCADE,
-    password_hash TEXT NOT NULL CHECK (LENGTH(password_hash) BETWEEN 1 AND 200),
+    password_hash TEXT NOT NULL CHECK (LENGTH(password_hash) = 60),
     name TEXT CHECK (LENGTH(name) BETWEEN 1 AND 50),  
     surname TEXT CHECK (LENGTH(surname) BETWEEN 1 AND 200),
     patronymic TEXT CHECK (LENGTH(patronymic) BETWEEN 1 AND 200),
@@ -84,8 +84,20 @@ FOREIGN KEY (root_message_id) REFERENCES message(id) ON DELETE SET NULL;
 CREATE TABLE IF NOT EXISTS file (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     file_type TEXT NOT NULL CHECK (LENGTH(file_type) BETWEEN 1 AND 100),
-    size BIGINT NOT NULL CHECK (size >= 0),
-    storage_path TEXT NOT NULL CHECK (LENGTH(storage_path) BETWEEN 1 AND 200),
+    size BIGINT NOT NULL CHECK (size >= 0 AND size <= 1073741824),                       -- 1 GB максимум
+        CONSTRAINT file_size_limit CHECK (
+        (file_type IN ('image', 'avatar') AND size <= 10485760) OR                       -- 10 MB для изображений
+        (file_type = 'document' AND size <= 52428800) OR                                 -- 50 MB для документов  
+        (file_type = 'video' AND size <= 1073741824) OR                                  -- 1 GB для видео
+        (file_type NOT IN ('image', 'avatar', 'document', 'video') AND size <= 10485760) -- 10 MB по умолчанию
+        ),
+    storage_path TEXT NOT NULL CHECK (
+        LENGTH(storage_path) BETWEEN 1 AND 200 AND
+        storage_path ~ '^[\w\-./]+[\w\-]$' AND       -- разрешенные символы, не заканчивается на слеш/точку
+        storage_path !~ '\.\.' AND                   -- запрет на parent directory traversal
+        storage_path !~ '^/' AND                     -- относительные пути
+        storage_path ~ '\.\w{1,10}$'                 -- должно быть расширение файла (1-10 символов)
+    ),
     message_id INTEGER NOT NULL REFERENCES message(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -115,11 +127,13 @@ BEFORE UPDATE ON profile_message
 FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 
 -- Создание таблицы настроек (settings)
+CREATE TYPE app_language AS ENUM ('ru', 'en', 'de', 'fr', 'es', 'zh', 'ja');
+
 CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     profile_id INTEGER NOT NULL UNIQUE REFERENCES profile(id) ON DELETE CASCADE,
     notification_tolerance INTEGER NOT NULL DEFAULT 0 CHECK (notification_tolerance >= 0),
-    language TEXT NOT NULL DEFAULT 'ru' CHECK (LENGTH(language) BETWEEN 1 AND 10),
+    language app_language NOT NULL DEFAULT 'ru',
     theme TEXT NOT NULL DEFAULT 'light' CHECK (LENGTH(theme) BETWEEN 1 AND 50),
     signature TEXT CHECK (LENGTH(signature) <= 500),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
