@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-func (handler *Handlers) LogoutHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
 		return

@@ -9,7 +9,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func (handler *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
 		return

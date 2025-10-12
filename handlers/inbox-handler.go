@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-func (handler *Handlers) InboxHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) InboxHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodGet {
 		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)

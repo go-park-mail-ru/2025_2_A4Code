@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-func (handler *Handlers) HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	_, err := ua.CheckSession(r, SECRET)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
