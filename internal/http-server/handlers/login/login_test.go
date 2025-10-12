@@ -1,6 +1,7 @@
-package handlers
+package login
 
 import (
+	handlers2 "2025_2_a4code/internal/http-server/handlers"
 	"bytes"
 	"encoding/json"
 	"net/http"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestLoginHandler(t *testing.T) {
-	h := New()
+	h := handlers2.New()
 	defer h.Reset()
 
 	tests := []struct {
@@ -70,7 +71,7 @@ func TestLoginHandler(t *testing.T) {
 }
 
 func TestLoginHandler_Success(t *testing.T) {
-	h := New()
+	h := handlers2.New()
 	defer h.Reset()
 
 	users := h.GetUsers()

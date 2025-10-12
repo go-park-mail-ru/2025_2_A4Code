@@ -1,7 +1,7 @@
 package user_actions
 
 import (
-	md "2025_2_a4code/handlers/mock-data"
+	md "2025_2_a4code/mocks/mock-data"
 	"fmt"
 	"net/http"
 	"time"

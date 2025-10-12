@@ -1,11 +1,12 @@
-package handlers
+package logout
 
 import (
+	handlers2 "2025_2_a4code/internal/http-server/handlers"
 	"encoding/json"
 	"net/http"
 )
 
-func (h *Handlers) LogoutHandler(w http.ResponseWriter, r *http.Request) {
+func (h *handlers2.Handlers) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
 		return

@@ -1,6 +1,7 @@
-package handlers
+package signup
 
 import (
+	handlers2 "2025_2_a4code/internal/http-server/handlers"
 	"2025_2_a4code/models"
 	"encoding/json"
 	"net/http"
@@ -9,7 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func (h *Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
+func (h *handlers2.Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
@@ -23,7 +24,7 @@ func (h *Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// проверка логина
-	for _, user := range users {
+	for _, user := range handlers2.users {
 		if credentials.Login == user["login"] {
 			http.Error(w, "Пользователь с таким логином уже существует", http.StatusUnauthorized)
 			return
@@ -39,7 +40,7 @@ func (h *Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//записываем в мап
-	users = append(users, newUser)
+	handlers2.users = append(handlers2.users, newUser)
 
 	// создаем токен
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -48,7 +49,7 @@ func (h *Handlers) SignupHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// подписываем
-	session, err := token.SignedString(SECRET)
+	session, err := token.SignedString(handlers2.SECRET)
 
 	if err != nil {
 		http.Error(w, "Ошибка регистрации", http.StatusInternalServerError)

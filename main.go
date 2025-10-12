@@ -1,8 +1,8 @@
 package main
 
 import (
-	"2025_2_a4code/config"
-	"2025_2_a4code/handlers"
+	"2025_2_a4code/internal/config"
+	"2025_2_a4code/internal/http-server/handlers"
 	"net/http"
 )
 

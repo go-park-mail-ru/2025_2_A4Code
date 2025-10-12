@@ -1,13 +1,14 @@
-package handlers
+package inbox
 
 import (
+	handlers2 "2025_2_a4code/internal/http-server/handlers"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
-func TestHealthCheckHandler(t *testing.T) {
-	h := New()
+func TestInboxHandler(t *testing.T) {
+	h := handlers2.New()
 	defer h.Reset()
 
 	tests := []struct {
@@ -16,6 +17,11 @@ func TestHealthCheckHandler(t *testing.T) {
 		setupAuth      bool
 		expectedStatus int
 	}{
+		{
+			name:           "Wrong method",
+			method:         "POST",
+			expectedStatus: http.StatusMethodNotAllowed,
+		},
 		{
 			name:           "Without authentication",
 			method:         "GET",
@@ -31,16 +37,16 @@ func TestHealthCheckHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, "/health", nil)
+			req := httptest.NewRequest(tt.method, "/inbox", nil)
 
 			if tt.setupAuth {
 				users := h.GetUsers()
 				testUser := map[string]string{
-					"login": "healthuser",
+					"login": "inboxuser",
 				}
 				h.SetUsers(append(users, testUser))
 
-				token, _ := h.CreateToken("healthuser")
+				token, _ := h.CreateToken("inboxuser")
 				req.AddCookie(&http.Cookie{
 					Name:  "session_id",
 					Value: token,
@@ -49,7 +55,7 @@ func TestHealthCheckHandler(t *testing.T) {
 
 			w := httptest.NewRecorder()
 
-			h.HealthCheckHandler(w, req)
+			h.InboxHandler(w, req)
 
 			if w.Code != tt.expectedStatus {
 				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)

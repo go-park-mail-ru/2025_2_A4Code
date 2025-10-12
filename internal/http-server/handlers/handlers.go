@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	md "2025_2_a4code/handlers/mock-data"
+	md "2025_2_a4code/mocks/mock-data"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"

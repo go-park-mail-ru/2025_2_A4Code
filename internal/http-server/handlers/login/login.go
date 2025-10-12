@@ -1,6 +1,7 @@
-package handlers
+package login
 
 import (
+	handlers2 "2025_2_a4code/internal/http-server/handlers"
 	"2025_2_a4code/models"
 	"encoding/json"
 	"net/http"
@@ -9,7 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func (h *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
+func (h *handlers2.Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
 		return
@@ -23,7 +24,7 @@ func (h *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 	// проверка логина и пароля
 	found := false
-	for _, user := range users {
+	for _, user := range handlers2.users {
 		if credentials.Login == user["login"] && credentials.Password == user["password"] {
 			found = true
 			break
@@ -42,7 +43,7 @@ func (h *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// подписываем
-	session, err := token.SignedString(SECRET)
+	session, err := token.SignedString(handlers2.SECRET)
 
 	if err != nil {
 		http.Error(w, "Ошибка авторизации", http.StatusInternalServerError)

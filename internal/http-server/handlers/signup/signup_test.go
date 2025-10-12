@@ -1,6 +1,7 @@
-package handlers
+package signup
 
 import (
+	handlers2 "2025_2_a4code/internal/http-server/handlers"
 	"bytes"
 	"encoding/json"
 	"net/http"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestSignupHandler(t *testing.T) {
-	h := New()
+	h := handlers2.New()
 	defer h.Reset()
 
 	tests := []struct {
@@ -78,7 +79,7 @@ func TestSignupHandler(t *testing.T) {
 }
 
 func TestSignupHandler_DuplicateUser(t *testing.T) {
-	h := New()
+	h := handlers2.New()
 	defer h.Reset()
 
 	users := h.GetUsers()

@@ -1,13 +1,14 @@
-package handlers
+package logout
 
 import (
+	handlers2 "2025_2_a4code/internal/http-server/handlers"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
 func TestLogoutHandler(t *testing.T) {
-	h := New()
+	h := handlers2.New()
 
 	tests := []struct {
 		name           string
