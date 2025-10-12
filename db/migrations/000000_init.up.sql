@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS profile (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     base_profile_id INTEGER NOT NULL UNIQUE REFERENCES base_profile(id) ON DELETE CASCADE,
     password_hash TEXT NOT NULL,
+    salt TEXT NOT NULL,
     name TEXT CHECK (LENGTH(name) BETWEEN 1 AND 50),  
     surname TEXT CHECK (LENGTH(surname) BETWEEN 1 AND 200),
     patronymic TEXT CHECK (LENGTH(patronymic) BETWEEN 1 AND 200),
@@ -179,17 +180,17 @@ BEGIN
     VALUES ('anna', 'a4mail.ru') RETURNING id INTO bp4;
     
     -- Вставка в profile
-    INSERT INTO profile (base_profile_id, password_hash, name, surname, patronymic, gender, birthday, phone_number)
-    VALUES (bp1, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'Alexey', 'Gusev', 'Nikolaevich', 'Male', '2003-08-20', '+77777777777') RETURNING id INTO p1;
+    INSERT INTO profile (base_profile_id, password_hash, salt, name, surname, patronymic, gender, birthday, phone_number)
+    VALUES (bp1, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'bjdokdda', 'Alexey', 'Gusev', 'Nikolaevich', 'Male', '2003-08-20', '+77777777777') RETURNING id INTO p1;
     
-    INSERT INTO profile (base_profile_id, password_hash, name, surname, patronymic, gender, birthday, phone_number)
-    VALUES (bp2, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'Antonina', 'Andreeva', 'Aleksandrovna', 'Female', '2003-10-17', '+79697045539') RETURNING id INTO p2;
+    INSERT INTO profile (base_profile_id, password_hash, salt, name, surname, patronymic, gender, birthday, phone_number)
+    VALUES (bp2, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'bjdokdda', 'Antonina', 'Andreeva', 'Aleksandrovna', 'Female', '2003-10-17', '+79697045539') RETURNING id INTO p2;
     
-    INSERT INTO profile (base_profile_id, password_hash, name, surname, patronymic, gender, birthday, phone_number)
-    VALUES (bp3, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'Andrey', 'Vavilov', 'Nikolaevich', 'Male', '2003-08-20', '+79099099090') RETURNING id INTO p3;
+    INSERT INTO profile (base_profile_id, password_hash, salt, name, surname, patronymic, gender, birthday, phone_number)
+    VALUES (bp3, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'bjdokdda', 'Andrey', 'Vavilov', 'Nikolaevich', 'Male', '2003-08-20', '+79099099090') RETURNING id INTO p3;
     
-    INSERT INTO profile (base_profile_id, password_hash, name, surname, patronymic, gender, birthday, phone_number)
-    VALUES (bp4, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'Anna', 'Mihonina', 'Aleksandrovna', 'Female', '2003-08-20', '+79099499090') RETURNING id INTO p4;
+    INSERT INTO profile (base_profile_id, password_hash, salt, name, surname, patronymic, gender, birthday, phone_number)
+    VALUES (bp4, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'bjdokdda', 'Anna', 'Mihonina', 'Aleksandrovna', 'Female', '2003-08-20', '+79099499090') RETURNING id INTO p4;
     
     -- Вставка в thread 
     INSERT INTO thread (root_message_id) VALUES (NULL) RETURNING id INTO t1;

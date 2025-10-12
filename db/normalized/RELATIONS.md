@@ -11,6 +11,7 @@
 - Id: Уникальный идентификатор пользователя в базе данных
 - BaseProfileId: Ссылка на базовый профиль в таблице BaseProfile
 - PasswordHash: Хэш пароля пользователя
+- Salt: Соль пароля
 - Name: Имя пользователя
 - Surname: Фамилия пользователя
 - Patronymic: Отчество пользователя
@@ -102,6 +103,7 @@ erDiagram
         _ Id PK
         _ BaseProfileId FK
         _ PasswordHash
+        _ Salt
         _ Name
         _ Surname
         _ Patronymic
@@ -178,7 +180,7 @@ erDiagram
 ```
 PROFILE
 ```text
-{Id} → {BaseProfileId, PasswordHash, Name, Surname, Patronymic, Gender, Birthday, ImagePath, PhoneNumber, 
+{Id} → {BaseProfileId, PasswordHash, Salt, Name, Surname, Patronymic, Gender, Birthday, ImagePath, PhoneNumber, 
 AuthVersion, CreatedAt, UpdatedAt}
 {PhoneNumber} → {Id}
 {BaseProfileId} → {Id}
