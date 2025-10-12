@@ -26,7 +26,7 @@ FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 CREATE TABLE IF NOT EXISTS profile (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     base_profile_id INTEGER NOT NULL UNIQUE REFERENCES base_profile(id) ON DELETE CASCADE,
-    password_hash TEXT NOT NULL CHECK (LENGTH(password_hash) = 60),
+    password_hash TEXT NOT NULL CHECK (LENGTH(password_hash) BETWEEN 1 AND 200),
     name TEXT CHECK (LENGTH(name) BETWEEN 1 AND 50),  
     surname TEXT CHECK (LENGTH(surname) BETWEEN 1 AND 200),
     patronymic TEXT CHECK (LENGTH(patronymic) BETWEEN 1 AND 200),
