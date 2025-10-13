@@ -58,7 +58,7 @@ func TestInboxHandler(t *testing.T) {
 			h.InboxHandler(w, req)
 
 			if w.Code != tt.expectedStatus {
-				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
+				t.Errorf("Expected Status %d, got %d", tt.expectedStatus, w.Code)
 			}
 		})
 	}
