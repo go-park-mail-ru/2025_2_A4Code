@@ -1,7 +1,6 @@
-package user_actions
+package session
 
 import (
-	md "2025_2_a4code/mocks/mock-data"
 	"fmt"
 	"net/http"
 	"time"
@@ -41,30 +40,15 @@ func CheckSession(r *http.Request, SECRET []byte) (jwt.MapClaims, error) {
 	return claims, nil
 }
 
-func getUserLogin(r *http.Request, SECRET []byte) (string, error) {
+func GetProfileID(r *http.Request, SECRET []byte) (int64, error) {
 	claims, err := CheckSession(r, SECRET)
 	if err != nil {
-		return "", err
+		return -1, err
 	}
-	login, ok := claims["login"].(string)
+	id, ok := claims["ID"].(int64)
 	if !ok {
-		return "", fmt.Errorf("логин не найден в токене")
+		return -1, fmt.Errorf("id не найден в токене")
 	}
 
-	return login, nil
-}
-
-func GetCurrentUserData(r *http.Request, SECRET []byte, users md.MockDataSignup) (map[string]string, error) {
-	login, err := getUserLogin(r, SECRET)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, user := range users {
-		if user["login"] == login {
-			return user, nil
-		}
-	}
-
-	return nil, fmt.Errorf("пользователь не найден")
+	return id, nil
 }

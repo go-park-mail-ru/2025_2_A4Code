@@ -2,7 +2,7 @@ package health_check
 
 import (
 	"2025_2_a4code/internal/http-server/handlers"
-	ua "2025_2_a4code/internal/lib/user-actions"
+	ua "2025_2_a4code/internal/lib/session"
 	"net/http"
 )
 

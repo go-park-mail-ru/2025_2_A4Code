@@ -1,32 +1,43 @@
 package inbox
 
 import (
-	handlers2 "2025_2_a4code/internal/http-server/handlers"
-	ua "2025_2_a4code/internal/lib/user-actions"
-	md "2025_2_a4code/mocks/mock-data"
+	"2025_2_a4code/internal/lib/session"
+	"2025_2_a4code/internal/usecase"
 	"encoding/json"
 	"net/http"
 )
 
-func (h *handlers2.Handlers) InboxHandler(w http.ResponseWriter, r *http.Request) {
+// TODO: убрать отсюда
+var SECRET = []byte("secret")
+
+type InboxHandler struct {
+	profileUcase *usecase.ProfileUcase
+}
+
+func New(uc *usecase.ProfileUcase) *InboxHandler {
+	return &InboxHandler{profileUcase: uc}
+}
+
+func (h *InboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodGet {
 		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// TODO: Выдача списка писем конкретного пользователя
-	_, err := ua.GetCurrentUserData(r, handlers2.SECRET, handlers2.users)
+	id, err := session.GetProfileID(r, SECRET)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 	}
 
-	// Тестовые данные в виде map[string]interface{}
-	res := md.New()
+	profile, err := h.profileUcase.GetByID(id)
+	if err != nil {
+
+	}
 
 	// Отправляем ответ
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(&res)
+	err = json.NewEncoder(w).Encode(&profile)
 	if err != nil {
 		http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
 		return
