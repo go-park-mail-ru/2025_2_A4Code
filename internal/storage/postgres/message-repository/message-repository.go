@@ -5,16 +5,16 @@ import (
 	"database/sql"
 )
 
-type PostgresMessageRepository struct {
+type MessageRepository struct {
 	db *sql.DB
 }
 
-func New(db *sql.DB) *PostgresMessageRepository {
-	return &PostgresMessageRepository{db: db}
+func New(db *sql.DB) *MessageRepository {
+	return &MessageRepository{db: db}
 }
 
-func (repo *PostgresMessageRepository) FindByID(id int64) (*domain.Message, error) {
-	const op = "storage.postgresql.message-repository.FindByMessageID"
+func (repo *MessageRepository) FindByID(id int64) (*domain.Message, error) {
+	const op = "storage.postgresql.message.FindByMessageID"
 
 	// TODO: реализовать логику (возможно этот метод будет использоваться в ProfileMessageRepository)
 

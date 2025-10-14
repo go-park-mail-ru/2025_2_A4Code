@@ -5,24 +5,24 @@ import (
 	"database/sql"
 )
 
-type PostgresProfileMessageRepository struct {
+type ProfileMessageRepository struct {
 	db *sql.DB
 }
 
-func New(db *sql.DB) *PostgresProfileMessageRepository {
-	return &PostgresProfileMessageRepository{db: db}
+func New(db *sql.DB) *ProfileMessageRepository {
+	return &ProfileMessageRepository{db: db}
 }
 
-func (repo *PostgresProfileMessageRepository) FindByProfileID(profileID int64) ([]domain.ProfileMessage, error) {
-	const op = "storage.postgresql.base-profile-repository.FindByProfileID"
+func (repo *ProfileMessageRepository) FindByProfileID(profileID int64) ([]domain.ProfileMessage, error) {
+	const op = "storage.postgresql.base-profile.FindByProfileID"
 
 	// TODO: реализовать логику
 
 	return []domain.ProfileMessage{}, nil
 }
 
-func (repo *PostgresProfileMessageRepository) FindByMessageID(messageID int64) (*domain.ProfileMessage, error) {
-	const op = "storage.postgresql.base-profile-repository.FindByProfileID"
+func (repo *ProfileMessageRepository) FindByMessageID(messageID int64) (*domain.ProfileMessage, error) {
+	const op = "storage.postgresql.base-profile.FindByProfileID"
 
 	// TODO: реализовать логику
 

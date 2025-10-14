@@ -1,4 +1,4 @@
-package profilemessage_ucase
+package profilemessage
 
 import "2025_2_a4code/internal/domain"
 
