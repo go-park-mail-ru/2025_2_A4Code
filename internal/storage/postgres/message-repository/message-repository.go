@@ -13,10 +13,18 @@ func New(db *sql.DB) *MessageRepository {
 	return &MessageRepository{db: db}
 }
 
-func (repo *MessageRepository) FindByID(id int64) (*domain.Message, error) {
+func (repo *MessageRepository) FindByMessageID(messageID int64) (*domain.Message, error) {
 	const op = "storage.postgresql.message.FindByMessageID"
 
-	// TODO: реализовать логику (возможно этот метод будет использоваться в ProfileMessageRepository)
+	// TODO: реализовать логику
 
 	return &domain.Message{}, nil
+}
+
+func (repo *MessageRepository) FindByProfileID(profileID int64) ([]domain.Message, error) {
+	const op = "storage.postgresql.message.FindByProfileID"
+
+	// TODO: реализовать логику
+
+	return []domain.Message{}, nil
 }

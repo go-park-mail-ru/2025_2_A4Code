@@ -1,7 +1,5 @@
 package domain
 
-import "time"
-
 type ProfileMessage struct {
 	ProfileID     int64
 	MessageID     int64
@@ -9,6 +7,4 @@ type ProfileMessage struct {
 	DeletedStatus bool
 	DraftStatus   bool
 	FolderID      string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
 }

@@ -24,3 +24,11 @@ func (repo *ProfileRepository) FindByID(id int64) (*domain.Profile, error) {
 
 	return &domain.Profile{}, nil
 }
+
+func (repo *ProfileRepository) FindSenderByID(id int64) (*domain.Sender, error) {
+	const op = "storage.postgresql.base-profile.FindSenderByID"
+
+	// TODO: реализовать логику
+
+	return &domain.Sender{}, nil
+}

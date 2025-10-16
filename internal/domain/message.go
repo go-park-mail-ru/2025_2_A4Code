@@ -3,12 +3,11 @@ package domain
 import "time"
 
 type Message struct {
-	ID              int64
-	Topic           string
-	Text            string
-	DateOfDispatch  time.Time
-	SenderProfileID int64
-	ThreadID        int64
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID       string    `json:"id"`
+	Sender   Sender    `json:"sender"`
+	Topic    string    `json:"topic"`
+	Snippet  string    `json:"snippet"`
+	Datetime time.Time `json:"datetime"`
+	IsRead   bool      `json:"is_read"`
+	Folder   string    `json:"folder"`
 }

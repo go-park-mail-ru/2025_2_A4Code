@@ -7,7 +7,6 @@ type Profile struct {
 	Username        string
 	Domain          string
 	CreatedAt       time.Time
-	UpdatedAt       time.Time
 	IsOurSystemUser bool
 	PasswordHash    string
 	Salt            string

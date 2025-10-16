@@ -1,7 +1,5 @@
 package domain
 
-import "time"
-
 type FolderType string
 
 const (
@@ -18,6 +16,4 @@ type Folder struct {
 	ProfileID int64
 	Name      string
 	Type      FolderType
-	CreatedAt time.Time
-	UpdatedAt time.Time
 }

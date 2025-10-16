@@ -1,7 +1,5 @@
 package domain
 
-import "time"
-
 type File struct {
 	ID          int64
 	Name        string
@@ -9,6 +7,4 @@ type File struct {
 	Size        int64
 	StoragePath string
 	MessageID   int64
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
 }
