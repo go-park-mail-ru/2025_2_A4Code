@@ -10,8 +10,7 @@ import (
 	"net/http"
 )
 
-// TODO: убрать отсюда
-var SECRET = []byte("secret")
+var SECRET = []byte("secret") // TODO: убрать отсюда
 
 type SuccessResponse struct {
 	Status string          `json:"Status"`
