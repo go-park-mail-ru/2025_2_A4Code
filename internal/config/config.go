@@ -11,7 +11,7 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Port string
+	ConfigPath string
 }
 
 func GetConfig() Config {
@@ -26,6 +26,6 @@ func GetConfig() Config {
 
 func GetAppConfig() *AppConfig {
 	return &AppConfig{
-		Port: os.Getenv("APP_PORT"),
+		ConfigPath: os.Getenv("CONFIG_PATH"),
 	}
 }

@@ -2,7 +2,6 @@ package profile
 
 import (
 	"2025_2_a4code/internal/domain"
-	profile "2025_2_a4code/internal/storage/postgres/profile-repository"
 )
 
 type ProfileRepository interface {
@@ -11,10 +10,10 @@ type ProfileRepository interface {
 }
 
 type ProfileUcase struct {
-	repo profile.ProfileRepository
+	repo ProfileRepository
 }
 
-func New(repo profile.ProfileRepository) *ProfileUcase {
+func New(repo ProfileRepository) *ProfileUcase {
 	return &ProfileUcase{repo: repo}
 }
 
