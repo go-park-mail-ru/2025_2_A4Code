@@ -1,30 +1,41 @@
 package signup
 
 import (
-	"2025_2_a4code/internal/domain"
 	resp "2025_2_a4code/internal/lib/api/response"
 
 	profileUcase "2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
 	"net/http"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
-type SignupResponse struct {
-	Status    string `json:"status"`
-	Timestamp string `json:"timestamp"`
+type SignupRequest struct {
+	Name     string    `json:"name"`
+	Username string    `json:"username"`
+	Birthday time.Time `json:"birthday"`
+	Gender   string    `json:"gender"`
+	Password string    `json:"password"`
 }
 
 type Response struct {
 	resp.Response
-	Body SignupResponse `json:"body,omitempty"`
+	Body struct {
+		Message string `json:"message"`
+	} `json:"body"`
 }
 
 type HandlerSignup struct {
 	profileUCase *profileUcase.ProfileUcase
+	JWTSecret    []byte
 }
 
-func New(ucBP *profileUcase.ProfileUcase) *HandlerSignup {
-	return &HandlerSignup{profileUCase: ucBP}
+func New(ucBP *profileUcase.ProfileUcase, secret []byte) *HandlerSignup {
+	return &HandlerSignup{
+		profileUCase: ucBP,
+		JWTSecret:    secret,
+	}
 }
 
 func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -34,68 +45,74 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var credentials domain.Profile
-	if err := json.NewDecoder(r.Body).Decode(&credentials); err != nil {
+	var req SignupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		sendErrorResponse(w, "Неправильный запрос", http.StatusBadRequest)
 		return
 	}
 
-	// // проверка логина
-	// for _, user := range handlers2.users {
-	// 	if credentials.Login == user["login"] {
-	// 		http.Error(w, "Пользователь с таким логином уже существует", http.StatusUnauthorized)
-	// 		return
-	// 	}
-	// }
+	// Валидация обязательных полей
+	if req.Username == "" || req.Password == "" || req.Name == "" || req.Gender == "" || req.Birthday.IsZero() {
+		sendErrorResponse(w, "Введите все поля формы", http.StatusBadRequest)
+		return
+	}
 
-	// newUser := map[string]string{
-	// 	"login":       credentials.Login,
-	// 	"password":    credentials.Password,
-	// 	"username":    credentials.Username,
-	// 	"dateofbirth": credentials.DateOfBirth,
-	// 	"gender":      credentials.Gender,
-	// }
+	// Преобразуем в UseCase запрос
+	SignupReq := profileUcase.SignupRequest{
+		Name:     req.Name,
+		Username: req.Username,
+		Birthday: req.Birthday,
+		Gender:   req.Gender,
+		Password: req.Password,
+	}
 
-	// //записываем в мап
-	// handlers2.users = append(handlers2.users, newUser)
+	// Вызываем usecase для регистрации
+	userID, err := h.profileUCase.Signup(r.Context(), SignupReq)
+	if err != nil {
+		sendErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
-	// // создаем токен
-	// token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-	// 	"login": credentials.Login,
-	// 	"exp":   time.Now().Add(24 * time.Hour).Unix(),
-	// })
+	// Создаем JWT токен после успешной регистрации
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": userID,
+		"login":   req.Username,
+		"exp":     time.Now().Add(24 * time.Hour).Unix(),
+	})
 
-	// // подписываем
-	// session, err := token.SignedString(handlers2.SECRET)
+	session, err := token.SignedString(h.JWTSecret)
+	if err != nil {
+		sendErrorResponse(w, "Ошибка создания сессии", http.StatusInternalServerError)
+		return
+	}
 
-	// if err != nil {
-	// 	http.Error(w, "Ошибка регистрации", http.StatusInternalServerError)
-	// 	return
-	// }
+	// Устанавливаем cookie
+	cookie := &http.Cookie{
+		Name:     "session_id",
+		Value:    session,
+		MaxAge:   3600,
+		HttpOnly: true,
+		Path:     "/",
+	}
+	http.SetCookie(w, cookie)
 
-	// cookie := &http.Cookie{
-	// 	Name:     "session_id",
-	// 	Value:    session,
-	// 	MaxAge:   3600,
-	// 	HttpOnly: true,
-	// 	Path:     "/",
-	// }
+	// Отправляем успешный ответ
+	w.Header().Set("Content-Type", "application/json")
+	response := Response{
+		Response: resp.Response{
+			Status: "200",
+		},
+		Body: struct {
+			Message string `json:"message"`
+		}{
+			Message: "Пользователь зарегистрирован",
+		},
+	}
 
-	// // ставим куки
-	// http.SetCookie(w, cookie)
-
-	// w.Header().Set("Content-Type", "application/json")
-	// err = json.NewEncoder(w).Encode(map[string]any{
-	// 	"status": "200",
-	// 	"body": struct {
-	// 		Message string `json:"message"`
-	// 	}{"Пользователь зарегистрирован"},
-	// })
-
-	// if err != nil {
-	// 	http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
-	// 	return
-	// }
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		sendErrorResponse(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
+		return
+	}
 }
 
 func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {

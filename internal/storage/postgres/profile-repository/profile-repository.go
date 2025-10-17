@@ -2,6 +2,7 @@ package profile_repository
 
 import (
 	"2025_2_a4code/internal/domain"
+	"context"
 	"database/sql"
 )
 
@@ -31,4 +32,15 @@ func (repo *ProfileRepository) FindSenderByID(id int64) (*domain.Sender, error) 
 	// TODO: реализовать логику
 
 	return &domain.Sender{}, nil
+}
+
+func (repo *ProfileRepository) UserExists(ctx context.Context, username string) (bool, error) {
+	// TODO: реализовать логику
+	return true, nil
+}
+
+func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Profile) (int64, error) {
+	// TODO: реализовать логику
+	var variable int64
+	return variable, nil
 }
