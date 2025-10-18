@@ -4,6 +4,7 @@ import (
 	"2025_2_a4code/internal/domain"
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -17,11 +18,17 @@ type SignupRequest struct {
 	Password string
 }
 
+type LoginRequest struct {
+	Email    string
+	Password string
+}
+
 type ProfileRepository interface {
 	FindByID(id int64) (*domain.Profile, error)
 	FindSenderByID(id int64) (*domain.Sender, error)
 	UserExists(ctx context.Context, username string) (bool, error)
 	CreateUser(ctx context.Context, profile domain.Profile) (int64, error)
+	FindByUsernameAndDomain(ctx context.Context, username string, domain string) (*domain.Profile, error)
 }
 
 type ProfileUcase struct {
@@ -72,4 +79,46 @@ func (uc *ProfileUcase) Signup(ctx context.Context, SignupReq SignupRequest) (in
 	}
 
 	return userID, nil
+}
+
+func (uc *ProfileUcase) Login(ctx context.Context, req LoginRequest) (int64, error) {
+	// Парсим email для извлечения username
+	username, err := uc.ExtractUsernameFromEmail(req.Email)
+	if err != nil {
+		return 0, err
+	}
+
+	// Ищем профиль по username и фиксированному домену
+	profile, err := uc.repo.FindByUsernameAndDomain(ctx, username, "a4mail.ru")
+	if err != nil {
+		return 0, errors.New("Пользователь с таким адресом почты отсутствует")
+	}
+
+	// Проверяем пароль
+	if !uc.checkPassword(req.Password, profile.PasswordHash) {
+		return 0, errors.New("Неверный пароль")
+	}
+
+	return profile.ID, nil
+}
+
+func (uc *ProfileUcase) ExtractUsernameFromEmail(email string) (string, error) {
+	// Убеждаемся, что email заканчивается на наш домен
+	if !strings.HasSuffix(email, "@a4mail.ru") {
+		return "", errors.New("Адрес должен оканчиваться на @a4mail.ru")
+	}
+
+	// Извлекаем username (всё до @)
+	username := strings.TrimSuffix(email, "@a4mail.ru")
+
+	// Дополнительная валидация username
+	if username == "" {
+		return "", errors.New("Неправильный формат адреса почты")
+	}
+
+	return username, nil
+}
+
+func (uc *ProfileUcase) checkPassword(password, hash string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }

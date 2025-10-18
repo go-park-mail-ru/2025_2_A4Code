@@ -76,7 +76,6 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Создаем JWT токен после успешной регистрации
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID,
-		"login":   req.Username,
 		"exp":     time.Now().Add(24 * time.Hour).Unix(),
 	})
 

@@ -69,7 +69,6 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Создаем JWT токен после успешной регистрации
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID,
-		"login":   req.U,
 		"exp":     time.Now().Add(24 * time.Hour).Unix(),
 	})
 
@@ -98,7 +97,7 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Body: struct {
 			Message string `json:"message"`
 		}{
-			Message: "Пользователь зарегистрирован",
+			Message: "Пользователь авторизован",
 		},
 	}
 

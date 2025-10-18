@@ -1,14 +1,28 @@
 package logout
 
 import (
-	handlers2 "2025_2_a4code/internal/http-server/handlers"
+	resp "2025_2_a4code/internal/lib/api/response"
 	"encoding/json"
 	"net/http"
 )
 
-func (h *handlers2.Handlers) LogoutHandler(w http.ResponseWriter, r *http.Request) {
+type Response struct {
+	resp.Response
+	Body struct {
+		Message string `json:"message"`
+	} `json:"body"`
+}
+
+type HandlerLogout struct {
+}
+
+func New() *HandlerLogout {
+	return &HandlerLogout{}
+}
+
+func (h *HandlerLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Неправильный метод", http.StatusMethodNotAllowed)
+		sendErrorResponse(w, "Неправильный метод", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -20,11 +34,32 @@ func (h *handlers2.Handlers) LogoutHandler(w http.ResponseWriter, r *http.Reques
 		HttpOnly: true,
 	})
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"status": "200",
-		"body": struct {
+	response := Response{
+		Response: resp.Response{
+			Status: http.StatusText(http.StatusOK),
+		},
+		Body: struct {
 			Message string `json:"message"`
-		}{"Logged out"},
-	})
+		}{Message: "Успешный выход из почты"},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err := json.NewEncoder(w).Encode(&response)
+	if err != nil {
+		sendErrorResponse(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
+		return
+	}
+}
+
+func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
+
+	response := Response{
+		Response: resp.Response{
+			Status: http.StatusText(statusCode),
+			Error:  errorMsg,
+		},
+	}
+
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(&response)
 }

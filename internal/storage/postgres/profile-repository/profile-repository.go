@@ -44,3 +44,9 @@ func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Pr
 	var variable int64
 	return variable, nil
 }
+
+func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, username string, emailDomain string) (*domain.Profile, error) {
+	const op = "storage.postgresql.base-profile.FindByUsernameAndDomain"
+	// TODO: реализовать логику
+	return &domain.Profile{}, nil
+}
