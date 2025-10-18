@@ -128,3 +128,15 @@ func (uc *ProfileUcase) checkPassword(password, hash string) bool {
 func (uc *ProfileUcase) FindInfoByID(profileID int64) (domain.ProfileInfo, error) {
 	return uc.repo.FindInfoByID(profileID)
 }
+
+func (uc *ProfileUcase) UserExists(ctx context.Context, username string) (bool, error) {
+	return uc.repo.UserExists(ctx, username)
+}
+
+func (uc *ProfileUcase) CreateUser(ctx context.Context, profile domain.Profile) (int64, error) {
+	return uc.repo.CreateUser(ctx, profile)
+}
+
+func (uc *ProfileUcase) FindByUsernameAndDomain(ctx context.Context, username string, domain string) (*domain.Profile, error) {
+	return uc.repo.FindByUsernameAndDomain(ctx, username, domain)
+}

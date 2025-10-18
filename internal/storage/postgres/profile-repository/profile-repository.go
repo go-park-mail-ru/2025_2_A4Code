@@ -58,7 +58,7 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 	return &domain.Profile{}, nil
 }
 
-func (repo *ProfileRepository) FindInfoByID(ctx context.Context, username string) (domain.ProfileInfo, error) {
+func (repo *ProfileRepository) FindInfoByID(profileID int64) (domain.ProfileInfo, error) {
 	const op = "storage.postgresql.base-profile.FindInfoByID"
 
 	// TODO: реализовать логику
