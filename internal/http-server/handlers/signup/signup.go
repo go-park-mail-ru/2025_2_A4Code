@@ -31,9 +31,9 @@ type HandlerSignup struct {
 	JWTSecret    []byte
 }
 
-func New(ucBP *profileUcase.ProfileUcase, secret []byte) *HandlerSignup {
+func New(ucP *profileUcase.ProfileUcase, secret []byte) *HandlerSignup {
 	return &HandlerSignup{
-		profileUCase: ucBP,
+		profileUCase: ucP,
 		JWTSecret:    secret,
 	}
 }

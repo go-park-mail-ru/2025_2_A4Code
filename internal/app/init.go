@@ -2,7 +2,13 @@ package app
 
 import (
 	"2025_2_a4code/internal/config"
+	health_check "2025_2_a4code/internal/http-server/handlers/health-check"
 	"2025_2_a4code/internal/http-server/handlers/inbox"
+	"2025_2_a4code/internal/http-server/handlers/login"
+	"2025_2_a4code/internal/http-server/handlers/logout"
+	"2025_2_a4code/internal/http-server/handlers/me"
+	message_page "2025_2_a4code/internal/http-server/handlers/message-page"
+	"2025_2_a4code/internal/http-server/handlers/signup"
 	messagerepository "2025_2_a4code/internal/storage/postgres/message-repository"
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	messageUcase "2025_2_a4code/internal/usecase/message"
@@ -19,6 +25,8 @@ const (
 	StoragePath = "./storage"
 )
 
+var SECRET = []byte("secret")
+
 type Storage struct {
 	db *sql.DB
 }
@@ -33,16 +41,24 @@ func Init() {
 	messageRepository := messagerepository.New(connection)
 	profileRepository := profilerepository.New(connection)
 
-	messageUsecase := messageUcase.New(messageRepository)
-	profileUsecase := profileUcase.New(profileRepository)
-	inboxHandler := inbox.New(profileUsecase, messageUsecase)
+	messageUCase := messageUcase.New(messageRepository)
+	profileUCase := profileUcase.New(profileRepository)
 
-	//http.Handle("/", corsMiddleware(http.HandlerFunc(h.HealthCheckHandler)))
-	//http.Handle("/login", corsMiddleware(http.HandlerFunc(h.LoginHandler)))
-	//http.Handle("/signup", corsMiddleware(http.HandlerFunc(h.SignupHandler)))
-	//http.Handle("/logout", corsMiddleware(http.HandlerFunc(h.LogoutHandler)))
-	//http.Handle("/me", corsMiddleware(http.HandlerFunc(h.MeHandler)))
+	healthCheckHandler := health_check.New(SECRET)
+	loginHandler := login.New(profileUCase, SECRET)
+	signupHandler := signup.New(profileUCase, SECRET)
+	logoutHandler := logout.New()
+	inboxHandler := inbox.New(profileUCase, messageUCase)
+	meHandler := me.New(profileUCase)
+	messagePageHandler := message_page.New(profileUCase, messageUCase)
+
+	http.Handle("/", corsMiddleware(http.HandlerFunc(healthCheckHandler.ServeHTTP)))
+	http.Handle("/login", corsMiddleware(http.HandlerFunc(loginHandler.ServeHTTP)))
+	http.Handle("/signup", corsMiddleware(http.HandlerFunc(signupHandler.ServeHTTP)))
+	http.Handle("/logout", corsMiddleware(http.HandlerFunc(logoutHandler.ServeHTTP)))
 	http.Handle("/inbox", corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP)))
+	http.Handle("/me", corsMiddleware(http.HandlerFunc(meHandler.ServeHTTP)))
+	http.Handle("/message-page", corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP))) // TODO: создать индивидуальный параметр в url
 
 	err = http.ListenAndServe(":"+cfg.AppConfig.ConfigPath, nil)
 
