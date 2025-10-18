@@ -11,7 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type LoginRequest struct {
+type Request struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
@@ -28,9 +28,9 @@ type HandlerLogin struct {
 	JWTSecret    []byte
 }
 
-func New(ucBP *profileUcase.ProfileUcase, secret []byte) *HandlerLogin {
+func New(ucP *profileUcase.ProfileUcase, secret []byte) *HandlerLogin {
 	return &HandlerLogin{
-		profileUCase: ucBP,
+		profileUCase: ucP,
 		JWTSecret:    secret,
 	}
 }
@@ -41,7 +41,7 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req LoginRequest
+	var req Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		sendErrorResponse(w, "Неправильный запрос", http.StatusBadRequest)
 		return

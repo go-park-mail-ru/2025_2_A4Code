@@ -8,6 +8,7 @@ import (
 type MessageRepository interface {
 	FindByMessageID(messageID int64) (*domain.Message, error)
 	FindByProfileID(profileID int64) ([]domain.Message, error)
+	FindFullByMessageID(messageID int64) (domain.FullMessage, error)
 }
 
 type MessageUcase struct {
@@ -46,4 +47,8 @@ func (uc *MessageUcase) GetMessagesInfo(profileID int64) (domain.Messages, error
 		MessageUnread: unread,
 		Messages:      messages,
 	}, nil
+}
+
+func (uc *MessageUcase) FindFullByMessageID(messageID int64) (domain.FullMessage, error) {
+	return uc.repo.FindFullByMessageID(messageID)
 }

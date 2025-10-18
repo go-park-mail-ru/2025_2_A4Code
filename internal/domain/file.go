@@ -1,10 +1,12 @@
 package domain
 
 type File struct {
-	ID          int64
+	//ID          int64
 	Name        string
 	FileType    string
 	Size        int64
 	StoragePath string
-	MessageID   int64
+	//MessageID   int64
 }
+
+type Files []File

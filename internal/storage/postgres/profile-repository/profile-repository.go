@@ -35,18 +35,33 @@ func (repo *ProfileRepository) FindSenderByID(id int64) (*domain.Sender, error) 
 }
 
 func (repo *ProfileRepository) UserExists(ctx context.Context, username string) (bool, error) {
+	const op = "storage.postgresql.base-profile.UserExists"
+
 	// TODO: реализовать логику
+
 	return true, nil
 }
 
 func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Profile) (int64, error) {
+	const op = "storage.postgresql.base-profile.CreateUser"
+
 	// TODO: реализовать логику
-	var variable int64
-	return variable, nil
+
+	return *new(int64), nil
 }
 
 func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, username string, emailDomain string) (*domain.Profile, error) {
 	const op = "storage.postgresql.base-profile.FindByUsernameAndDomain"
+
 	// TODO: реализовать логику
+
 	return &domain.Profile{}, nil
+}
+
+func (repo *ProfileRepository) FindInfoByID(ctx context.Context, username string) (domain.ProfileInfo, error) {
+	const op = "storage.postgresql.base-profile.FindInfoByID"
+
+	// TODO: реализовать логику
+
+	return domain.ProfileInfo{}, nil
 }

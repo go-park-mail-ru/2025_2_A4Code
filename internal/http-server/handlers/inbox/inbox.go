@@ -23,8 +23,8 @@ type HandlerInbox struct {
 	messageUCase *messageUcase.MessageUcase
 }
 
-func New(ucBP *profileUcase.ProfileUcase, ucM *messageUcase.MessageUcase) *HandlerInbox {
-	return &HandlerInbox{profileUCase: ucBP, messageUCase: ucM}
+func New(ucP *profileUcase.ProfileUcase, ucM *messageUcase.MessageUcase) *HandlerInbox {
+	return &HandlerInbox{profileUCase: ucP, messageUCase: ucM}
 }
 
 func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +54,7 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Отправляем ответ
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(&response)
+	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
 		sendErrorResponse(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
 		return

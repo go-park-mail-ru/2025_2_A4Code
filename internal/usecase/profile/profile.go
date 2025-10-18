@@ -2,6 +2,7 @@ package profile
 
 import (
 	"2025_2_a4code/internal/domain"
+	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	"context"
 	"errors"
 	"strings"
@@ -29,13 +30,14 @@ type ProfileRepository interface {
 	UserExists(ctx context.Context, username string) (bool, error)
 	CreateUser(ctx context.Context, profile domain.Profile) (int64, error)
 	FindByUsernameAndDomain(ctx context.Context, username string, domain string) (*domain.Profile, error)
+	FindInfoByID(int64) (domain.ProfileInfo, error)
 }
 
 type ProfileUcase struct {
 	repo ProfileRepository
 }
 
-func New(repo ProfileRepository) *ProfileUcase {
+func New(repo *profilerepository.ProfileRepository) *ProfileUcase {
 	return &ProfileUcase{repo: repo}
 }
 
@@ -121,4 +123,8 @@ func (uc *ProfileUcase) ExtractUsernameFromEmail(email string) (string, error) {
 
 func (uc *ProfileUcase) checkPassword(password, hash string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+}
+
+func (uc *ProfileUcase) FindInfoByID(profileID int64) (domain.ProfileInfo, error) {
+	return uc.repo.FindInfoByID(profileID)
 }
