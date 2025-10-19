@@ -12,8 +12,8 @@ const (
 )
 
 type Folder struct {
-	//ID        int64
-	//ProfileID int64
-	Name string
-	Type FolderType
+	ID        int64
+	ProfileID int64
+	Name      string
+	Type      FolderType
 }

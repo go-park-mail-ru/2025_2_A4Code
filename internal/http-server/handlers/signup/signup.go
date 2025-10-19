@@ -11,7 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type SignupRequest struct {
+type Request struct {
 	Name     string    `json:"name"`
 	Username string    `json:"username"`
 	Birthday time.Time `json:"birthday"`
@@ -45,7 +45,7 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req SignupRequest
+	var req Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		sendErrorResponse(w, "Неправильный запрос", http.StatusBadRequest)
 		return

@@ -36,3 +36,19 @@ func (repo *MessageRepository) FindByProfileID(profileID int64) ([]domain.Messag
 
 	return []domain.Message{}, nil
 }
+
+func (repo *MessageRepository) SaveMessage(topic, receiver, text string, threadID int64) (messageID int64, err error) {
+	const op = "storage.postgresql.message.Save"
+
+	// TODO: реализовать логику
+
+	return *new(int64), nil
+}
+
+func (repo *MessageRepository) SaveFile(messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error) {
+	const op = "storage.postgresql.message.SaveFile"
+
+	// TODO: реализовать логику
+
+	return *new(int64), nil
+}

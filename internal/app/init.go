@@ -2,13 +2,15 @@ package app
 
 import (
 	"2025_2_a4code/internal/config"
-	health_check "2025_2_a4code/internal/http-server/handlers/health-check"
+	healthcheck "2025_2_a4code/internal/http-server/handlers/health-check"
 	"2025_2_a4code/internal/http-server/handlers/inbox"
 	"2025_2_a4code/internal/http-server/handlers/login"
 	"2025_2_a4code/internal/http-server/handlers/logout"
 	"2025_2_a4code/internal/http-server/handlers/me"
-	message_page "2025_2_a4code/internal/http-server/handlers/message-page"
+	messagepage "2025_2_a4code/internal/http-server/handlers/message-page"
+	sendmessage "2025_2_a4code/internal/http-server/handlers/send-message"
 	"2025_2_a4code/internal/http-server/handlers/signup"
+	uploadfile "2025_2_a4code/internal/http-server/handlers/upload-file"
 	messagerepository "2025_2_a4code/internal/storage/postgres/message-repository"
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	messageUcase "2025_2_a4code/internal/usecase/message"
@@ -22,7 +24,8 @@ import (
 // TODO: подключение хэндлеров, бд и тд
 
 const (
-	StoragePath = "./storage"
+	StoragePath    = "./storage"
+	FileUploadPath = "./files"
 )
 
 var SECRET = []byte("secret")
@@ -44,13 +47,15 @@ func Init() {
 	messageUCase := messageUcase.New(messageRepository)
 	profileUCase := profileUcase.New(profileRepository)
 
-	healthCheckHandler := health_check.New(SECRET)
+	healthCheckHandler := healthcheck.New(SECRET)
 	loginHandler := login.New(profileUCase, SECRET)
 	signupHandler := signup.New(profileUCase, SECRET)
 	logoutHandler := logout.New()
 	inboxHandler := inbox.New(profileUCase, messageUCase)
 	meHandler := me.New(profileUCase)
-	messagePageHandler := message_page.New(profileUCase, messageUCase)
+	messagePageHandler := messagepage.New(profileUCase, messageUCase)
+	sendMessageHandler := sendmessage.New(messageUCase)
+	uploadFileHandler, err := uploadfile.New(FileUploadPath)
 
 	http.Handle("/", corsMiddleware(http.HandlerFunc(healthCheckHandler.ServeHTTP)))
 	http.Handle("/login", corsMiddleware(http.HandlerFunc(loginHandler.ServeHTTP)))
@@ -58,7 +63,9 @@ func Init() {
 	http.Handle("/logout", corsMiddleware(http.HandlerFunc(logoutHandler.ServeHTTP)))
 	http.Handle("/inbox", corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP)))
 	http.Handle("/me", corsMiddleware(http.HandlerFunc(meHandler.ServeHTTP)))
-	http.Handle("/message-page", corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP))) // TODO: создать индивидуальный параметр в url
+	http.Handle("/{message_id}", corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP)))
+	http.Handle("/compose", corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP)))
+	http.Handle("/upload", corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP)))
 
 	err = http.ListenAndServe(":"+cfg.AppConfig.ConfigPath, nil)
 

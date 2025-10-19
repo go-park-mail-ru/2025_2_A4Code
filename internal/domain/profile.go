@@ -20,6 +20,7 @@ type Profile struct {
 }
 
 type ProfileInfo struct {
+	ID         int64     `json:"id"`
 	Username   string    `json:"username"`
 	CreatedAt  time.Time `json:"created_at"`
 	Name       string    `json:"name"`

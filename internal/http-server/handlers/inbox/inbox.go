@@ -4,6 +4,7 @@ import (
 	"2025_2_a4code/internal/domain"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
+	"time"
 
 	messageUcase "2025_2_a4code/internal/usecase/message"
 	profileUcase "2025_2_a4code/internal/usecase/profile"
@@ -13,6 +14,19 @@ import (
 
 var SECRET = []byte("secret") // TODO: убрать отсюда
 
+type Sender struct {
+	Email    string `json:"email"`
+	Username string `json:"username"`
+	Avatar   string `json:"avatar"`
+}
+
+type Message struct {
+	Sender   Sender    `json:"sender"`
+	Topic    string    `json:"topic"`
+	Snippet  string    `json:"snippet"`
+	Datetime time.Time `json:"datetime"`
+	IsRead   bool      `json:"is_read"`
+}
 type Response struct {
 	resp.Response
 	Body domain.Messages `json:"body,omitempty"`
@@ -40,16 +54,29 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	messagesResponse, err := h.messageUCase.GetMessagesInfo(id)
+	messagesResponse := make([]Message, 0)
+	messages, err := h.messageUCase.FindByProfileID(id)
+	for _, m := range messages {
+		messagesResponse = append(messagesResponse, Message{
+			Sender:   Sender(m.Sender),
+			Topic:    m.Topic,
+			Snippet:  m.Snippet,
+			Datetime: m.Datetime,
+			IsRead:   m.IsRead,
+		})
+	}
+
+	messagesInfo, err := h.messageUCase.GetMessagesInfo(id)
 	if err != nil {
 		sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
+	messagesInfo.Messages = messagesResponse
 
 	response := Response{
 		Response: resp.Response{
 			Status: http.StatusText(http.StatusOK),
 		},
-		Body: messagesResponse,
+		Body: messagesInfo,
 	}
 
 	// Отправляем ответ
