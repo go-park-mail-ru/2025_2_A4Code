@@ -58,7 +58,11 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	messages, err := h.messageUCase.FindByProfileID(id)
 	for _, m := range messages {
 		messagesResponse = append(messagesResponse, Message{
-			Sender:   Sender(m.Sender),
+			Sender: Sender{
+				Email:    m.Email,
+				Username: m.Username,
+				Avatar:   m.Avatar,
+			},
 			Topic:    m.Topic,
 			Snippet:  m.Snippet,
 			Datetime: m.Datetime,
