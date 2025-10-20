@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS base_profile (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (username),
     UNIQUE (username, domain)
+);    
 
 -- Триггер для updated_at в base_profile
 CREATE OR REPLACE FUNCTION update_updated_at()
@@ -26,8 +27,7 @@ FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 CREATE TABLE IF NOT EXISTS profile (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     base_profile_id INTEGER NOT NULL UNIQUE REFERENCES base_profile(id) ON DELETE CASCADE,
-    password_hash TEXT NOT NULL,
-    salt TEXT NOT NULL,
+    password_hash TEXT NOT NULL CHECK (LENGTH(password_hash) <= 255),
     name TEXT CHECK (LENGTH(name) BETWEEN 1 AND 50),  
     surname TEXT CHECK (LENGTH(surname) BETWEEN 1 AND 200),
     patronymic TEXT CHECK (LENGTH(patronymic) BETWEEN 1 AND 200),
@@ -81,6 +81,22 @@ ALTER TABLE thread
 ADD CONSTRAINT fk_thread_root_message
 FOREIGN KEY (root_message_id) REFERENCES message(id) ON DELETE SET NULL;
 
+-- Создание таблицы папок (folder)
+CREATE TABLE IF NOT EXISTS folder(
+    id        INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+	profile_id INTEGER NOT NULL REFERENCES profile(id) ON DELETE NO ACTION,
+	folder_name      TEXT NOT NULL CHECK (LENGTH(folder_name) BETWEEN 1 AND 50),
+	folder_type      TEXT NOT NULL CHECK (folder_type IN ('inbox', 'sent', 'draft', 'spam', 'trash', 'custom')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Триггер для updated_at в folder
+CREATE TRIGGER folder_update_trigger
+BEFORE UPDATE ON folder
+FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
+
+
 -- Создание таблицы файлов (file)
 CREATE TABLE IF NOT EXISTS file (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
@@ -116,7 +132,7 @@ CREATE TABLE IF NOT EXISTS profile_message (
     read_status BOOLEAN NOT NULL DEFAULT FALSE,
     deleted_status BOOLEAN NOT NULL DEFAULT FALSE,
     draft_status BOOLEAN NOT NULL DEFAULT FALSE,
-    folder_name TEXT NOT NULL DEFAULT 'Inbox' CHECK (LENGTH(folder_name) BETWEEN 1 AND 50),
+    folder_id INTEGER NOT NULL REFERENCES folder(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (profile_id, message_id)
@@ -161,6 +177,12 @@ DECLARE
     t2 INTEGER;
     t3 INTEGER;
     t4 INTEGER;
+    f1 INTEGER;
+    f2 INTEGER;
+    f3 INTEGER;
+    f4 INTEGER;
+    f5 INTEGER;
+    f6 INTEGER;
     m1 INTEGER;
     m2 INTEGER;
     m3 INTEGER;
@@ -180,25 +202,25 @@ BEGIN
     VALUES ('anna', 'a4mail.ru') RETURNING id INTO bp4;
     
     -- Вставка в profile
-    INSERT INTO profile (base_profile_id, password_hash, salt, name, surname, patronymic, gender, birthday, phone_number)
-    VALUES (bp1, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'bjdokdda', 'Alexey', 'Gusev', 'Nikolaevich', 'Male', '2003-08-20', '+77777777777') RETURNING id INTO p1;
+    INSERT INTO profile (base_profile_id, password_hash, name, surname, patronymic, gender, birthday, phone_number)
+    VALUES (bp1, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'Alexey', 'Gusev', 'Nikolaevich', 'Male', '2003-08-20', '+77777777777') RETURNING id INTO p1;
     
-    INSERT INTO profile (base_profile_id, password_hash, salt, name, surname, patronymic, gender, birthday, phone_number)
-    VALUES (bp2, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'bjdokdda', 'Antonina', 'Andreeva', 'Aleksandrovna', 'Female', '2003-10-17', '+79697045539') RETURNING id INTO p2;
+    INSERT INTO profile (base_profile_id, password_hash,  name, surname, patronymic, gender, birthday, phone_number)
+    VALUES (bp2, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'Antonina', 'Andreeva', 'Aleksandrovna', 'Female', '2003-10-17', '+79697045539') RETURNING id INTO p2;
     
-    INSERT INTO profile (base_profile_id, password_hash, salt, name, surname, patronymic, gender, birthday, phone_number)
-    VALUES (bp3, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'bjdokdda', 'Andrey', 'Vavilov', 'Nikolaevich', 'Male', '2003-08-20', '+79099099090') RETURNING id INTO p3;
+    INSERT INTO profile (base_profile_id, password_hash, name, surname, patronymic, gender, birthday, phone_number)
+    VALUES (bp3, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'Andrey', 'Vavilov', 'Nikolaevich', 'Male', '2003-08-20', '+79099099090') RETURNING id INTO p3;
     
-    INSERT INTO profile (base_profile_id, password_hash, salt, name, surname, patronymic, gender, birthday, phone_number)
-    VALUES (bp4, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'bjdokdda', 'Anna', 'Mihonina', 'Aleksandrovna', 'Female', '2003-08-20', '+79099499090') RETURNING id INTO p4;
+    INSERT INTO profile (base_profile_id, password_hash, name, surname, patronymic, gender, birthday, phone_number)
+    VALUES (bp4, '$2a$10$4PcooWbEMRjvdk2cMFumO.ajWaAclawIljtlfu2.2f5/fV8LkgEZe', 'Anna', 'Mihonina', 'Aleksandrovna', 'Female', '2003-08-20', '+79099499090') RETURNING id INTO p4;
     
     -- Вставка в thread 
     INSERT INTO thread (root_message_id) VALUES (NULL) RETURNING id INTO t1;
     INSERT INTO thread (root_message_id) VALUES (NULL) RETURNING id INTO t2;
     INSERT INTO thread (root_message_id) VALUES (NULL) RETURNING id INTO t3;
     INSERT INTO thread (root_message_id) VALUES (NULL) RETURNING id INTO t4;
-    
-    -- Вставка в message 
+
+    -- Вставка в message
     INSERT INTO message (topic, text, sender_base_profile_id, thread_id)
     VALUES ('Topic1 Lorem ipsum.', 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.', bp1, t1) RETURNING id INTO m1;
     
@@ -217,16 +239,35 @@ BEGIN
     UPDATE thread SET root_message_id = m3 WHERE id = t3;
     UPDATE thread SET root_message_id = m4 WHERE id = t4;
     
+    -- Вставка в folder 
+    INSERT INTO folder (profile_id, folder_name, folder_type) 
+    VALUES (p1, 'Inbox', 'inbox') RETURNING id INTO f1;
+
+    INSERT INTO folder (profile_id, folder_name, folder_type) 
+    VALUES (p1, 'Sent', 'sent') RETURNING id INTO f2;
+    
+    INSERT INTO folder (profile_id, folder_name, folder_type) 
+    VALUES (p2, 'Inbox', 'inbox') RETURNING id INTO f3;
+
+    INSERT INTO folder (profile_id, folder_name, folder_type) 
+    VALUES (p2, 'Sent', 'sent') RETURNING id INTO f4;
+    
+    INSERT INTO folder (profile_id, folder_name, folder_type) 
+    VALUES (p3, 'Inbox', 'inbox') RETURNING id INTO f5;
+    
+    INSERT INTO folder (profile_id, folder_name, folder_type) 
+    VALUES (p4, 'Inbox', 'inbox') RETURNING id INTO f6;
+
     -- Вставка в profile_message
-    INSERT INTO profile_message (profile_id, message_id) VALUES (p1, m1);
-    INSERT INTO profile_message (profile_id, message_id) VALUES (p2, m1);
-    INSERT INTO profile_message (profile_id, message_id) VALUES (p1, m2);
-    INSERT INTO profile_message (profile_id, message_id) VALUES (p3, m2);
-    INSERT INTO profile_message (profile_id, message_id) VALUES (p2, m3);
-    INSERT INTO profile_message (profile_id, message_id) VALUES (p3, m3);
-    INSERT INTO profile_message (profile_id, message_id) VALUES (p4, m3);
-    INSERT INTO profile_message (profile_id, message_id) VALUES (p3, m4);
-    INSERT INTO profile_message (profile_id, message_id) VALUES (p4, m4);
+    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p1, m1, );
+    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p2, m1, );
+    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p1, m2, );
+    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p3, m2, );
+    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p2, m3, );
+    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p3, m3, );
+    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p4, m3, );
+    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p3, m4, );
+    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p4, m4, );
     
     -- Вставка в settings
     INSERT INTO settings (profile_id) VALUES (p1);
