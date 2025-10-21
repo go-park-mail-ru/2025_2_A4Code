@@ -13,6 +13,9 @@ DROP TABLE IF EXISTS message CASCADE;  -- После file, так как file з
 DROP TRIGGER IF EXISTS thread_update_trigger ON thread;
 DROP TABLE IF EXISTS thread CASCADE;
 
+DROP TRIGGER IF EXISTS folder_profile_message_update_trigger ON folder_profile_message;
+DROP TABLE IF EXISTS folder_profile_message CASCADE;
+
 DROP TRIGGER IF EXISTS folder_update_trigger ON folder;
 DROP TABLE IF EXISTS folder CASCADE;
 

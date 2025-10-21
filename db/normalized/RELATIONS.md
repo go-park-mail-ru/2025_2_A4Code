@@ -36,6 +36,14 @@
 - RootMessage: Корневое сообщение цепочки (ссылка на Message)
 - CreatedAt: Дата и время создания записи
 - UpdatedAt: Дата и время последнего обновления записи
+### Folder
+Папки с сообщениями
+- Id: Уникальный идентификатор папки с сообщениями
+- Profile_id: Идентификатор пользователя
+- Folder_name: Название папки
+- Folder_type: Тип папки ('inbox', 'sent', 'draft', 'spam', 'trash', 'custom')
+- CreatedAt: Дата и время создания записи
+- UpdatedAt: Дата и время последнего обновления записи
 ### File
 Прикрепленные файлы
 - Id: Уникальный идентификатор файла
@@ -45,14 +53,19 @@
 - MessageId: Идентификатор сообщения, к которому прикреплен файл
 - CreatedAt: Дата и время создания записи
 - UpdatedAt: Дата и время последнего обновления записи
+### FolderProfileMessage
+Связь пользователя, сообщения и папки(для нахождения сообщения у одного пользователя в нескольких папках)
+- MessageId: Идентификатор сообщения (часть составного ключа)
+- FolderId: Идентификатор папки (часть составного ключа)
+- CreatedAt: Дата и время создания записи
+- UpdatedAt: Дата и время последнего обновления записи
 ### ProfileMessage
-Связь пользователей с сообщениями (статусы и папки)
+Связь пользователей с сообщениями (статусы)
 - ProfileId: Идентификатор пользователя (часть составного ключа)
 - MessageId: Идентификатор сообщения (часть составного ключа)
 - ReadStatus: Статус прочтения сообщения пользователем
 - DeletedStatus: Статус удаления сообщения пользователем
 - DraftStatus: Статус черновика сообщения
-- FolderName: Название папки, в которой находится сообщение
 - CreatedAt: Дата и время создания записи
 - UpdatedAt: Дата и время последнего обновления записи
 ### Settings
@@ -74,13 +87,18 @@ erDiagram
     PROFILE { }
     MESSAGE { }
     THREAD { }
+    FOLDER { }
     FILE { }
+    FOLDERPROFILEMESSAGE { }
     PROFILEMESSAGE { }
     SETTINGS { }
 
     PROFILE ||--o| SETTINGS : "has"
     MESSAGE ||--o{ PROFILEMESSAGE : "relatedTo"
     PROFILE ||--o{ PROFILEMESSAGE : "receivedBy"
+    PROFILE ||--o{ FOLDER : "has"
+    MESSAGE ||--o{ FOLDERPROFILEMESSAGE : "placed_in"
+    FOLDER ||--o{ FOLDERPROFILEMESSAGE : "contains"
     MESSAGE ||--o{ FILE : "attachedTo"
     THREAD ||--o{ MESSAGE : "groups"
     PROFILE ||--|| BASEPROFILE : "extends"
@@ -129,6 +147,14 @@ erDiagram
         _ CreatedAt
         _ UpdatedAt
     }
+    FOLDER {
+        _ Id PK
+        _ Profile_id FK
+        _ Folder_name
+        _ Folder_type
+        _ CreatedAt
+        _ UpdatedAt
+    }
     FILE {
         _ Id PK
         _ FileType
@@ -138,13 +164,18 @@ erDiagram
         _ CreatedAt
         _ UpdatedAt
     }
+    FOLDERPROFILEMESSAGE {
+        _ MessageId PK "FK"
+        _ FolderId PK "FK"
+        _ CreatedAt
+        _ UpdatedAt
+    }
     PROFILEMESSAGE {
         _ ProfileId PK "FK"
         _ MessageId PK "FK"
         _ ReadStatus
         _ DeletedStatus
         _ DraftStatus
-        _ FolderName 
         _ CreatedAt
         _ UpdatedAt
     }
@@ -162,6 +193,9 @@ erDiagram
     PROFILE ||--o| SETTINGS : "has"
     MESSAGE ||--o{ PROFILEMESSAGE : "relatedTo"
     PROFILE ||--o{ PROFILEMESSAGE : "receivedBy"
+    PROFILE ||--o{ FOLDER : "has"
+    MESSAGE ||--o{ FOLDERPROFILEMESSAGE : "placed_in"
+    FOLDER ||--o{ FOLDERPROFILEMESSAGE : "contains"
     MESSAGE ||--o{ FILE : "attachedTo"
     THREAD ||--o{ MESSAGE : "groups"
     PROFILE ||--|| BASEPROFILE : "extends"
@@ -191,13 +225,21 @@ AuthVersion, CreatedAt, UpdatedAt}
 ```text
 {Id} → {RootMessageId, CreatedAt, UpdatedAt}
 ```
+### FOLDER
+```text
+{Id} → {ProfileId, FolderName, FolderType, CreatedAt, UpdatedAt}
+```
 ### FILE
 ```text
 {Id} → {FileType, Size, StoragePath, MessageId, CreatedAt, UpdatedAt}
 ```
+### FOLDERPROFILEMESSAGE
+```text
+{MessageId, FolderId} → {CreatedAt, UpdatedAt}
+```
 ### PROFILEMESSAGE
 ```text
-{ProfileId, MessageId} → {ReadStatus, DeletedStatus, DraftStatus, FolderName, CreatedAt, UpdatedAt}
+{ProfileId, MessageId} → {ReadStatus, DeletedStatus, DraftStatus, CreatedAt, UpdatedAt}
 ```
 ### SETTINGS
 ```text

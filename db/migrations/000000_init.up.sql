@@ -125,6 +125,20 @@ CREATE TRIGGER file_update_trigger
 BEFORE UPDATE ON file
 FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 
+-- Создание таблицы связи профилей и сообщений и папок (folder_profile_message)
+CREATE TABLE IF NOT EXISTS folder_profile_message (
+    message_id INTEGER NOT NULL REFERENCES message(id) ON DELETE CASCADE,
+    folder_id INTEGER NOT NULL REFERENCES folder(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (message_id, folder_id)
+);
+
+-- Триггер для updated_at в folder_profile_message
+CREATE TRIGGER folder_profile_message_update_trigger
+BEFORE UPDATE ON folder_profile_message
+FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
+
 -- Создание таблицы связи профилей и сообщений (profile_message)
 CREATE TABLE IF NOT EXISTS profile_message (
     profile_id INTEGER NOT NULL REFERENCES profile(id) ON DELETE CASCADE,
@@ -132,7 +146,6 @@ CREATE TABLE IF NOT EXISTS profile_message (
     read_status BOOLEAN NOT NULL DEFAULT FALSE,
     deleted_status BOOLEAN NOT NULL DEFAULT FALSE,
     draft_status BOOLEAN NOT NULL DEFAULT FALSE,
-    folder_id INTEGER NOT NULL REFERENCES folder(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (profile_id, message_id)
@@ -258,16 +271,27 @@ BEGIN
     INSERT INTO folder (profile_id, folder_name, folder_type) 
     VALUES (p4, 'Inbox', 'inbox') RETURNING id INTO f6;
 
+    -- Вставка в folder_profile_message
+    INSERT INTO folder_profile_message (message_id, folder_id) VALUES (m1, f2);
+    INSERT INTO folder_profile_message (message_id, folder_id) VALUES (m1, f3);
+    INSERT INTO folder_profile_message (message_id, folder_id) VALUES (m2, f2);
+    INSERT INTO folder_profile_message (message_id, folder_id) VALUES (m2, f5);
+    INSERT INTO folder_profile_message (message_id, folder_id) VALUES (m3, f4);
+    INSERT INTO folder_profile_message (message_id, folder_id) VALUES (m3, f5);
+    INSERT INTO folder_profile_message (message_id, folder_id) VALUES (m3, f6);
+    INSERT INTO folder_profile_message (message_id, folder_id) VALUES (m4, f4); 
+    INSERT INTO folder_profile_message (message_id, folder_id) VALUES (m4, f6);
+
     -- Вставка в profile_message
-    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p1, m1, );
-    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p2, m1, );
-    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p1, m2, );
-    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p3, m2, );
-    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p2, m3, );
-    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p3, m3, );
-    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p4, m3, );
-    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p3, m4, );
-    INSERT INTO profile_message (profile_id, message_id, folder_id) VALUES (p4, m4, );
+    INSERT INTO profile_message (profile_id, message_id) VALUES (p1, m1);
+    INSERT INTO profile_message (profile_id, message_id) VALUES (p2, m1);
+    INSERT INTO profile_message (profile_id, message_id) VALUES (p1, m2);
+    INSERT INTO profile_message (profile_id, message_id) VALUES (p3, m2);
+    INSERT INTO profile_message (profile_id, message_id) VALUES (p2, m3);
+    INSERT INTO profile_message (profile_id, message_id) VALUES (p3, m3);
+    INSERT INTO profile_message (profile_id, message_id) VALUES (p4, m3);
+    INSERT INTO profile_message (profile_id, message_id) VALUES (p2, m4);
+    INSERT INTO profile_message (profile_id, message_id) VALUES (p4, m4);
     
     -- Вставка в settings
     INSERT INTO settings (profile_id) VALUES (p1);
