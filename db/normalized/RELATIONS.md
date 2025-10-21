@@ -64,8 +64,6 @@
 - ProfileId: Идентификатор пользователя (часть составного ключа)
 - MessageId: Идентификатор сообщения (часть составного ключа)
 - ReadStatus: Статус прочтения сообщения пользователем
-- DeletedStatus: Статус удаления сообщения пользователем
-- DraftStatus: Статус черновика сообщения
 - CreatedAt: Дата и время создания записи
 - UpdatedAt: Дата и время последнего обновления записи
 ### Settings
@@ -174,8 +172,6 @@ erDiagram
         _ ProfileId PK "FK"
         _ MessageId PK "FK"
         _ ReadStatus
-        _ DeletedStatus
-        _ DraftStatus
         _ CreatedAt
         _ UpdatedAt
     }
@@ -239,7 +235,7 @@ AuthVersion, CreatedAt, UpdatedAt}
 ```
 ### PROFILEMESSAGE
 ```text
-{ProfileId, MessageId} → {ReadStatus, DeletedStatus, DraftStatus, CreatedAt, UpdatedAt}
+{ProfileId, MessageId} → {ReadStatus, CreatedAt, UpdatedAt}
 ```
 ### SETTINGS
 ```text
