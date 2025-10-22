@@ -44,7 +44,7 @@ func (h *HandlerLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(&response)
+	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
 		sendErrorResponse(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
 		return

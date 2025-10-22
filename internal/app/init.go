@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	_ "github.com/lib/pq"
 )
 
 // TODO: подключение хэндлеров, бд и тд
@@ -37,7 +39,7 @@ type Storage struct {
 func Init() {
 	cfg := config.GetConfig() // Путь к конфигу config/prod.yml
 
-	connection, err := newDbConnection(StoragePath)
+	connection, err := newDbConnection(cfg.DBConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,7 +69,7 @@ func Init() {
 	http.Handle("/compose", corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP)))
 	http.Handle("/upload", corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP)))
 
-	err = http.ListenAndServe(":"+cfg.AppConfig.ConfigPath, nil)
+	err = http.ListenAndServe(":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
 	//err := http.ListenAndServe(":8080", nil)
@@ -78,10 +80,15 @@ func Init() {
 
 }
 
-func newDbConnection(storagePath string) (*sql.DB, error) {
+func newDbConnection(dbConfig *config.DBConfig) (*sql.DB, error) {
 	const op = "app.newDbConnection"
 
-	db, err := sql.Open("postgres", storagePath)
+	connectionString := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		dbConfig.Host, dbConfig.Port, dbConfig.User, dbConfig.Password, dbConfig.Name, dbConfig.SSLMode,
+	)
+
+	db, err := sql.Open("postgres", connectionString)
 	if err != nil {
 		return nil, fmt.Errorf(op+": %w", err)
 	}
