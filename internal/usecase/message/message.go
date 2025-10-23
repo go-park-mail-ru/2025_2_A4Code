@@ -8,8 +8,8 @@ import (
 type MessageRepository interface {
 	FindByMessageID(messageID int64) (*domain.Message, error)
 	FindByProfileID(profileID int64) ([]domain.Message, error)
-	FindFullByMessageID(messageID int64) (domain.FullMessage, error)
-	SaveMessage(topic, receiver, text string, threadID int64) (int64, error)
+	FindFullByMessageID(messageID int64, profileID int64) (domain.FullMessage, error)
+	SaveMessage(receiverProfileEmail string, senderBaseProfileID int64, topic, text string, threadID int64) (int64, error)
 	SaveFile(messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
 }
 
@@ -51,12 +51,12 @@ func (uc *MessageUcase) GetMessagesInfo(profileID int64) (domain.Messages, error
 	}, nil
 }
 
-func (uc *MessageUcase) FindFullByMessageID(messageID int64) (domain.FullMessage, error) {
-	return uc.repo.FindFullByMessageID(messageID)
+func (uc *MessageUcase) FindFullByMessageID(messageID int64, profileID int64) (domain.FullMessage, error) {
+	return uc.repo.FindFullByMessageID(messageID, profileID)
 }
 
-func (uc *MessageUcase) SaveMessage(topic, receiver, text string, threadID int64) (messageID int64, err error) {
-	return uc.repo.SaveMessage(topic, receiver, text, threadID)
+func (uc *MessageUcase) SaveMessage(receiverProfileEmail string, senderBaseProfileID int64, topic, text string, threadID int64) (messageID int64, err error) {
+	return uc.repo.SaveMessage(receiverProfileEmail, senderBaseProfileID, topic, text, threadID)
 }
 
 func (uc *MessageUcase) SaveFile(messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error) {

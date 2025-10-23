@@ -8,7 +8,7 @@ type Message struct {
 	Snippet  string    `json:"snippet"`
 	Datetime time.Time `json:"datetime"`
 	IsRead   bool      `json:"is_read"`
-	Folder   string    `json:"folder"`
+	//Folder   string    `json:"folder"`
 	Sender
 }
 

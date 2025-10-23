@@ -57,7 +57,7 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := session.GetProfileID(r, SECRET)
+	id, err := session.GetProfileID(r, SECRET)
 	if err != nil {
 		sendErrorResponse(w, err.Error(), http.StatusUnauthorized)
 		return
@@ -69,7 +69,7 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullMessage, err := h.messageUCase.FindFullByMessageID(int64(messageID))
+	fullMessage, err := h.messageUCase.FindFullByMessageID(int64(messageID), id)
 	if err != nil {
 		sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return

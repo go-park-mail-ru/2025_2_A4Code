@@ -25,8 +25,9 @@ type Receiver struct {
 type Receivers []Receiver
 
 type Request struct {
-	Topic string `json:"topic"`
-	Text  string `json:"text"`
+	Topic    string `json:"topic"`
+	Text     string `json:"text"`
+	ThreadID int64  `json:"thread_id"`
 	Receivers
 	Files
 }
@@ -68,9 +69,8 @@ func (h *HandlerWriteEmail) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sendErrorResponse(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
 	for _, receiver := range req.Receivers {
-		messageID, err := h.messageUCase.SaveMessage(req.Topic, receiver.Email, req.Text, id)
+		messageID, err := h.messageUCase.SaveMessage(receiver.Email, id, req.Topic, req.Text, req.ThreadID)
 		if err != nil {
 			sendErrorResponse(w, "Failed to save message: "+err.Error(), http.StatusInternalServerError)
 			return

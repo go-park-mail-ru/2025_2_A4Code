@@ -23,11 +23,8 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// TODO: подключение хэндлеров, бд и тд
-
 const (
-	StoragePath    = "./storage"
-	FileUploadPath = "./files"
+	FileUploadPath = "./files" // TODO: в дальнейшем будет минио
 )
 
 var SECRET = []byte("secret")
@@ -69,10 +66,10 @@ func Init() {
 	http.Handle("/compose", corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP)))
 	http.Handle("/upload", corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP)))
 
-	err = http.ListenAndServe(":"+cfg.AppConfig.Port, nil)
+	//err = http.ListenAndServe(":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
-	//err := http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", nil)
 
 	if err != nil {
 		panic(err)
