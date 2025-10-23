@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS profile (
     surname TEXT CHECK (LENGTH(surname) BETWEEN 1 AND 200),
     patronymic TEXT CHECK (LENGTH(patronymic) BETWEEN 1 AND 200),
     gender TEXT CHECK (gender IN ('Male', 'Female')),
-    birthday DATE,
+    birthday DATE NOT NULL,
     image_path TEXT CHECK (LENGTH(image_path) BETWEEN 1 AND 200),
     phone_number TEXT UNIQUE CHECK (LENGTH(phone_number) BETWEEN 1 AND 20),
     auth_version INTEGER NOT NULL DEFAULT 1,
