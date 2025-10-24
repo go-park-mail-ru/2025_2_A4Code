@@ -30,7 +30,7 @@ type ProfileRepository interface {
 	UserExists(ctx context.Context, username string) (bool, error)
 	CreateUser(ctx context.Context, profile domain.Profile) (int64, error)
 	FindByUsernameAndDomain(ctx context.Context, username string, domain string) (*domain.Profile, error)
-	FindInfoByID(int64) (domain.ProfileInfo, error)
+	FindInfoByID(int64) (*domain.ProfileInfo, error)
 }
 
 type ProfileUcase struct {
@@ -125,7 +125,7 @@ func (uc *ProfileUcase) checkPassword(password, hash string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
-func (uc *ProfileUcase) FindInfoByID(profileID int64) (domain.ProfileInfo, error) {
+func (uc *ProfileUcase) FindInfoByID(profileID int64) (*domain.ProfileInfo, error) {
 	return uc.repo.FindInfoByID(profileID)
 }
 
