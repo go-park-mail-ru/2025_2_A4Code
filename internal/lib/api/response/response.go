@@ -5,8 +5,8 @@ import (
 )
 
 type Response struct {
-	Status string `json:"status"`
-	Error  string `json:"error,omitempty"`
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
 }
 
 func OK() Response {
@@ -14,5 +14,5 @@ func OK() Response {
 }
 
 func Error(msg string) Response {
-	return Response{Status: http.StatusText(http.StatusBadRequest), Error: msg}
+	return Response{Status: http.StatusText(http.StatusBadRequest), Message: msg}
 }

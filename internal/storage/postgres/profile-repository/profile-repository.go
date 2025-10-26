@@ -245,7 +245,7 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 	return &profile, nil
 }
 
-func (repo *ProfileRepository) FindInfoByID(profileID int64) (*domain.ProfileInfo, error) {
+func (repo *ProfileRepository) FindInfoByID(profileID int64) (domain.ProfileInfo, error) {
 	const op = "storage.postgres.profile-repository.FindInfoByID"
 
 	const query = `
@@ -265,7 +265,7 @@ func (repo *ProfileRepository) FindInfoByID(profileID int64) (*domain.ProfileInf
 
 	stmt, err := repo.db.Prepare(query)
 	if err != nil {
-		return nil, fmt.Errorf(op+`: %w`, err)
+		return domain.ProfileInfo{}, fmt.Errorf(op+`: %w`, err)
 	}
 	defer stmt.Close()
 
@@ -280,10 +280,71 @@ func (repo *ProfileRepository) FindInfoByID(profileID int64) (*domain.ProfileInf
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil // TODO: добавить кастомную ошибку
+			return domain.ProfileInfo{}, nil // TODO: добавить кастомную ошибку
 		}
-		return nil, fmt.Errorf(op+`: query: %w`, err)
+		return domain.ProfileInfo{}, fmt.Errorf(op+`: query: %w`, err)
 	}
 
-	return &profileInfo, nil
+	return profileInfo, nil
+}
+
+func (repo *ProfileRepository) FindSettingsById(profileID int64) (domain.Settings, error) {
+	const op = "storage.postgres.profile-repository.FindSettingsById"
+
+	const query = `
+        SELECT 
+            s.id, s.profile_id, s.notification_tolerance, s.language, s.theme, s.signature,
+            p.id as actual_profile_id
+        FROM 
+            base_profile bp
+        JOIN 
+            profile p ON bp.id = p.base_profile_id
+        LEFT JOIN 
+            settings s ON p.id = s.profile_id
+        WHERE 
+            bp.id = $1`
+
+	stmt, err := repo.db.Prepare(query)
+	if err != nil {
+		return domain.Settings{}, fmt.Errorf("%s: %w", op, err)
+	}
+	defer stmt.Close()
+
+	var settings domain.Settings
+	var actualProfileID int64
+	var settingsID sql.NullInt64
+	var notificationTolerance, language, theme sql.NullString
+	var signatureNullable sql.NullString
+
+	err = stmt.QueryRow(profileID).Scan(
+		&settingsID, &settings.ProfileID, &notificationTolerance,
+		&language, &theme, &signatureNullable,
+		&actualProfileID,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return domain.Settings{}, fmt.Errorf("%s: profile not found: %w", op, err)
+		}
+		return domain.Settings{}, fmt.Errorf("%s: query: %w", op, err)
+	}
+
+	if !settingsID.Valid {
+		defaultSettings := domain.SetDefaultSettings(actualProfileID)
+		return defaultSettings, nil
+	}
+
+	settings.ID = settingsID.Int64
+	settings.ProfileID = actualProfileID
+	settings.NotificationTolerance = notificationTolerance.String
+	settings.Language = language.String
+	settings.Theme = theme.String
+
+	if signatureNullable.Valid && signatureNullable.String != "" {
+		settings.Signatures = []string{signatureNullable.String}
+	} else {
+		settings.Signatures = []string{}
+	}
+
+	return settings, nil
 }

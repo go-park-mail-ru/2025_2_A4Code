@@ -5,7 +5,6 @@ import (
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -14,13 +13,13 @@ import (
 type SignupRequest struct {
 	Name     string
 	Username string
-	Birthday time.Time
+	Birthday string
 	Gender   string
 	Password string
 }
 
 type LoginRequest struct {
-	Email    string
+	Username string
 	Password string
 }
 
@@ -30,7 +29,8 @@ type ProfileRepository interface {
 	UserExists(ctx context.Context, username string) (bool, error)
 	CreateUser(ctx context.Context, profile domain.Profile) (int64, error)
 	FindByUsernameAndDomain(ctx context.Context, username string, domain string) (*domain.Profile, error)
-	FindInfoByID(int64) (*domain.ProfileInfo, error)
+	FindInfoByID(int64) (domain.ProfileInfo, error)
+	FindSettingsById(profileID int64) (domain.Settings, error)
 }
 
 type ProfileUcase struct {
@@ -59,6 +59,11 @@ func (uc *ProfileUcase) Signup(ctx context.Context, SignupReq SignupRequest) (in
 		return 0, errors.New("Пользователь с таким логином уже существует")
 	}
 
+	birthday, err := time.Parse("02.01.2006", SignupReq.Birthday)
+	if err != nil {
+		return 0, errors.New("Неверный формат даты. Используйте ДД.ММ.ГГГГ")
+	}
+
 	// Хэширование пароля
 	PasswordHash, err := bcrypt.GenerateFromPassword([]byte(SignupReq.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -68,10 +73,10 @@ func (uc *ProfileUcase) Signup(ctx context.Context, SignupReq SignupRequest) (in
 	// Создаем domain модель с хэшированным паролем
 	profile := domain.Profile{
 		Name:         SignupReq.Name,
-		Username:     SignupReq.Username, // Исправлено: было Userame
-		Birthday:     SignupReq.Birthday,
+		Username:     SignupReq.Username,
+		Birthday:     birthday,
 		Gender:       SignupReq.Gender,
-		PasswordHash: string(PasswordHash), // Сохраняем хэш
+		PasswordHash: string(PasswordHash),
 	}
 
 	// Сохранение в БД через репозиторий
@@ -84,14 +89,8 @@ func (uc *ProfileUcase) Signup(ctx context.Context, SignupReq SignupRequest) (in
 }
 
 func (uc *ProfileUcase) Login(ctx context.Context, req LoginRequest) (int64, error) {
-	// Парсим email для извлечения username
-	username, err := uc.ExtractUsernameFromEmail(req.Email)
-	if err != nil {
-		return 0, err
-	}
-
 	// Ищем профиль по username и фиксированному домену
-	profile, err := uc.repo.FindByUsernameAndDomain(ctx, username, "a4mail.ru")
+	profile, err := uc.repo.FindByUsernameAndDomain(ctx, req.Username, "a4mail.ru")
 	if err != nil {
 		return 0, errors.New("Пользователь с таким адресом почты отсутствует")
 	}
@@ -104,28 +103,11 @@ func (uc *ProfileUcase) Login(ctx context.Context, req LoginRequest) (int64, err
 	return profile.ID, nil
 }
 
-func (uc *ProfileUcase) ExtractUsernameFromEmail(email string) (string, error) {
-	// Убеждаемся, что email заканчивается на наш домен
-	if !strings.HasSuffix(email, "@a4mail.ru") {
-		return "", errors.New("Адрес должен оканчиваться на @a4mail.ru")
-	}
-
-	// Извлекаем username (всё до @)
-	username := strings.TrimSuffix(email, "@a4mail.ru")
-
-	// Дополнительная валидация username
-	if username == "" {
-		return "", errors.New("Неправильный формат адреса почты")
-	}
-
-	return username, nil
-}
-
 func (uc *ProfileUcase) checkPassword(password, hash string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
-func (uc *ProfileUcase) FindInfoByID(profileID int64) (*domain.ProfileInfo, error) {
+func (uc *ProfileUcase) FindInfoByID(profileID int64) (domain.ProfileInfo, error) {
 	return uc.repo.FindInfoByID(profileID)
 }
 
@@ -139,4 +121,8 @@ func (uc *ProfileUcase) CreateUser(ctx context.Context, profile domain.Profile) 
 
 func (uc *ProfileUcase) FindByUsernameAndDomain(ctx context.Context, username string, domain string) (*domain.Profile, error) {
 	return uc.repo.FindByUsernameAndDomain(ctx, username, domain)
+}
+
+func (uc *ProfileUcase) FindSettingsById(profileID int64) (domain.Settings, error) {
+	return uc.repo.FindSettingsById(profileID)
 }

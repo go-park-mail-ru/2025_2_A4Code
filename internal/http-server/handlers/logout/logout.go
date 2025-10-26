@@ -4,13 +4,12 @@ import (
 	resp "2025_2_a4code/internal/lib/api/response"
 	"encoding/json"
 	"net/http"
+	"strconv"
 )
 
 type Response struct {
 	resp.Response
-	Body struct {
-		Message string `json:"message"`
-	} `json:"body"`
+	Body interface{} `json:"body,omitempty"`
 }
 
 type HandlerLogout struct {
@@ -36,11 +35,10 @@ func (h *HandlerLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	response := Response{
 		Response: resp.Response{
-			Status: http.StatusText(http.StatusOK),
+			Status:  http.StatusText(http.StatusOK),
+			Message: "Успешный выход из почты",
 		},
-		Body: struct {
-			Message string `json:"message"`
-		}{Message: "Успешный выход из почты"},
+		Body: struct{}{},
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -55,9 +53,10 @@ func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
 
 	response := Response{
 		Response: resp.Response{
-			Status: http.StatusText(statusCode),
-			Error:  errorMsg,
+			Status:  strconv.Itoa(statusCode),
+			Message: errorMsg,
 		},
+		Body: struct{}{},
 	}
 
 	w.WriteHeader(statusCode)
