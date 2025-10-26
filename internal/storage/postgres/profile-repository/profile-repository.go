@@ -276,7 +276,7 @@ func (repo *ProfileRepository) FindInfoByID(profileID int64) (domain.ProfileInfo
 	return profileInfo, nil
 }
 
-func (repo *ProfileRepository) FindSettingsById(profileID int64) (domain.Settings, error) {
+func (repo *ProfileRepository) FindSettingsByProfileId(profileID int64) (domain.Settings, error) {
 	const op = "storage.postgres.profile-repository.FindSettingsById"
 
 	const query = `
