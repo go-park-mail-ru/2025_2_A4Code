@@ -6,24 +6,23 @@ import (
 	profileUcase "2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
 type Request struct {
-	Name     string    `json:"name"`
-	Username string    `json:"username"`
-	Birthday time.Time `json:"birthday"`
-	Gender   string    `json:"gender"`
-	Password string    `json:"password"`
+	Name     string `json:"name"`
+	Username string `json:"username"`
+	Birthday string `json:"birthday"`
+	Gender   string `json:"gender"`
+	Password string `json:"password"`
 }
 
 type Response struct {
 	resp.Response
-	Body struct {
-		Message string `json:"message"`
-	} `json:"body"`
+	Body interface{} `json:"body,omitempty"`
 }
 
 type HandlerSignup struct {
@@ -52,7 +51,7 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Валидация обязательных полей
-	if req.Username == "" || req.Password == "" || req.Name == "" || req.Gender == "" || req.Birthday.IsZero() {
+	if req.Username == "" || req.Password == "" || req.Name == "" || req.Gender == "" || req.Birthday == "" {
 		sendErrorResponse(w, "Введите все поля формы", http.StatusBadRequest)
 		return
 	}
@@ -69,7 +68,7 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Вызываем usecase для регистрации
 	userID, err := h.profileUCase.Signup(r.Context(), SignupReq)
 	if err != nil {
-		sendErrorResponse(w, err.Error(), http.StatusBadRequest)
+		sendErrorResponse(w, "Ошибка: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -99,13 +98,10 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	response := Response{
 		Response: resp.Response{
-			Status: "200",
+			Status:  "200",
+			Message: "Вы успешно зарегистрировались",
 		},
-		Body: struct {
-			Message string `json:"message"`
-		}{
-			Message: "Пользователь зарегистрирован",
-		},
+		Body: struct{}{},
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
@@ -118,9 +114,10 @@ func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
 
 	response := Response{
 		Response: resp.Response{
-			Status:  http.StatusText(statusCode),
+			Status:  strconv.Itoa(statusCode),
 			Message: errorMsg,
 		},
+		Body: struct{}{},
 	}
 
 	w.WriteHeader(statusCode)

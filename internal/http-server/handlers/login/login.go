@@ -2,25 +2,25 @@ package login
 
 import (
 	resp "2025_2_a4code/internal/lib/api/response"
+	"strings"
 
 	profileUcase "2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
 type Request struct {
-	Email    string `json:"email"`
+	Login    string `json:"login"`
 	Password string `json:"password"`
 }
 
 type Response struct {
 	resp.Response
-	Body struct {
-		Message string `json:"message"`
-	} `json:"body"`
+	Body interface{} `json:"body,omitempty"`
 }
 
 type HandlerLogin struct {
@@ -48,14 +48,25 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Валидация обязательных полей
-	if req.Email == "" || req.Password == "" {
+	if req.Login == "" || req.Password == "" {
 		sendErrorResponse(w, "Введите все поля формы", http.StatusBadRequest)
 		return
 	}
 
+	username := req.Login
+	if strings.Contains(req.Login, "@") {
+		parts := strings.Split(req.Login, "@")
+		if len(parts) > 0 && parts[0] != "" {
+			username = parts[0]
+		} else {
+			sendErrorResponse(w, "Неправильный формат логина или почты", http.StatusBadRequest)
+			return
+		}
+	}
+
 	// Преобразуем в UseCase запрос
 	LoginReq := profileUcase.LoginRequest{
-		Email:    req.Email,
+		Username: username,
 		Password: req.Password,
 	}
 
@@ -92,13 +103,10 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	response := Response{
 		Response: resp.Response{
-			Status: "200",
+			Status:  "200",
+			Message: "Вы успешно авторизованы",
 		},
-		Body: struct {
-			Message string `json:"message"`
-		}{
-			Message: "Пользователь авторизован",
-		},
+		Body: struct{}{},
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
@@ -111,9 +119,10 @@ func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
 
 	response := Response{
 		Response: resp.Response{
-			Status:  http.StatusText(statusCode),
+			Status:  strconv.Itoa(statusCode),
 			Message: errorMsg,
 		},
+		Body: struct{}{},
 	}
 
 	w.WriteHeader(statusCode)
