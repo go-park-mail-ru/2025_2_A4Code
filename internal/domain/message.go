@@ -13,13 +13,13 @@ type Message struct {
 }
 
 type FullMessage struct {
-	ID       string    `json:"id"`
-	Topic    string    `json:"topic"`
-	Text     string    `json:"text"`
-	Datetime time.Time `json:"datetime"`
+	ID         string    `json:"id"`
+	Topic      string    `json:"topic"`
+	Text       string    `json:"text"`
+	Datetime   time.Time `json:"datetime"`
+	ThreadRoot string    `json:"thread_root"`
 	Folder
 	Sender
-	Thread
 	Files
 }
 

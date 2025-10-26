@@ -1,4 +1,4 @@
-package send_message
+package reply_message
 
 import (
 	resp "2025_2_a4code/internal/lib/api/response"
@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"net/http"
 )
-
-var SECRET = []byte("secret") // TODO: убрать отсюда
 
 type File struct {
 	Name        string `json:"name"`
@@ -25,10 +23,12 @@ type Receiver struct {
 type Receivers []Receiver
 
 type Request struct {
-	Topic     string    `json:"topic"`
-	Text      string    `json:"text"`
-	Receivers Receivers `json:"receivers"`
-	Files     Files     `json:"files"`
+	RootMessageID int64     `json:"root_message_id"`
+	Topic         string    `json:"topic"`
+	Text          string    `json:"text"`
+	ThreadRoot    string    `json:"thread_root"`
+	Receivers     Receivers `json:"receivers"`
+	Files         Files     `json:"files"`
 }
 
 type Response struct {
@@ -36,15 +36,19 @@ type Response struct {
 	Body struct{} `json:"body"`
 }
 
-type HandlerSend struct {
+type HandlerReply struct {
 	messageUCase *message.MessageUcase
+	secret       []byte
 }
 
-func New(ucM *message.MessageUcase) *HandlerSend {
-	return &HandlerSend{messageUCase: ucM}
+func New(messageUCase *message.MessageUcase, SECRET []byte) *HandlerReply {
+	return &HandlerReply{
+		messageUCase: messageUCase,
+		secret:       SECRET,
+	}
 }
 
-func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerReply) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		sendErrorResponse(w, "Метод не разрешен", http.StatusMethodNotAllowed)
 		return
@@ -61,17 +65,26 @@ func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := session.GetProfileID(r, SECRET)
+	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
 		sendErrorResponse(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
+
+	if err != nil {
+		sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	for _, receiver := range req.Receivers {
 		messageID, err := h.messageUCase.SaveMessage(receiver.Email, id, req.Topic, req.Text)
 		if err != nil {
 			sendErrorResponse(w, "Не удалось сохранить файл: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		threadId, err := h.messageUCase.SaveThread(req.RootMessageID, req.ThreadRoot) // TODO: проверка на существование треда
+		err = h.messageUCase.SaveThreadIdToMessage(messageID, threadId)
 
 		for _, file := range req.Files {
 			_, err = h.messageUCase.SaveFile(messageID, file.Name, file.FileType, file.StoragePath, file.Size)

@@ -1,4 +1,4 @@
-package me
+package profile_page
 
 import (
 	resp "2025_2_a4code/internal/lib/api/response"
@@ -11,12 +11,6 @@ import (
 
 var SECRET = []byte("secret") // TODO: убрать отсюда
 
-type Settings struct {
-	NotificationTolerance string
-	Language              string
-	Theme                 string
-	Signature             string
-}
 type Profile struct {
 	Username   string    `json:"username"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -24,9 +18,8 @@ type Profile struct {
 	Surname    string    `json:"surname"`
 	Patronymic string    `json:"patronymic"`
 	Gender     string    `json:"gender"`
-	Birthday   string    `json:"birthday"`
+	Birthday   string    `json:"date_of_birth"`
 	AvatarPath string    `json:"avatar_path"`
-	Settings
 }
 type Response struct {
 	resp.Response
@@ -43,7 +36,7 @@ func New(ucP *profile.ProfileUcase) *HandlerMe {
 
 func (h *HandlerMe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		sendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)
+		sendErrorResponse(w, "Метод не разрешен", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -69,21 +62,15 @@ func (h *HandlerMe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Birthday:   profileInfo.Birthday,
 		AvatarPath: profileInfo.AvatarPath,
 	}
-	settingsResponse := Settings{
-		NotificationTolerance: profileInfo.NotificationTolerance,
-		Language:              profileInfo.Language,
-		Theme:                 profileInfo.Theme,
-		Signature:             profileInfo.Signature,
-	}
 
 	response := Response{
 		Response: resp.Response{
-			Status: http.StatusText(http.StatusOK),
+			Status:  http.StatusText(http.StatusOK),
+			Message: "Страница пользователя получена",
 		},
 		Body: struct {
-			Profile  Profile
-			Settings Settings
-		}{Profile: profileInfoResponse, Settings: settingsResponse},
+			Profile Profile
+		}{Profile: profileInfoResponse},
 	}
 
 	// Отправляем ответ
@@ -99,8 +86,8 @@ func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
 
 	response := Response{
 		Response: resp.Response{
-			Status: http.StatusText(statusCode),
-			Error:  errorMsg,
+			Status:  http.StatusText(statusCode),
+			Message: "Ошибка: " + errorMsg,
 		},
 	}
 

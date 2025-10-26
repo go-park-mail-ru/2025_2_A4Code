@@ -29,7 +29,7 @@ type DBConfig struct {
 func GetConfig() Config {
 	err := godotenv.Load(".env")
 	if err != nil {
-		panic("Error loading .env file")
+		panic("Message loading .env file")
 	}
 
 	configPath := os.Getenv("CONFIG_PATH")
@@ -39,7 +39,7 @@ func GetConfig() Config {
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		log.Fatalf("Error reading config file %s: %v", configPath, err)
+		log.Fatalf("Message reading config file %s: %v", configPath, err)
 	}
 
 	var yamlStruct struct {
@@ -48,7 +48,7 @@ func GetConfig() Config {
 	}
 
 	if err := yaml.Unmarshal(data, &yamlStruct); err != nil {
-		log.Fatalf("Error parsing YAML config: %v", err)
+		log.Fatalf("Message parsing YAML config: %v", err)
 	}
 
 	return Config{

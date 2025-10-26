@@ -96,7 +96,7 @@ func (repo *MessageRepository) FindFullByMessageID(messageID int64, profileID in
 		LEFT JOIN
 			profile p ON bp.Id = p.BaseProfileId
 		LEFT JOIN
-			thread t ON m.ThreadId = t.Id
+			thread t ON m.ThreadRoot = t.Id
 		LEFT JOIN
 			folderprofilemessage fpm ON m.Id = fpm.MessageId
 		LEFT JOIN
@@ -120,7 +120,7 @@ func (repo *MessageRepository) FindFullByMessageID(messageID int64, profileID in
 		&messageIdInt, &msg.Topic, &msg.Text, &msg.Datetime,
 		&senderId, &senderUsername, &senderDomain,
 		&senderName, &senderSurname, &senderAvatar,
-		&msg.Thread.ID, &msg.Thread.RootMessage,
+		&msg.ThreadRoot, &msg.ThreadRoot,
 		&msg.Folder.ID, &msg.Folder.ProfileID, &msg.Folder.Name, &folderTypeStr,
 	)
 	if err != nil {
@@ -241,11 +241,11 @@ func (repo *MessageRepository) FindByProfileID(profileID int64) ([]domain.Messag
 	return messages, nil
 }
 
-func (repo *MessageRepository) SaveMessage(receiverProfileEmail string, senderBaseProfileID int64, topic, text string, threadID int64) (messageID int64, err error) {
+func (repo *MessageRepository) SaveMessage(receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (messageID int64, err error) {
 	const op = "storage.postgresql.message.Save"
 
 	const queryMessage = `
-		INSERT INTO messages (Topic, Text, DateOfDispatch, SenderBaseProfileId, ThreadId, CreatedAt, UpdatedAt)
+		INSERT INTO messages (Topic, Text, DateOfDispatch, SenderBaseProfileId, ThreadRoot, CreatedAt, UpdatedAt)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING MessageId`
 
@@ -257,10 +257,6 @@ func (repo *MessageRepository) SaveMessage(receiverProfileEmail string, senderBa
 
 	timeNow := time.Now()
 	var nullThreadID sql.NullInt64
-	if threadID > 0 {
-		nullThreadID.Int64 = threadID
-		nullThreadID.Valid = true
-	}
 	err = stmt.QueryRow(topic, text, timeNow, senderBaseProfileID, nullThreadID, time.Now(), time.Now()).Scan(&messageID)
 	if err != nil {
 		return 0, fmt.Errorf(op+": %w", err)
@@ -331,4 +327,55 @@ func (repo *MessageRepository) SaveFile(messageID int64, fileName, fileType, sto
 	}
 
 	return fileID, nil
+}
+
+func (repo *MessageRepository) SaveThread(messageID int64, threadRoot string) (threadID int64, err error) {
+	const op = "storage.postgresql.message.SaveThread"
+
+	const query = `
+		INSERT INTO thread (RootMessageId, CreateAt, UpdatedAt)
+		VALUES ($1, $2, $3)`
+
+	stmt, err := repo.db.Prepare(query)
+	if err != nil {
+		return 0, fmt.Errorf(op+": %w", err)
+	}
+	defer stmt.Close()
+
+	timeNow := time.Now()
+	err = stmt.QueryRow(messageID, timeNow, timeNow).Scan(&threadID)
+	if err != nil {
+		return 0, fmt.Errorf(op+": %w", err)
+	}
+
+	return threadID, nil
+}
+
+func (repo *MessageRepository) SaveThreadIdToMessage(messageID int64, threadID int64) error {
+	const op = "storage.postgresql.message.SaveThreadIdToMessage"
+
+	const query = `
+        UPDATE messages
+        SET ThreadRoot = $1, UpdatedAt = $2
+        WHERE Id = $3`
+	stmt, err := repo.db.Prepare(query)
+	if err != nil {
+		return fmt.Errorf(op+": %w", err)
+	}
+	defer stmt.Close()
+	timeNow := time.Now()
+	res, err := stmt.Exec(threadID, timeNow, messageID)
+	if err != nil {
+		return fmt.Errorf(op+": %w", err)
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf(op+": %w", err)
+	}
+	if rowsAffected == 0 {
+
+		return fmt.Errorf(op + ": Сообщение не найдено (ни одна строка не изменилась)")
+	}
+	return nil
 }

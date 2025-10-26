@@ -9,8 +9,10 @@ type MessageRepository interface {
 	FindByMessageID(messageID int64) (*domain.Message, error)
 	FindByProfileID(profileID int64) ([]domain.Message, error)
 	FindFullByMessageID(messageID int64, profileID int64) (domain.FullMessage, error)
-	SaveMessage(receiverProfileEmail string, senderBaseProfileID int64, topic, text string, threadID int64) (int64, error)
+	SaveMessage(receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
 	SaveFile(messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
+	SaveThread(messageID int64, threadId string) (threadID int64, err error)
+	SaveThreadIdToMessage(messageID int64, threadID int64) error
 }
 
 type MessageUcase struct {
@@ -55,10 +57,18 @@ func (uc *MessageUcase) FindFullByMessageID(messageID int64, profileID int64) (d
 	return uc.repo.FindFullByMessageID(messageID, profileID)
 }
 
-func (uc *MessageUcase) SaveMessage(receiverProfileEmail string, senderBaseProfileID int64, topic, text string, threadID int64) (messageID int64, err error) {
-	return uc.repo.SaveMessage(receiverProfileEmail, senderBaseProfileID, topic, text, threadID)
+func (uc *MessageUcase) SaveMessage(receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (messageID int64, err error) {
+	return uc.repo.SaveMessage(receiverProfileEmail, senderBaseProfileID, topic, text)
 }
 
 func (uc *MessageUcase) SaveFile(messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error) {
 	return uc.repo.SaveFile(messageID, fileName, fileType, storagePath, size)
+}
+
+func (uc *MessageUcase) SaveThread(messageID int64, threadId string) (threadID int64, err error) {
+	return uc.repo.SaveThread(messageID, threadId)
+}
+
+func (uc *MessageUcase) SaveThreadIdToMessage(messageID int64, threadID int64) error {
+	return uc.repo.SaveThreadIdToMessage(messageID, threadID)
 }

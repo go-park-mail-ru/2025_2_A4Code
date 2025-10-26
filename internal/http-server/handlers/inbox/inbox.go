@@ -78,7 +78,8 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	response := Response{
 		Response: resp.Response{
-			Status: http.StatusText(http.StatusOK),
+			Status:  http.StatusText(http.StatusOK),
+			Message: "Письма получены",
 		},
 		Body: messagesInfo,
 	}
@@ -97,8 +98,8 @@ func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
 
 	response := Response{
 		Response: resp.Response{
-			Status: http.StatusText(statusCode),
-			Error:  errorMsg,
+			Status:  http.StatusText(statusCode),
+			Message: "Ошибка: " + errorMsg,
 		},
 	}
 

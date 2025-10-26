@@ -1,4 +1,4 @@
-package me
+package profile_page
 
 import (
 	handlers2 "2025_2_a4code/internal/http-server/handlers"
@@ -37,7 +37,7 @@ func TestMeHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, "/me", nil)
+			req := httptest.NewRequest(tt.method, "/profile-page", nil)
 
 			if tt.setupAuth {
 				users := h.GetUsers()

@@ -28,13 +28,12 @@ type File struct {
 
 type Files []File
 
-type Thread int64
 type Message struct {
 	Topic    string    `json:"topic"`
 	Text     string    `json:"text"`
 	Datetime time.Time `json:"datetime"`
+	ThreadId string    `json:"thread_id"`
 	Sender
-	Thread
 	Files
 }
 type Response struct {
@@ -93,13 +92,14 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Username: fullMessage.Username,
 			Avatar:   fullMessage.Avatar,
 		},
-		Thread: Thread(fullMessage.Thread.RootMessage),
-		Files:  filesResponse,
+		ThreadId: fullMessage.ThreadRoot,
+		Files:    filesResponse,
 	}
 
 	response := Response{
 		Response: resp.Response{
-			Status: http.StatusText(http.StatusOK),
+			Status:  http.StatusText(http.StatusOK),
+			Message: "Письмо отправлено",
 		},
 		Body: messageResponse,
 	}
@@ -111,8 +111,8 @@ func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
 
 	response := Response{
 		Response: resp.Response{
-			Status: http.StatusText(statusCode),
-			Error:  errorMsg,
+			Status:  http.StatusText(statusCode),
+			Message: "Ошибка: " + errorMsg,
 		},
 	}
 

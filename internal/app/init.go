@@ -6,9 +6,11 @@ import (
 	"2025_2_a4code/internal/http-server/handlers/inbox"
 	"2025_2_a4code/internal/http-server/handlers/login"
 	"2025_2_a4code/internal/http-server/handlers/logout"
-	"2025_2_a4code/internal/http-server/handlers/me"
 	messagepage "2025_2_a4code/internal/http-server/handlers/message-page"
+	"2025_2_a4code/internal/http-server/handlers/profile-page"
+	replymessage "2025_2_a4code/internal/http-server/handlers/reply-message"
 	sendmessage "2025_2_a4code/internal/http-server/handlers/send-message"
+	"2025_2_a4code/internal/http-server/handlers/settings"
 	"2025_2_a4code/internal/http-server/handlers/signup"
 	uploadfile "2025_2_a4code/internal/http-server/handlers/upload-file"
 	messagerepository "2025_2_a4code/internal/storage/postgres/message-repository"
@@ -34,7 +36,7 @@ type Storage struct {
 }
 
 func Init() {
-	cfg := config.GetConfig() // Путь к конфигу config/prod.yml
+	cfg := config.GetConfig()
 
 	connection, err := newDbConnection(cfg.DBConfig)
 	if err != nil {
@@ -51,20 +53,24 @@ func Init() {
 	signupHandler := signup.New(profileUCase, SECRET)
 	logoutHandler := logout.New()
 	inboxHandler := inbox.New(profileUCase, messageUCase)
-	meHandler := me.New(profileUCase)
+	meHandler := profile_page.New(profileUCase)
 	messagePageHandler := messagepage.New(profileUCase, messageUCase)
 	sendMessageHandler := sendmessage.New(messageUCase)
 	uploadFileHandler, err := uploadfile.New(FileUploadPath)
+	settingsHandler := settings.New(profileUCase, SECRET)
+	replyHandler := replymessage.New(messageUCase, SECRET)
 
 	http.Handle("/", corsMiddleware(http.HandlerFunc(healthCheckHandler.ServeHTTP)))
 	http.Handle("/login", corsMiddleware(http.HandlerFunc(loginHandler.ServeHTTP)))
 	http.Handle("/signup", corsMiddleware(http.HandlerFunc(signupHandler.ServeHTTP)))
 	http.Handle("/logout", corsMiddleware(http.HandlerFunc(logoutHandler.ServeHTTP)))
-	http.Handle("/inbox", corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP)))
-	http.Handle("/me", corsMiddleware(http.HandlerFunc(meHandler.ServeHTTP)))
-	http.Handle("/{message_id}", corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP)))
-	http.Handle("/compose", corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP)))
+	http.Handle("/messages/inbox", corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP)))
+	http.Handle("/user/profile", corsMiddleware(http.HandlerFunc(meHandler.ServeHTTP)))
+	http.Handle("/messages/{message_id}", corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP)))
+	http.Handle("/messages/compose", corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP)))
 	http.Handle("/upload", corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP)))
+	http.Handle("/user/settings", corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP)))
+	http.Handle("/messages/reply", corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP)))
 
 	//err = http.ListenAndServe(":"+cfg.AppConfig.Port, nil)
 

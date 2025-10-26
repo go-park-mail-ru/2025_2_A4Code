@@ -1,13 +1,15 @@
 package domain
 
 type Settings struct {
-	ID                    int64
-	ProfileID             int64
-	NotificationTolerance string
-	Language              string
-	Theme                 string
-	Signature             string
+	ID                    int64    `json:"id"`
+	ProfileID             int64    `json:"profile_id"`
+	NotificationTolerance string   `json:"notification_tolerance"`
+	Language              string   `json:"language"`
+	Theme                 string   `json:"theme"`
+	Signatures            []string `json:"signatures"`
 }
+
+type Signatures []string
 
 func SetDefaultSettings(profileID int64) Settings {
 	return Settings{
@@ -15,6 +17,6 @@ func SetDefaultSettings(profileID int64) Settings {
 		Language:              "ru",
 		Theme:                 "light",
 		NotificationTolerance: "normal",
-		Signature:             "",
+		//Signature:             "",
 	}
 }
