@@ -2,12 +2,12 @@ package app
 
 import (
 	"2025_2_a4code/internal/config"
-	healthcheck "2025_2_a4code/internal/http-server/handlers/health-check"
 	"2025_2_a4code/internal/http-server/handlers/inbox"
 	"2025_2_a4code/internal/http-server/handlers/login"
 	"2025_2_a4code/internal/http-server/handlers/logout"
 	messagepage "2025_2_a4code/internal/http-server/handlers/message-page"
-	"2025_2_a4code/internal/http-server/handlers/profile-page"
+	profile_page "2025_2_a4code/internal/http-server/handlers/profile-page"
+	"2025_2_a4code/internal/http-server/handlers/refresh"
 	replymessage "2025_2_a4code/internal/http-server/handlers/reply-message"
 	sendmessage "2025_2_a4code/internal/http-server/handlers/send-message"
 	"2025_2_a4code/internal/http-server/handlers/settings"
@@ -48,9 +48,9 @@ func Init() {
 	messageUCase := messageUcase.New(messageRepository)
 	profileUCase := profileUcase.New(profileRepository)
 
-	healthCheckHandler := healthcheck.New(SECRET)
 	loginHandler := login.New(profileUCase, SECRET)
 	signupHandler := signup.New(profileUCase, SECRET)
+	refreshHandler := refresh.New(SECRET)
 	logoutHandler := logout.New()
 	inboxHandler := inbox.New(profileUCase, messageUCase)
 	meHandler := profile_page.New(profileUCase)
@@ -60,10 +60,10 @@ func Init() {
 	settingsHandler := settings.New(profileUCase, SECRET)
 	replyHandler := replymessage.New(messageUCase, SECRET)
 
-	http.Handle("/", corsMiddleware(http.HandlerFunc(healthCheckHandler.ServeHTTP)))
-	http.Handle("/login", corsMiddleware(http.HandlerFunc(loginHandler.ServeHTTP)))
-	http.Handle("/signup", corsMiddleware(http.HandlerFunc(signupHandler.ServeHTTP)))
-	http.Handle("/logout", corsMiddleware(http.HandlerFunc(logoutHandler.ServeHTTP)))
+	http.Handle("/auth/login", corsMiddleware(http.HandlerFunc(loginHandler.ServeHTTP)))
+	http.Handle("/auth/signup", corsMiddleware(http.HandlerFunc(signupHandler.ServeHTTP)))
+	http.Handle("/auth/refresh", corsMiddleware(http.HandlerFunc(refreshHandler.ServeHTTP)))
+	http.Handle("/auth/logout", corsMiddleware(http.HandlerFunc(logoutHandler.ServeHTTP)))
 	http.Handle("/messages/inbox", corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP)))
 	http.Handle("/user/profile", corsMiddleware(http.HandlerFunc(meHandler.ServeHTTP)))
 	http.Handle("/messages/{message_id}", corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP)))
