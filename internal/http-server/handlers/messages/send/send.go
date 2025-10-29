@@ -1,4 +1,4 @@
-package send_message
+package send
 
 import (
 	resp "2025_2_a4code/internal/lib/api/response"

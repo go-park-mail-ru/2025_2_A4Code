@@ -2,17 +2,18 @@ package app
 
 import (
 	"2025_2_a4code/internal/config"
-	"2025_2_a4code/internal/http-server/handlers/inbox"
-	"2025_2_a4code/internal/http-server/handlers/login"
-	"2025_2_a4code/internal/http-server/handlers/logout"
-	messagepage "2025_2_a4code/internal/http-server/handlers/message-page"
-	profile_page "2025_2_a4code/internal/http-server/handlers/profile-page"
-	"2025_2_a4code/internal/http-server/handlers/refresh"
-	replymessage "2025_2_a4code/internal/http-server/handlers/reply-message"
-	sendmessage "2025_2_a4code/internal/http-server/handlers/send-message"
-	"2025_2_a4code/internal/http-server/handlers/settings"
-	"2025_2_a4code/internal/http-server/handlers/signup"
-	uploadfile "2025_2_a4code/internal/http-server/handlers/upload-file"
+	"2025_2_a4code/internal/http-server/handlers/auth/login"
+	"2025_2_a4code/internal/http-server/handlers/auth/logout"
+	"2025_2_a4code/internal/http-server/handlers/auth/refresh"
+	"2025_2_a4code/internal/http-server/handlers/auth/signup"
+	"2025_2_a4code/internal/http-server/handlers/messages/inbox"
+	messagepage "2025_2_a4code/internal/http-server/handlers/messages/message-page"
+	"2025_2_a4code/internal/http-server/handlers/messages/reply"
+	"2025_2_a4code/internal/http-server/handlers/messages/send"
+	"2025_2_a4code/internal/http-server/handlers/user/profile-page"
+	"2025_2_a4code/internal/http-server/handlers/user/settings"
+	uploadfile "2025_2_a4code/internal/http-server/handlers/user/upload-file"
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	messagerepository "2025_2_a4code/internal/storage/postgres/message-repository"
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	messageUcase "2025_2_a4code/internal/usecase/message"
@@ -20,9 +21,11 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 
 	_ "github.com/lib/pq"
+	"go.uber.org/zap"
 )
 
 const (
@@ -36,18 +39,24 @@ type Storage struct {
 }
 
 func Init() {
+	// Читаем конфиг
 	cfg := config.GetConfig()
 
+	// Установка соединения с базой
 	connection, err := newDbConnection(cfg.DBConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Создание репозиториев
 	messageRepository := messagerepository.New(connection)
 	profileRepository := profilerepository.New(connection)
 
+	// Создание юзкейсов
 	messageUCase := messageUcase.New(messageRepository)
 	profileUCase := profileUcase.New(profileRepository)
 
+	// Создание хэндлеров
 	loginHandler := login.New(profileUCase, SECRET)
 	signupHandler := signup.New(profileUCase, SECRET)
 	refreshHandler := refresh.New(SECRET)
@@ -55,24 +64,35 @@ func Init() {
 	inboxHandler := inbox.New(profileUCase, messageUCase)
 	meHandler := profile_page.New(profileUCase)
 	messagePageHandler := messagepage.New(profileUCase, messageUCase)
-	sendMessageHandler := sendmessage.New(messageUCase)
+	sendMessageHandler := send.New(messageUCase)
 	uploadFileHandler, err := uploadfile.New(FileUploadPath)
 	settingsHandler := settings.New(profileUCase, SECRET)
-	replyHandler := replymessage.New(messageUCase, SECRET)
+	replyHandler := reply.New(messageUCase, SECRET)
 
-	http.Handle("/auth/login", corsMiddleware(http.HandlerFunc(loginHandler.ServeHTTP)))
-	http.Handle("/auth/signup", corsMiddleware(http.HandlerFunc(signupHandler.ServeHTTP)))
-	http.Handle("/auth/refresh", corsMiddleware(http.HandlerFunc(refreshHandler.ServeHTTP)))
-	http.Handle("/auth/logout", corsMiddleware(http.HandlerFunc(logoutHandler.ServeHTTP)))
-	http.Handle("/messages/inbox", corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP)))
-	http.Handle("/user/profile", corsMiddleware(http.HandlerFunc(meHandler.ServeHTTP)))
-	http.Handle("/messages/{message_id}", corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP)))
-	http.Handle("/messages/compose", corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP)))
-	http.Handle("/upload", corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP)))
-	http.Handle("/user/settings", corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP)))
-	http.Handle("/messages/reply", corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP)))
+	// Создание логгера
+	lg, err := zap.NewProduction()
+	if err != nil {
+		slog.Error(err.Error())
+	}
+	defer lg.Sync()
+	lg.Info("Starting server...", zap.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.Port))
+	sugar := lg.Sugar().With(zap.String("mode", "[access_log]"))
+	zlog := logger.Logger{Zlog: sugar}
 
-	//err = http.ListenAndServe(":"+cfg.AppConfig.Port, nil)
+	// роутинг + настройка middleware
+	http.Handle("/auth/login", zlog.Initialize(corsMiddleware(http.HandlerFunc(loginHandler.ServeHTTP))))
+	http.Handle("/auth/signup", zlog.Initialize(corsMiddleware(http.HandlerFunc(signupHandler.ServeHTTP))))
+	http.Handle("/auth/refresh", zlog.Initialize(corsMiddleware(http.HandlerFunc(refreshHandler.ServeHTTP))))
+	http.Handle("/auth/logout", zlog.Initialize(corsMiddleware(http.HandlerFunc(logoutHandler.ServeHTTP))))
+	http.Handle("/messages/inbox", zlog.Initialize(corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP))))
+	http.Handle("/user/profile", zlog.Initialize(corsMiddleware(http.HandlerFunc(meHandler.ServeHTTP))))
+	http.Handle("/messages/{message_id}", zlog.Initialize(corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP))))
+	http.Handle("/messages/compose", zlog.Initialize(corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP))))
+	http.Handle("/upload", zlog.Initialize(corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
+	http.Handle("/user/settings", zlog.Initialize(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
+	http.Handle("/messages/reply", zlog.Initialize(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
+
+	//err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
 	err = http.ListenAndServe(":8080", nil)

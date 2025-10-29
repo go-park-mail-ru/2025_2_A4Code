@@ -49,10 +49,10 @@ func (h *HandlerSettings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	settingsResponse := Settings{ // TODO: поменять наполнение
-		NotificationTolerance: settings,
-		Language:              settings,
-		Theme:                 settings,
-		Signatures:            settings,
+		NotificationTolerance: settings.NotificationTolerance,
+		Language:              settings.Language,
+		Theme:                 settings.Theme,
+		Signatures:            settings.Signatures,
 	}
 
 	reponse := Response{

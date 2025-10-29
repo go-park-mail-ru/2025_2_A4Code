@@ -14,6 +14,7 @@ type Config struct {
 }
 
 type AppConfig struct {
+	Host string `yaml:"host"`
 	Port string `yaml:"port"`
 }
 
