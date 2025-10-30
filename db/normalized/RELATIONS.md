@@ -20,6 +20,19 @@
 - AuthVersion: Версия аутентификации
 - CreatedAt: Дата и время создания записи
 - UpdatedAt: Дата и время последнего обновления записи
+
+### RefreshTokens
+Таблица для хранения refresh токенов пользователей
+- Id: Уникальный идентификатор записи в базе данных
+- Token: Сам refresh токен (строка)
+- ProfileId: Ссылка на профиль пользователя
+- ExpiresAt: Дата и время истечения срока действия токена
+- UserAgent: Информация о браузере/устройстве пользователя
+- IpAddress: IP-адрес с которого был создан токен
+- Revoked: Флаг отзыва токена
+- CreatedAt: Дата и время создания записи
+- UpdatedAt: Дата и время последнего обновления записи
+
 ### Message
 Сообщения электронной почты
 - Id: Уникальный идентификатор сообщения
@@ -83,6 +96,7 @@
 erDiagram
     BASEPROFILE { }
     PROFILE { }
+    REFRESH_TOKENS { }
     MESSAGE { }
     THREAD { }
     FOLDER { }
@@ -92,6 +106,7 @@ erDiagram
     SETTINGS { }
 
     PROFILE ||--o| SETTINGS : "has"
+    PROFILE ||--o{ REFRESH_TOKENS : "has"
     MESSAGE ||--o{ PROFILEMESSAGE : "relatedTo"
     PROFILE ||--o{ PROFILEMESSAGE : "receivedBy"
     PROFILE ||--o{ FOLDER : "has"
@@ -126,6 +141,17 @@ erDiagram
         _ ImagePath
         _ PhoneNumber "AK"
         _ AuthVersion
+        _ CreatedAt
+        _ UpdatedAt
+    }
+    REFRESH_TOKENS {
+        _ Id PK
+        _ Token "AK"
+        _ ProfileId FK
+        _ ExpiresAt
+        _ UserAgent
+        _ IpAddress
+        _ Revoked
         _ CreatedAt
         _ UpdatedAt
     }
@@ -187,6 +213,7 @@ erDiagram
     }
 
     PROFILE ||--o| SETTINGS : "has"
+    PROFILE ||--o{ REFRESH_TOKENS : "has"
     MESSAGE ||--o{ PROFILEMESSAGE : "relatedTo"
     PROFILE ||--o{ PROFILEMESSAGE : "receivedBy"
     PROFILE ||--o{ FOLDER : "has"
@@ -206,12 +233,17 @@ erDiagram
 {Username} → {Id, Domain, CreatedAt, UpdatedAt}  
 {Username, Domain} → {Id, CreatedAt, UpdatedAt} 
 ```
-PROFILE
+### PROFILE
 ```text
 {Id} → {BaseProfileId, PasswordHash, Name, Surname, Patronymic, Gender, Birthday, ImagePath, PhoneNumber, 
 AuthVersion, CreatedAt, UpdatedAt}
 {PhoneNumber} → {Id}
 {BaseProfileId} → {Id}
+```
+### REFRESH_TOKENS
+```text
+{Id} → {Token, ProfileId, ExpiresAt, UserAgent, IpAddress, Revoked, CreatedAt, UpdatedAt}
+{Token} → {Id}
 ```
 ### MESSAGE
 ```text

@@ -45,6 +45,22 @@ CREATE TRIGGER profile_update_trigger
 BEFORE UPDATE ON profile
 FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
 
+CREATE TABLE refresh_tokens (
+    id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    token TEXT NOT NULL UNIQUE CHECK (LENGTH(token) BETWEEN 32 AND 64),
+    profile_id INTEGER NOT NULL REFERENCES profile(id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    user_agent TEXT CHECK (LENGTH(user_agent) <= 500),
+    ip_address INET,
+    revoked BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TRIGGER refresh_tokens_update_trigger
+BEFORE UPDATE ON refresh_tokens
+FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
+
 -- Создание таблицы цепочек сообщений (thread) без foreign key сначала
 CREATE TABLE IF NOT EXISTS thread (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,

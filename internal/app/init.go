@@ -10,7 +10,7 @@ import (
 	messagepage "2025_2_a4code/internal/http-server/handlers/messages/message-page"
 	"2025_2_a4code/internal/http-server/handlers/messages/reply"
 	"2025_2_a4code/internal/http-server/handlers/messages/send"
-	"2025_2_a4code/internal/http-server/handlers/user/profile-page"
+	profile_page "2025_2_a4code/internal/http-server/handlers/user/profile-page"
 	"2025_2_a4code/internal/http-server/handlers/user/settings"
 	uploadfile "2025_2_a4code/internal/http-server/handlers/user/upload-file"
 	"2025_2_a4code/internal/http-server/middleware/logger"
@@ -92,10 +92,10 @@ func Init() {
 	http.Handle("/user/settings", zlog.Initialize(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
 	http.Handle("/messages/reply", zlog.Initialize(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
 
-	//err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
+	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
-	err = http.ListenAndServe(":8080", nil)
+	// err = http.ListenAndServe(":8080", nil)
 
 	if err != nil {
 		panic(err)
