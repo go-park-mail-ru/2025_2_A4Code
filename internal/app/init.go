@@ -10,26 +10,34 @@ import (
 	messagepage "2025_2_a4code/internal/http-server/handlers/messages/message-page"
 	"2025_2_a4code/internal/http-server/handlers/messages/reply"
 	"2025_2_a4code/internal/http-server/handlers/messages/send"
-	profile_page "2025_2_a4code/internal/http-server/handlers/user/profile-page"
+	profilepage "2025_2_a4code/internal/http-server/handlers/user/profile-page"
 	"2025_2_a4code/internal/http-server/handlers/user/settings"
 	uploadfile "2025_2_a4code/internal/http-server/handlers/user/upload-file"
+	"2025_2_a4code/internal/http-server/middleware/cors"
 	"2025_2_a4code/internal/http-server/middleware/logger"
+	e "2025_2_a4code/internal/lib/wrapper"
 	messagerepository "2025_2_a4code/internal/storage/postgres/message-repository"
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	messageUcase "2025_2_a4code/internal/usecase/message"
 	profileUcase "2025_2_a4code/internal/usecase/profile"
 	"database/sql"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
+	"os"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/lib/pq"
 	"go.uber.org/zap"
 )
 
 const (
 	FileUploadPath = "./files" // TODO: в дальнейшем будет минио
+	envLocal       = "local"
+	envDev         = "dev"
+	envProd        = "prod"
 )
 
 var SECRET = []byte("secret")
@@ -42,10 +50,22 @@ func Init() {
 	// Читаем конфиг
 	cfg := config.GetConfig()
 
+	// Создание логгера
+	log := setupLogger(envLocal)
+	log.Debug("debug messages are enabled")
+	loggerMiddleware := logger.New(log)
+
 	// Установка соединения с базой
 	connection, err := newDbConnection(cfg.DBConfig)
 	if err != nil {
-		log.Fatal(err)
+		log.Error("error connecting to database")
+		os.Exit(1)
+	}
+
+	// Миграции
+	err = runMigrations(connection, "file://./db/migrations")
+	if err != nil {
+		log.Error(err.Error())
 	}
 
 	// Создание репозиториев
@@ -56,46 +76,51 @@ func Init() {
 	messageUCase := messageUcase.New(messageRepository)
 	profileUCase := profileUcase.New(profileRepository)
 
+	//lg, err := zap.NewProduction()
+	//if err != nil {
+	//	slog.Error(err.Error())
+	//}
+	//defer lg.Sync()
+	//
+	//sugar := lg.Sugar()
+	//appLogger := sugar.With(zap.String("service", "app"))
+	//
+	//accessLogger := sugar.With(zap.String("service", "access_log"))
+	//zlog := logger.Zap{Log: accessLogger}
+
 	// Создание хэндлеров
 	loginHandler := login.New(profileUCase, SECRET)
 	signupHandler := signup.New(profileUCase, SECRET)
 	refreshHandler := refresh.New(SECRET)
 	logoutHandler := logout.New()
-	inboxHandler := inbox.New(profileUCase, messageUCase)
-	meHandler := profile_page.New(profileUCase)
+	inboxHandler := inbox.New(profileUCase, messageUCase, log)
+	meHandler := profilepage.New(profileUCase)
 	messagePageHandler := messagepage.New(profileUCase, messageUCase)
 	sendMessageHandler := send.New(messageUCase)
 	uploadFileHandler, err := uploadfile.New(FileUploadPath)
 	settingsHandler := settings.New(profileUCase, SECRET)
 	replyHandler := reply.New(messageUCase, SECRET)
 
-	// Создание логгера
-	lg, err := zap.NewProduction()
-	if err != nil {
-		slog.Error(err.Error())
-	}
-	defer lg.Sync()
-	lg.Info("Starting server...", zap.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.Port))
-	sugar := lg.Sugar().With(zap.String("mode", "[access_log]"))
-	zlog := logger.Logger{Zlog: sugar}
+	slog.Info("Starting server...", zap.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.Port))
 
 	// роутинг + настройка middleware
-	http.Handle("/auth/login", zlog.Initialize(corsMiddleware(http.HandlerFunc(loginHandler.ServeHTTP))))
-	http.Handle("/auth/signup", zlog.Initialize(corsMiddleware(http.HandlerFunc(signupHandler.ServeHTTP))))
-	http.Handle("/auth/refresh", zlog.Initialize(corsMiddleware(http.HandlerFunc(refreshHandler.ServeHTTP))))
-	http.Handle("/auth/logout", zlog.Initialize(corsMiddleware(http.HandlerFunc(logoutHandler.ServeHTTP))))
-	http.Handle("/messages/inbox", zlog.Initialize(corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP))))
-	http.Handle("/user/profile", zlog.Initialize(corsMiddleware(http.HandlerFunc(meHandler.ServeHTTP))))
-	http.Handle("/messages/{message_id}", zlog.Initialize(corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP))))
-	http.Handle("/messages/compose", zlog.Initialize(corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP))))
-	http.Handle("/upload", zlog.Initialize(corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
-	http.Handle("/user/settings", zlog.Initialize(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
-	http.Handle("/messages/reply", zlog.Initialize(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
+	http.Handle("/auth/login", loggerMiddleware(cors.Initialize(http.HandlerFunc(loginHandler.ServeHTTP))))
+	http.Handle("/auth/signup", loggerMiddleware(cors.Initialize(http.HandlerFunc(signupHandler.ServeHTTP))))
+	http.Handle("/auth/refresh", loggerMiddleware(cors.Initialize(http.HandlerFunc(refreshHandler.ServeHTTP))))
+	http.Handle("/auth/logout", loggerMiddleware(cors.Initialize(http.HandlerFunc(logoutHandler.ServeHTTP))))
+	http.Handle("/messages/inbox", loggerMiddleware(cors.Initialize(http.HandlerFunc(inboxHandler.ServeHTTP))))
+	http.Handle("/user/profile", loggerMiddleware(cors.Initialize(http.HandlerFunc(meHandler.ServeHTTP))))
+	http.Handle("/messages/{message_id}", loggerMiddleware(cors.Initialize(http.HandlerFunc(messagePageHandler.ServeHTTP))))
+	http.Handle("/messages/compose", loggerMiddleware(cors.Initialize(http.HandlerFunc(sendMessageHandler.ServeHTTP))))
+	http.Handle("/upload", loggerMiddleware(cors.Initialize(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
+	http.Handle("/user/settings", loggerMiddleware(cors.Initialize(http.HandlerFunc(settingsHandler.ServeHTTP))))
+	http.Handle("/messages/reply", loggerMiddleware(cors.Initialize(http.HandlerFunc(replyHandler.ServeHTTP))))
 
-	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
+	//err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
-	// err = http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", nil)
+	slog.Info("Server has started working...")
 
 	if err != nil {
 		panic(err)
@@ -113,30 +138,67 @@ func newDbConnection(dbConfig *config.DBConfig) (*sql.DB, error) {
 
 	db, err := sql.Open("postgres", connectionString)
 	if err != nil {
-		return nil, fmt.Errorf(op+": %w", err)
+		return nil, e.Wrap(op, err)
 	}
 
 	if err = db.Ping(); err != nil {
-		return nil, fmt.Errorf(op+": %w", err)
+		return nil, e.Wrap(op, err)
 	}
 
-	log.Println("Connected to postgresql successfully")
+	slog.Info("Connected to postgresql successfully")
 
 	return db, nil
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000") // TODO: change it
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+func runMigrations(db *sql.DB, migrationsDir string) error {
+	const op = "app.runMigrations"
 
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		return e.Wrap(op, err)
+	}
 
-		next.ServeHTTP(w, r)
-	})
+	m, err := migrate.NewWithDatabaseInstance(migrationsDir, "postgres", driver)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+
+	slog.Info("Applying migrations...")
+	err = m.Up()
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+
+	if err == migrate.ErrNoChange {
+		slog.Info("Migrations are already successfully applied")
+	} else {
+		slog.Info("Migrations are successfully applied")
+	}
+
+	return nil
+}
+
+func setupLogger(env string) *slog.Logger {
+	var log *slog.Logger
+
+	switch env {
+	case envLocal:
+		log = slog.New(
+			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
+		)
+	case envDev:
+		log = slog.New(
+			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
+		)
+	case envProd:
+		log = slog.New(
+			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
+		)
+	default: // If env config is invalid, set prod settings by default due to security
+		log = slog.New(
+			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
+		)
+	}
+
+	return log
 }

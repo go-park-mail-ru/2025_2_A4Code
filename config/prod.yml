@@ -6,5 +6,5 @@ db:
   port: 8050
   user: postgres
   password: postgresql
-  name: postgres
+  name: a4code_db
   sslmode: "disable"
