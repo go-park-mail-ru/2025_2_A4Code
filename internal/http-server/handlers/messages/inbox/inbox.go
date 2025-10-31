@@ -12,8 +12,6 @@ import (
 	"net/http"
 )
 
-var SECRET = []byte("secret") // TODO: убрать отсюда
-
 type Sender struct {
 	Email    string `json:"email"`
 	Username string `json:"username"`
@@ -35,10 +33,16 @@ type HandlerInbox struct {
 	profileUCase *profileUcase.ProfileUcase
 	messageUCase *messageUcase.MessageUcase
 	log          *slog.Logger
+	secret       []byte
 }
 
-func New(profileUCase *profileUcase.ProfileUcase, messageUCase *messageUcase.MessageUcase, log *slog.Logger) *HandlerInbox {
-	return &HandlerInbox{profileUCase: profileUCase, messageUCase: messageUCase, log: log}
+func New(profileUCase *profileUcase.ProfileUcase, messageUCase *messageUcase.MessageUcase, log *slog.Logger, SECRET []byte) *HandlerInbox {
+	return &HandlerInbox{
+		profileUCase: profileUCase,
+		messageUCase: messageUCase,
+		log:          log,
+		secret:       SECRET,
+	}
 }
 
 func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -51,7 +55,7 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := session.GetProfileID(r, SECRET)
+	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
 		log.Error(err.Error())
 		resp.SendErrorResponse(w, err.Error(), http.StatusUnauthorized)

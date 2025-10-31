@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-var SECRET = []byte("secret") // TODO: убрать отсюда
-
 type Profile struct {
 	Username   string    `json:"username"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -27,10 +25,13 @@ type Response struct {
 
 type HandlerMe struct {
 	profileUCase *profile.ProfileUcase
+	secret       []byte
 }
 
-func New(ucP *profile.ProfileUcase) *HandlerMe {
-	return &HandlerMe{profileUCase: ucP}
+func New(ucP *profile.ProfileUcase, SECRET []byte) *HandlerMe {
+	return &HandlerMe{profileUCase: ucP,
+		secret: SECRET,
+	}
 }
 
 func (h *HandlerMe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -39,7 +40,7 @@ func (h *HandlerMe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := session.GetProfileID(r, SECRET)
+	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
 		resp.SendErrorResponse(w, err.Error(), http.StatusUnauthorized)
 		return

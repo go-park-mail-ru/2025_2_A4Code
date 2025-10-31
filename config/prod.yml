@@ -1,6 +1,7 @@
 app:
   host: 217.16.16.26
   port: 8000
+  secret: secret
 db:
   host: 217.16.16.26
   port: 8050

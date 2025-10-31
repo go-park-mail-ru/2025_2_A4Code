@@ -41,8 +41,6 @@ const (
 	envProd        = "prod"
 )
 
-var SECRET = []byte("secret")
-
 type Storage struct {
 	db *sql.DB
 }
@@ -50,6 +48,8 @@ type Storage struct {
 func Init() {
 	// Читаем конфиг
 	cfg := config.GetConfig()
+
+	var SECRET = []byte(cfg.AppConfig.Secret)
 
 	// Создание логгера
 	log := setupLogger(envLocal)
@@ -94,10 +94,10 @@ func Init() {
 	signupHandler := signup.New(profileUCase, SECRET)
 	refreshHandler := refresh.New(SECRET)
 	logoutHandler := logout.New()
-	inboxHandler := inbox.New(profileUCase, messageUCase, log)
-	meHandler := profilepage.New(profileUCase)
-	messagePageHandler := messagepage.New(profileUCase, messageUCase)
-	sendMessageHandler := send.New(messageUCase)
+	inboxHandler := inbox.New(profileUCase, messageUCase, log, SECRET)
+	meHandler := profilepage.New(profileUCase, SECRET)
+	messagePageHandler := messagepage.New(profileUCase, messageUCase, SECRET)
+	sendMessageHandler := send.New(messageUCase, SECRET)
 	uploadFileHandler, err := uploadfile.New(FileUploadPath)
 	settingsHandler := settings.New(profileUCase, SECRET)
 	replyHandler := reply.New(messageUCase, SECRET)

@@ -43,10 +43,15 @@ type Response struct {
 type HandlerMessagePage struct {
 	profileUCase *profile.ProfileUcase
 	messageUCase *message.MessageUcase
+	secret       []byte
 }
 
-func New(ucP *profile.ProfileUcase, usM *message.MessageUcase) *HandlerMessagePage {
-	return &HandlerMessagePage{profileUCase: ucP, messageUCase: usM}
+func New(ucP *profile.ProfileUcase, usM *message.MessageUcase, SECRET []byte) *HandlerMessagePage {
+	return &HandlerMessagePage{
+		profileUCase: ucP,
+		messageUCase: usM,
+		secret:       SECRET,
+	}
 }
 
 func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -8,8 +8,6 @@ import (
 	"net/http"
 )
 
-var SECRET = []byte("secret") // TODO: убрать отсюда
-
 type File struct {
 	Name        string `json:"name"`
 	FileType    string `json:"file_type"`
@@ -37,10 +35,11 @@ type Response struct {
 
 type HandlerSend struct {
 	messageUCase *message.MessageUcase
+	secret       []byte
 }
 
-func New(ucM *message.MessageUcase) *HandlerSend {
-	return &HandlerSend{messageUCase: ucM}
+func New(messageUCase *message.MessageUcase, SECRET []byte) *HandlerSend {
+	return &HandlerSend{messageUCase: messageUCase, secret: SECRET}
 }
 
 func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +59,7 @@ func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := session.GetProfileID(r, SECRET)
+	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
 		resp.SendErrorResponse(w, err.Error(), http.StatusUnauthorized)
 		return
