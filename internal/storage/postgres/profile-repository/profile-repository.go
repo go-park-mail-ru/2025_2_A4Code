@@ -2,8 +2,11 @@ package profile_repository
 
 import (
 	"2025_2_a4code/internal/domain"
+	common_e "2025_2_a4code/internal/lib/errors"
+	e "2025_2_a4code/internal/lib/wrapper"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -15,14 +18,14 @@ func New(db *sql.DB) *ProfileRepository {
 	return &ProfileRepository{db: db}
 }
 
-func (repo *ProfileRepository) FindByID(id int64) (*domain.Profile, error) {
+func (repo *ProfileRepository) FindByID(ctx context.Context, id int64) (*domain.Profile, error) {
 	const op = "storage.postgres.profile-repository.FindByID"
 
 	const query = `
 		SELECT 
 			bp.id, bp.username, bp.domain, bp.created_at,
-			p.password_hash, p.auth_version, p.name, COALESCE(p.surname, ''), 
-			COALESCE(p.patronymic, ''), p.gender, p.birthday, COALESCE(p.avatar_path, '')
+			p.password_hash, p.auth_version, p.name, p.surname, 
+			p.patronymic, p.gender, p.birthday, p.avatar_path
 		FROM 
 			base_profile bp
 		JOIN 
@@ -30,28 +33,39 @@ func (repo *ProfileRepository) FindByID(id int64) (*domain.Profile, error) {
 		WHERE 
 			bp.id = $1`
 
-	stmt, err := repo.db.Prepare(query)
+	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf(op+`: %w`, err)
+		return nil, e.Wrap(op, err)
 	}
 	defer stmt.Close()
 
 	var profile domain.Profile
+	var profileSurname, profilePatronymic, profileAvatar sql.NullString
 
-	err = stmt.QueryRow(id).Scan(
+	err = stmt.QueryRowContext(ctx, id).Scan(
 		&profile.ID, &profile.Username, &profile.Domain, &profile.CreatedAt,
-		&profile.PasswordHash, &profile.AuthVersion, &profile.Name, &profile.Surname,
-		&profile.Patronymic, &profile.Gender, &profile.Birthday, &profile.AvatarPath,
+		&profile.PasswordHash, &profile.AuthVersion, &profile.Name, &profileSurname,
+		&profilePatronymic, &profile.Gender, &profile.Birthday, &profileAvatar,
 	)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil // TODO: добавить кастомную ошибку
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, e.Wrap(op, common_e.ErrNotFound)
 		}
-		return nil, fmt.Errorf(op+`: query: %w`, err)
+		return nil, e.Wrap(op, err)
 	}
 
-	if profile.Domain == "a4mail.ru" {
+	if profileSurname.Valid {
+		profile.Surname = profileSurname.String
+	}
+	if profilePatronymic.Valid {
+		profile.Patronymic = profilePatronymic.String
+	}
+	if profileAvatar.Valid {
+		profile.AvatarPath = profileAvatar.String
+	}
+
+	if profile.Domain == "flintmail.ru" {
 		profile.IsOurSystemUser = true
 	} else {
 		profile.IsOurSystemUser = false
@@ -60,13 +74,13 @@ func (repo *ProfileRepository) FindByID(id int64) (*domain.Profile, error) {
 	return &profile, nil
 }
 
-func (repo *ProfileRepository) FindSenderByID(id int64) (*domain.Sender, error) {
+func (repo *ProfileRepository) FindSenderByID(ctx context.Context, id int64) (*domain.Sender, error) {
 	const op = "storage.postgres.profile-repository.FindSenderByID"
 
 	const query = `
 		SELECT 
 			bp.id, bp.username, bp.domain, 
-			COALESCE(p.name, ''), COALESCE(p.surname, ''), COALESCE(p.avatar_path, '')
+			p.name, p.surname, p.avatar_path
 		FROM 
 			base_profile bp
 		LEFT JOIN 
@@ -74,29 +88,42 @@ func (repo *ProfileRepository) FindSenderByID(id int64) (*domain.Sender, error) 
 		WHERE 
 			bp.id = $1`
 
-	stmt, err := repo.db.Prepare(query)
+	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf(op+`: %w`, err)
+		return nil, e.Wrap(op, err)
 	}
 	defer stmt.Close()
 
 	var sender domain.Sender
-	var senderLogin, senderDomain, senderName, senderSurname string
+	var senderLogin, senderDomain string
+	var senderName, senderSurname, senderAvatar sql.NullString
 
-	err = stmt.QueryRow(id).Scan(
+	err = stmt.QueryRowContext(ctx, id).Scan(
 		&sender.Id, &senderLogin, &senderDomain,
-		&senderName, &senderSurname, &sender.Avatar,
+		&senderName, &senderSurname, &senderAvatar,
 	)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil // TODO: добавить кастомную ошибку
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, e.Wrap(op, common_e.ErrNotFound)
 		}
-		return nil, fmt.Errorf(op+`: query: %w`, err)
+		return nil, e.Wrap(op, err)
 	}
 
-	sender.Email = senderLogin + senderDomain
-	sender.Username = senderName + senderSurname
+	if senderName.Valid {
+		sender.Username = senderName.String
+		if senderSurname.Valid {
+			sender.Username += (" " + senderSurname.String)
+		}
+	} else if senderSurname.Valid {
+		sender.Username = senderSurname.String
+	}
+
+	if senderAvatar.Valid {
+		sender.Avatar = senderAvatar.String
+	}
+
+	sender.Email = fmt.Sprintf("%s@%s", senderLogin, senderDomain)
 
 	return &sender, nil
 }
@@ -108,26 +135,26 @@ func (repo *ProfileRepository) UserExists(ctx context.Context, username string) 
 		SELECT EXISTS (
 			SELECT 1
 			FROM base_profile 
-			WHERE username = $1 AND domain = 'a4mail.ru'
+			WHERE username = $1 AND domain = 'flintmail.ru'
 		)`
 
-	stmt, err := repo.db.Prepare(query)
+	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
-		return false, fmt.Errorf(op+`: %w`, err)
+		return false, e.Wrap(op, err)
 	}
 	defer stmt.Close()
 
 	var user_exists bool
 
-	err = stmt.QueryRow(username).Scan(
+	err = stmt.QueryRowContext(ctx, username).Scan(
 		&user_exists,
 	)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return false, nil // TODO: добавить кастомную ошибку
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, e.Wrap(op, common_e.ErrNotFound)
 		}
-		return false, fmt.Errorf(op+`: query: %w`, err)
+		return false, e.Wrap(op, err)
 	}
 
 	return user_exists, nil
@@ -136,9 +163,9 @@ func (repo *ProfileRepository) UserExists(ctx context.Context, username string) 
 func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Profile) (int64, error) {
 	const op = "storage.postgres.profile-repository.CreateUser"
 
-	tx, err := repo.db.Begin()
+	tx, err := repo.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("%s: %w", op, err)
+		return 0, e.Wrap(op+": failed to begin transaction: ", err)
 	}
 	defer tx.Rollback()
 
@@ -147,19 +174,19 @@ func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Pr
     	VALUES ($1, $2) 
 		RETURNING id;
 		`
-	stmt, err := tx.Prepare(query1)
+	stmt, err := tx.PrepareContext(ctx, query1)
 	if err != nil {
-		return 0, fmt.Errorf(op+`: %w`, err)
+		return 0, e.Wrap(op, err)
 	}
 	defer stmt.Close()
 
 	var newBaseProfileId int64
 
-	err = stmt.QueryRow(profile.Username, profile.Domain).Scan(
+	err = stmt.QueryRowContext(ctx, profile.Username, profile.Domain).Scan(
 		&newBaseProfileId,
 	)
 	if err != nil {
-		return 0, fmt.Errorf("%s: %w", op, err)
+		return 0, e.Wrap(op+": failed to create base profile: ", err)
 	}
 
 	const query2 = `
@@ -167,24 +194,24 @@ func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Pr
     	VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id;
 		`
-	stmt, err = tx.Prepare(query2)
+	stmt, err = tx.PrepareContext(ctx, query2)
 	if err != nil {
-		return 0, fmt.Errorf(op+`: %w`, err)
+		return 0, e.Wrap(op, err)
 	}
 	defer stmt.Close()
 
 	var newProfileId int64
 
-	err = stmt.QueryRow(newBaseProfileId, profile.PasswordHash, profile.Name, profile.Surname, profile.Patronymic, profile.Gender, profile.Birthday).Scan(
+	err = stmt.QueryRowContext(ctx, newBaseProfileId, profile.PasswordHash, profile.Name, profile.Surname, profile.Patronymic, profile.Gender, profile.Birthday).Scan(
 		&newProfileId,
 	)
 
 	if err != nil {
-		return 0, fmt.Errorf("%s: %w", op, err)
+		return 0, e.Wrap(op+": failed to create profile: ", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("%s: %w", op, err)
+		return 0, e.Wrap(op+": failed to commit transaction: ", err)
 	}
 
 	return newBaseProfileId, nil
@@ -196,8 +223,8 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 	const query = `
 		SELECT 
 			bp.id, bp.created_at,
-			p.password_hash, p.auth_version, p.name, COALESCE(p.surname, ''), 
-			COALESCE(p.patronymic, ''), p.gender, p.birthday, COALESCE(p.avatar_path, '')
+			p.password_hash, p.auth_version, p.name, p.surname, 
+			p.patronymic, p.gender, p.birthday, p.avatar_path
 		FROM 
 			base_profile bp
 		JOIN 
@@ -205,30 +232,41 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 		WHERE 
 			bp.username = $1 AND bp.domain = $2`
 
-	stmt, err := repo.db.Prepare(query)
+	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf(op+`: %w`, err)
+		return nil, e.Wrap(op, err)
 	}
 	defer stmt.Close()
 
 	var profile domain.Profile
 	profile.Username = username
 	profile.Domain = emailDomain
+	var profileSurname, profilePatronymic, profileAvatar sql.NullString
 
-	err = stmt.QueryRow(username, emailDomain).Scan(
+	err = stmt.QueryRowContext(ctx, username, emailDomain).Scan(
 		&profile.ID, &profile.CreatedAt,
-		&profile.PasswordHash, &profile.AuthVersion, &profile.Name, &profile.Surname,
-		&profile.Patronymic, &profile.Gender, &profile.Birthday, &profile.AvatarPath,
+		&profile.PasswordHash, &profile.AuthVersion, &profile.Name, &profileSurname,
+		&profilePatronymic, &profile.Gender, &profile.Birthday, &profileAvatar,
 	)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil // TODO: добавить кастомную ошибку
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, e.Wrap(op, common_e.ErrNotFound)
 		}
-		return nil, fmt.Errorf(op+`: query: %w`, err)
+		return nil, e.Wrap(op, err)
 	}
 
-	if profile.Domain == "a4mail.ru" {
+	if profileSurname.Valid {
+		profile.Surname = profileSurname.String
+	}
+	if profilePatronymic.Valid {
+		profile.Patronymic = profilePatronymic.String
+	}
+	if profileAvatar.Valid {
+		profile.AvatarPath = profileAvatar.String
+	}
+
+	if profile.Domain == "flintmail.ru" {
 		profile.IsOurSystemUser = true
 	} else {
 		profile.IsOurSystemUser = false
@@ -237,14 +275,14 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 	return &profile, nil
 }
 
-func (repo *ProfileRepository) FindInfoByID(profileID int64) (domain.ProfileInfo, error) {
+func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64) (domain.ProfileInfo, error) {
 	const op = "storage.postgres.profile-repository.FindInfoByID"
 
 	const query = `
 		SELECT 
 			bp.id, bp.username, bp.created_at,
-			p.name, COALESCE(p.surname, ''), 
-			COALESCE(p.patronymic, ''), p.gender, p.birthday, COALESCE(p.avatar_path, '')
+			p.name, p.surname, 
+			p.patronymic, p.gender, p.birthday, p.avatar_path
 		FROM 
 			base_profile bp
 		JOIN 
@@ -252,31 +290,42 @@ func (repo *ProfileRepository) FindInfoByID(profileID int64) (domain.ProfileInfo
 		WHERE 
 			bp.id = $1`
 
-	stmt, err := repo.db.Prepare(query)
+	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
-		return domain.ProfileInfo{}, fmt.Errorf(op+`: %w`, err)
+		return domain.ProfileInfo{}, e.Wrap(op, err)
 	}
 	defer stmt.Close()
 
 	var profileInfo domain.ProfileInfo
+	var profileInfoSurname, profileInfoPatronymic, profileInfoAvatar sql.NullString
 
-	err = stmt.QueryRow(profileID).Scan(
+	err = stmt.QueryRowContext(ctx, profileID).Scan(
 		&profileInfo.ID, &profileInfo.Username, &profileInfo.CreatedAt,
-		&profileInfo.Name, &profileInfo.Surname,
-		&profileInfo.Patronymic, &profileInfo.Gender, &profileInfo.Birthday, &profileInfo.AvatarPath,
+		&profileInfo.Name, &profileInfoSurname,
+		&profileInfoPatronymic, &profileInfo.Gender, &profileInfo.Birthday, &profileInfoAvatar,
 	)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return domain.ProfileInfo{}, nil // TODO: добавить кастомную ошибку
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.ProfileInfo{}, e.Wrap(op, common_e.ErrNotFound)
 		}
-		return domain.ProfileInfo{}, fmt.Errorf(op+`: query: %w`, err)
+		return domain.ProfileInfo{}, e.Wrap(op, err)
+	}
+
+	if profileInfoSurname.Valid {
+		profileInfo.Surname = profileInfoSurname.String
+	}
+	if profileInfoPatronymic.Valid {
+		profileInfo.Patronymic = profileInfoPatronymic.String
+	}
+	if profileInfoAvatar.Valid {
+		profileInfo.AvatarPath = profileInfoAvatar.String
 	}
 
 	return profileInfo, nil
 }
 
-func (repo *ProfileRepository) FindSettingsByProfileId(profileID int64) (domain.Settings, error) {
+func (repo *ProfileRepository) FindSettingsByProfileId(ctx context.Context, profileID int64) (domain.Settings, error) {
 	const op = "storage.postgres.profile-repository.FindSettingsById"
 
 	const query = `
@@ -292,9 +341,9 @@ func (repo *ProfileRepository) FindSettingsByProfileId(profileID int64) (domain.
         WHERE 
             bp.id = $1`
 
-	stmt, err := repo.db.Prepare(query)
+	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
-		return domain.Settings{}, fmt.Errorf("%s: %w", op, err)
+		return domain.Settings{}, e.Wrap(op, err)
 	}
 	defer stmt.Close()
 
@@ -304,7 +353,7 @@ func (repo *ProfileRepository) FindSettingsByProfileId(profileID int64) (domain.
 	var notificationTolerance, language, theme sql.NullString
 	var signatureNullable sql.NullString
 
-	err = stmt.QueryRow(profileID).Scan(
+	err = stmt.QueryRowContext(ctx, profileID).Scan(
 		&settingsID, &settings.ProfileID, &notificationTolerance,
 		&language, &theme, &signatureNullable,
 		&actualProfileID,
@@ -312,9 +361,9 @@ func (repo *ProfileRepository) FindSettingsByProfileId(profileID int64) (domain.
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return domain.Settings{}, fmt.Errorf("%s: profile not found: %w", op, err)
+			return domain.Settings{}, e.Wrap(op, common_e.ErrNotFound)
 		}
-		return domain.Settings{}, fmt.Errorf("%s: query: %w", op, err)
+		return domain.Settings{}, e.Wrap(op, err)
 	}
 
 	if !settingsID.Valid {

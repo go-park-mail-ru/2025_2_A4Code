@@ -2,6 +2,7 @@ package login
 
 import (
 	resp "2025_2_a4code/internal/lib/api/response"
+	"log/slog"
 	"strings"
 
 	profileUcase "2025_2_a4code/internal/usecase/profile"
@@ -23,25 +24,32 @@ type Response struct {
 
 type HandlerLogin struct {
 	profileUCase *profileUcase.ProfileUcase
+	log          *slog.Logger
 	JWTSecret    []byte
 }
 
-func New(ucP *profileUcase.ProfileUcase, secret []byte) *HandlerLogin {
+func New(ucP *profileUcase.ProfileUcase, log *slog.Logger, secret []byte) *HandlerLogin {
 	return &HandlerLogin{
 		profileUCase: ucP,
+		log:          log,
 		JWTSecret:    secret,
 	}
 }
 
 func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log := h.log
+	log.Info("handle /auth/login")
+
 	if r.Method != http.MethodPost {
-		resp.SendErrorResponse(w, "Неправильный метод", http.StatusMethodNotAllowed)
+		log.Error(http.StatusText(http.StatusMethodNotAllowed))
+		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		resp.SendErrorResponse(w, "Неправильный запрос", http.StatusBadRequest)
+		log.Error(http.StatusText(http.StatusBadRequest))
+		resp.SendErrorResponse(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 

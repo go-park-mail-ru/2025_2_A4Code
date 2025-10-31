@@ -46,7 +46,7 @@ func (h *HandlerMe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profileInfo, err := h.profileUCase.FindInfoByID(id)
+	profileInfo, err := h.profileUCase.FindInfoByID(r.Context(), id)
 	if err != nil {
 		resp.SendErrorResponse(w, err.Error(), http.StatusNotFound)
 		return

@@ -90,7 +90,7 @@ func Init() {
 	//zlog := logger.Zap{Log: accessLogger}
 
 	// Создание хэндлеров
-	loginHandler := login.New(profileUCase, SECRET)
+	loginHandler := login.New(profileUCase, log, SECRET)
 	signupHandler := signup.New(profileUCase, SECRET)
 	refreshHandler := refresh.New(SECRET)
 	logoutHandler := logout.New()

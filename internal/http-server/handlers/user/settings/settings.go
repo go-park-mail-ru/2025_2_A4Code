@@ -41,7 +41,7 @@ func (h *HandlerSettings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	id, err := session.GetProfileID(r, h.secret)
 
-	settings, err := h.profileUCase.FindSettingsByProfileId(id)
+	settings, err := h.profileUCase.FindSettingsByProfileId(r.Context(), id)
 	if err != nil {
 		resp.SendErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
