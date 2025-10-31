@@ -4,12 +4,10 @@ import (
 	resp "2025_2_a4code/internal/lib/api/response"
 	"encoding/json"
 	"net/http"
-	"strconv"
 )
 
 type Response struct {
 	resp.Response
-	Body interface{} `json:"body,omitempty"`
 }
 
 type HandlerLogout struct {
@@ -21,7 +19,7 @@ func New() *HandlerLogout {
 
 func (h *HandlerLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		sendErrorResponse(w, "Неправильный метод", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Неправильный метод", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -37,28 +35,14 @@ func (h *HandlerLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Response: resp.Response{
 			Status:  http.StatusText(http.StatusOK),
 			Message: "Успешный выход из почты",
+			Body:    struct{}{},
 		},
-		Body: struct{}{},
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
-		sendErrorResponse(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
 		return
 	}
-}
-
-func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
-
-	response := Response{
-		Response: resp.Response{
-			Status:  strconv.Itoa(statusCode),
-			Message: errorMsg,
-		},
-		Body: struct{}{},
-	}
-
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(&response)
 }

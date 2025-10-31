@@ -33,7 +33,6 @@ type Request struct {
 
 type Response struct {
 	resp.Response
-	Body struct{} `json:"body"`
 }
 
 type HandlerSend struct {
@@ -46,37 +45,37 @@ func New(ucM *message.MessageUcase) *HandlerSend {
 
 func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		sendErrorResponse(w, "Метод не разрешен", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Метод не разрешен", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		sendErrorResponse(w, "Неправильный запрос", http.StatusBadRequest)
+		resp.SendErrorResponse(w, "Неправильный запрос", http.StatusBadRequest)
 		return
 	}
 
 	if req.Text == "" || req.Receivers == nil || len(req.Receivers) == 0 {
-		sendErrorResponse(w, "Неправильный запрос", http.StatusBadRequest)
+		resp.SendErrorResponse(w, "Неправильный запрос", http.StatusBadRequest)
 		return
 	}
 
 	id, err := session.GetProfileID(r, SECRET)
 	if err != nil {
-		sendErrorResponse(w, err.Error(), http.StatusUnauthorized)
+		resp.SendErrorResponse(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 	for _, receiver := range req.Receivers {
-		messageID, err := h.messageUCase.SaveMessage(receiver.Email, id, req.Topic, req.Text)
+		messageID, err := h.messageUCase.SaveMessage(r.Context(), receiver.Email, id, req.Topic, req.Text)
 		if err != nil {
-			sendErrorResponse(w, "Не удалось сохранить файл: "+err.Error(), http.StatusInternalServerError)
+			resp.SendErrorResponse(w, "Не удалось сохранить файл: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		for _, file := range req.Files {
-			_, err = h.messageUCase.SaveFile(messageID, file.Name, file.FileType, file.StoragePath, file.Size)
+			_, err = h.messageUCase.SaveFile(r.Context(), messageID, file.Name, file.FileType, file.StoragePath, file.Size)
 			if err != nil {
-				sendErrorResponse(w, "Не удалось сохранить файл: "+err.Error(), http.StatusInternalServerError)
+				resp.SendErrorResponse(w, "Не удалось сохранить файл: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
 		}
@@ -85,22 +84,9 @@ func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	response := Response{
 		Response: resp.Response{
 			Status: http.StatusText(http.StatusOK),
+			Body:   struct{}{},
 		},
-		Body: struct{}{},
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
-}
-
-func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
-
-	response := Response{
-		Response: resp.Response{
-			Status:  http.StatusText(statusCode),
-			Message: "Ошибка: " + errorMsg,
-		},
-	}
-
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(&response)
 }

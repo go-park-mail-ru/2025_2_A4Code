@@ -21,6 +21,7 @@ import (
 	messageUcase "2025_2_a4code/internal/usecase/message"
 	profileUcase "2025_2_a4code/internal/usecase/profile"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -101,25 +102,28 @@ func Init() {
 	settingsHandler := settings.New(profileUCase, SECRET)
 	replyHandler := reply.New(messageUCase, SECRET)
 
+	// настройка corsMiddleware
+	corsMiddleware := cors.New()
+
 	slog.Info("Starting server...", zap.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.Port))
 
 	// роутинг + настройка middleware
-	http.Handle("/auth/login", loggerMiddleware(cors.Initialize(http.HandlerFunc(loginHandler.ServeHTTP))))
-	http.Handle("/auth/signup", loggerMiddleware(cors.Initialize(http.HandlerFunc(signupHandler.ServeHTTP))))
-	http.Handle("/auth/refresh", loggerMiddleware(cors.Initialize(http.HandlerFunc(refreshHandler.ServeHTTP))))
-	http.Handle("/auth/logout", loggerMiddleware(cors.Initialize(http.HandlerFunc(logoutHandler.ServeHTTP))))
-	http.Handle("/messages/inbox", loggerMiddleware(cors.Initialize(http.HandlerFunc(inboxHandler.ServeHTTP))))
-	http.Handle("/user/profile", loggerMiddleware(cors.Initialize(http.HandlerFunc(meHandler.ServeHTTP))))
-	http.Handle("/messages/{message_id}", loggerMiddleware(cors.Initialize(http.HandlerFunc(messagePageHandler.ServeHTTP))))
-	http.Handle("/messages/compose", loggerMiddleware(cors.Initialize(http.HandlerFunc(sendMessageHandler.ServeHTTP))))
-	http.Handle("/upload", loggerMiddleware(cors.Initialize(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
-	http.Handle("/user/settings", loggerMiddleware(cors.Initialize(http.HandlerFunc(settingsHandler.ServeHTTP))))
-	http.Handle("/messages/reply", loggerMiddleware(cors.Initialize(http.HandlerFunc(replyHandler.ServeHTTP))))
+	http.Handle("/auth/login", loggerMiddleware(corsMiddleware(http.HandlerFunc(loginHandler.ServeHTTP))))
+	http.Handle("/auth/signup", loggerMiddleware(corsMiddleware(http.HandlerFunc(signupHandler.ServeHTTP))))
+	http.Handle("/auth/refresh", loggerMiddleware(corsMiddleware(http.HandlerFunc(refreshHandler.ServeHTTP))))
+	http.Handle("/auth/logout", loggerMiddleware(corsMiddleware(http.HandlerFunc(logoutHandler.ServeHTTP))))
+	http.Handle("/messages/inbox", loggerMiddleware(corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP))))
+	http.Handle("/user/profile", loggerMiddleware(corsMiddleware(http.HandlerFunc(meHandler.ServeHTTP))))
+	http.Handle("/messages/{message_id}", loggerMiddleware(corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP))))
+	http.Handle("/messages/compose", loggerMiddleware(corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP))))
+	http.Handle("/upload", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
+	http.Handle("/user/settings", loggerMiddleware(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
+	http.Handle("/messages/reply", loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
 
-	//err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
+	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
-	err = http.ListenAndServe(":8080", nil)
+	// err = http.ListenAndServe(":8080", nil)
 	slog.Info("Server has started working...")
 
 	if err != nil {
@@ -169,7 +173,7 @@ func runMigrations(db *sql.DB, migrationsDir string) error {
 		return e.Wrap(op, err)
 	}
 
-	if err == migrate.ErrNoChange {
+	if errors.Is(err, migrate.ErrNoChange) {
 		slog.Info("Migrations are already successfully applied")
 	} else {
 		slog.Info("Migrations are successfully applied")

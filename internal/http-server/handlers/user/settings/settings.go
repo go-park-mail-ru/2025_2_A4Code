@@ -17,7 +17,6 @@ type Settings struct {
 
 type Response struct {
 	resp.Response
-	Body Settings `json:"body"`
 }
 
 type Signatures []string
@@ -36,7 +35,7 @@ func New(profileUCase *profile.ProfileUcase, SECRET []byte) *HandlerSettings {
 
 func (h *HandlerSettings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		sendErrorResponse(w, "Метод не разрешен", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Метод не разрешен", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -44,7 +43,7 @@ func (h *HandlerSettings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	settings, err := h.profileUCase.FindSettingsByProfileId(id)
 	if err != nil {
-		sendErrorResponse(w, err.Error(), http.StatusBadRequest)
+		resp.SendErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -59,24 +58,11 @@ func (h *HandlerSettings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Response: resp.Response{
 			Status:  http.StatusText(http.StatusOK),
 			Message: "Настройки получены",
+			Body:    settingsResponse,
 		},
-		Body: settingsResponse,
 	}
 
 	if err := json.NewEncoder(w).Encode(reponse); err != nil {
-		sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		resp.SendErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
-}
-
-func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
-
-	response := Response{
-		Response: resp.Response{
-			Status:  http.StatusText(statusCode),
-			Message: "Ошибка: " + errorMsg,
-		},
-	}
-
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(&response)
 }

@@ -7,7 +7,6 @@ import (
 	profileUcase "2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -20,7 +19,6 @@ type Request struct {
 
 type Response struct {
 	resp.Response
-	Body interface{} `json:"body,omitempty"`
 }
 
 type HandlerLogin struct {
@@ -37,19 +35,19 @@ func New(ucP *profileUcase.ProfileUcase, secret []byte) *HandlerLogin {
 
 func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		sendErrorResponse(w, "Неправильный метод", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Неправильный метод", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		sendErrorResponse(w, "Неправильный запрос", http.StatusBadRequest)
+		resp.SendErrorResponse(w, "Неправильный запрос", http.StatusBadRequest)
 		return
 	}
 
 	// Валидация обязательных полей
 	if req.Login == "" || req.Password == "" {
-		sendErrorResponse(w, "Введите все поля формы", http.StatusBadRequest)
+		resp.SendErrorResponse(w, "Введите все поля формы", http.StatusBadRequest)
 		return
 	}
 
@@ -59,7 +57,7 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if len(parts) > 0 && parts[0] != "" {
 			username = parts[0]
 		} else {
-			sendErrorResponse(w, "Неправильный формат логина или почты", http.StatusBadRequest)
+			resp.SendErrorResponse(w, "Неправильный формат логина или почты", http.StatusBadRequest)
 			return
 		}
 	}
@@ -73,7 +71,7 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Вызываем usecase для входа
 	userID, err := h.profileUCase.Login(r.Context(), LoginReq)
 	if err != nil {
-		sendErrorResponse(w, err.Error(), http.StatusBadRequest)
+		resp.SendErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -85,7 +83,7 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	session, err := token.SignedString(h.JWTSecret)
 	if err != nil {
-		sendErrorResponse(w, "Ошибка создания сессии", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Ошибка создания сессии", http.StatusInternalServerError)
 		return
 	}
 
@@ -105,26 +103,12 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Response: resp.Response{
 			Status:  "200",
 			Message: "Вы успешно авторизованы",
+			Body:    struct{}{},
 		},
-		Body: struct{}{},
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		sendErrorResponse(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
 		return
 	}
-}
-
-func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
-
-	response := Response{
-		Response: resp.Response{
-			Status:  strconv.Itoa(statusCode),
-			Message: errorMsg,
-		},
-		Body: struct{}{},
-	}
-
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(&response)
 }

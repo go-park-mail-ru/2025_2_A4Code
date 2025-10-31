@@ -2,17 +2,18 @@ package message
 
 import (
 	"2025_2_a4code/internal/domain"
-	"fmt"
+	e "2025_2_a4code/internal/lib/wrapper"
+	"context"
 )
 
 type MessageRepository interface {
-	FindByMessageID(messageID int64) (*domain.Message, error)
-	FindByProfileID(profileID int64) ([]domain.Message, error)
-	FindFullByMessageID(messageID int64, profileID int64) (domain.FullMessage, error)
-	SaveMessage(receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
-	SaveFile(messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
-	SaveThread(messageID int64, threadId string) (threadID int64, err error)
-	SaveThreadIdToMessage(messageID int64, threadID int64) error
+	FindByMessageID(ctx context.Context, messageID int64) (*domain.Message, error)
+	FindByProfileID(ctx context.Context, profileID int64) ([]domain.Message, error)
+	FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
+	SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
+	SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
+	SaveThread(ctx context.Context, messageID int64, threadId string) (threadID int64, err error)
+	SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error
 }
 
 type MessageUcase struct {
@@ -23,20 +24,20 @@ func New(repo MessageRepository) *MessageUcase {
 	return &MessageUcase{repo: repo}
 }
 
-func (uc *MessageUcase) FindByMessageID(messageID int64) (*domain.Message, error) {
-	return uc.repo.FindByMessageID(messageID)
+func (uc *MessageUcase) FindByMessageID(ctx context.Context, messageID int64) (*domain.Message, error) {
+	return uc.repo.FindByMessageID(ctx, messageID)
 }
 
-func (uc *MessageUcase) FindByProfileID(profileID int64) ([]domain.Message, error) {
-	return uc.repo.FindByProfileID(profileID)
+func (uc *MessageUcase) FindByProfileID(ctx context.Context, profileID int64) ([]domain.Message, error) {
+	return uc.repo.FindByProfileID(ctx, profileID)
 }
 
-func (uc *MessageUcase) GetMessagesInfo(profileID int64) (domain.Messages, error) {
+func (uc *MessageUcase) GetMessagesInfo(ctx context.Context, profileID int64) (domain.Messages, error) {
 	const op = "usecase.message.GetMessagesInfo"
 
-	messages, err := uc.FindByProfileID(profileID)
+	messages, err := uc.FindByProfileID(ctx, profileID)
 	if err != nil {
-		return domain.Messages{}, fmt.Errorf("%s: %w", op, err)
+		return domain.Messages{}, e.Wrap(op, err)
 	}
 
 	unread := len(messages)
@@ -53,22 +54,22 @@ func (uc *MessageUcase) GetMessagesInfo(profileID int64) (domain.Messages, error
 	}, nil
 }
 
-func (uc *MessageUcase) FindFullByMessageID(messageID int64, profileID int64) (domain.FullMessage, error) {
-	return uc.repo.FindFullByMessageID(messageID, profileID)
+func (uc *MessageUcase) FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error) {
+	return uc.repo.FindFullByMessageID(ctx, messageID, profileID)
 }
 
-func (uc *MessageUcase) SaveMessage(receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (messageID int64, err error) {
-	return uc.repo.SaveMessage(receiverProfileEmail, senderBaseProfileID, topic, text)
+func (uc *MessageUcase) SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (messageID int64, err error) {
+	return uc.repo.SaveMessage(ctx, receiverProfileEmail, senderBaseProfileID, topic, text)
 }
 
-func (uc *MessageUcase) SaveFile(messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error) {
-	return uc.repo.SaveFile(messageID, fileName, fileType, storagePath, size)
+func (uc *MessageUcase) SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error) {
+	return uc.repo.SaveFile(ctx, messageID, fileName, fileType, storagePath, size)
 }
 
-func (uc *MessageUcase) SaveThread(messageID int64, threadId string) (threadID int64, err error) {
-	return uc.repo.SaveThread(messageID, threadId)
+func (uc *MessageUcase) SaveThread(ctx context.Context, messageID int64, threadId string) (threadID int64, err error) {
+	return uc.repo.SaveThread(ctx, messageID, threadId)
 }
 
-func (uc *MessageUcase) SaveThreadIdToMessage(messageID int64, threadID int64) error {
-	return uc.repo.SaveThreadIdToMessage(messageID, threadID)
+func (uc *MessageUcase) SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error {
+	return uc.repo.SaveThreadIdToMessage(ctx, messageID, threadID)
 }

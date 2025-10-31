@@ -23,7 +23,6 @@ type Profile struct {
 }
 type Response struct {
 	resp.Response
-	Body interface{} `json:"body,omitempty"`
 }
 
 type HandlerMe struct {
@@ -36,19 +35,19 @@ func New(ucP *profile.ProfileUcase) *HandlerMe {
 
 func (h *HandlerMe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		sendErrorResponse(w, "Метод не разрешен", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Метод не разрешен", http.StatusMethodNotAllowed)
 		return
 	}
 
 	id, err := session.GetProfileID(r, SECRET)
 	if err != nil {
-		sendErrorResponse(w, err.Error(), http.StatusUnauthorized)
+		resp.SendErrorResponse(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
 	profileInfo, err := h.profileUCase.FindInfoByID(id)
 	if err != nil {
-		sendErrorResponse(w, err.Error(), http.StatusNotFound)
+		resp.SendErrorResponse(w, err.Error(), http.StatusNotFound)
 		return
 	}
 
@@ -67,30 +66,15 @@ func (h *HandlerMe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Response: resp.Response{
 			Status:  http.StatusText(http.StatusOK),
 			Message: "Страница пользователя получена",
+			Body:    profileInfoResponse,
 		},
-		Body: struct {
-			Profile Profile
-		}{Profile: profileInfoResponse},
 	}
 
 	// Отправляем ответ
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
-		sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		resp.SendErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-}
-
-func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
-
-	response := Response{
-		Response: resp.Response{
-			Status:  http.StatusText(statusCode),
-			Message: "Ошибка: " + errorMsg,
-		},
-	}
-
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(&response)
 }

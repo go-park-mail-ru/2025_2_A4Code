@@ -38,7 +38,6 @@ type Message struct {
 }
 type Response struct {
 	resp.Response
-	Body Message `json:"body"`
 }
 
 type HandlerMessagePage struct {
@@ -52,25 +51,25 @@ func New(ucP *profile.ProfileUcase, usM *message.MessageUcase) *HandlerMessagePa
 
 func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		sendErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	id, err := session.GetProfileID(r, SECRET)
 	if err != nil {
-		sendErrorResponse(w, err.Error(), http.StatusUnauthorized)
+		resp.SendErrorResponse(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
 	messageID, err := strconv.Atoi(r.URL.Query().Get("message_id"))
 	if err != nil {
-		sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		resp.SendErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	fullMessage, err := h.messageUCase.FindFullByMessageID(int64(messageID), id)
+	fullMessage, err := h.messageUCase.FindFullByMessageID(r.Context(), int64(messageID), id)
 	if err != nil {
-		sendErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		resp.SendErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -100,22 +99,9 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Response: resp.Response{
 			Status:  http.StatusText(http.StatusOK),
 			Message: "Письмо отправлено",
+			Body:    messageResponse,
 		},
-		Body: messageResponse,
 	}
 
 	err = json.NewEncoder(w).Encode(response)
-}
-
-func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
-
-	response := Response{
-		Response: resp.Response{
-			Status:  http.StatusText(statusCode),
-			Message: "Ошибка: " + errorMsg,
-		},
-	}
-
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(&response)
 }

@@ -1,7 +1,6 @@
 package inbox
 
 import (
-	"2025_2_a4code/internal/domain"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
 	"log/slog"
@@ -30,7 +29,6 @@ type Message struct {
 }
 type Response struct {
 	resp.Response
-	Body domain.Messages `json:"body,omitempty"`
 }
 
 type HandlerInbox struct {
@@ -49,22 +47,22 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodGet {
 		log.Error(http.StatusText(http.StatusMethodNotAllowed))
-		sendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
 	id, err := session.GetProfileID(r, SECRET)
 	if err != nil {
 		log.Error(err.Error())
-		sendErrorResponse(w, err.Error(), http.StatusUnauthorized)
+		resp.SendErrorResponse(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
 	messagesResponse := make([]Message, 0)
-	messages, err := h.messageUCase.FindByProfileID(id)
+	messages, err := h.messageUCase.FindByProfileID(r.Context(), id)
 	if err != nil {
 		log.Error(err.Error())
-		sendErrorResponse(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		resp.SendErrorResponse(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	for _, m := range messages {
@@ -81,10 +79,10 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	messagesInfo, err := h.messageUCase.GetMessagesInfo(id)
+	messagesInfo, err := h.messageUCase.GetMessagesInfo(r.Context(), id)
 	if err != nil {
 		log.Error(err.Error())
-		sendErrorResponse(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		resp.SendErrorResponse(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	messagesInfo.Messages = messagesResponse
@@ -93,8 +91,8 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Response: resp.Response{
 			Status:  http.StatusText(http.StatusOK),
 			Message: "Письма получены",
+			Body:    messagesInfo,
 		},
-		Body: messagesInfo,
 	}
 
 	// Отправляем ответ
@@ -102,21 +100,7 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
 		log.Error(err.Error())
-		sendErrorResponse(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		resp.SendErrorResponse(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-
-}
-
-func sendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
-
-	response := Response{
-		Response: resp.Response{
-			Status:  http.StatusText(statusCode),
-			Message: "Error: " + errorMsg,
-		},
-	}
-
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(&response)
 }
