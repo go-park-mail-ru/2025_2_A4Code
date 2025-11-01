@@ -25,7 +25,7 @@ func (repo *ProfileRepository) FindByID(ctx context.Context, id int64) (*domain.
 		SELECT 
 			bp.id, bp.username, bp.domain, bp.created_at,
 			p.password_hash, p.auth_version, p.name, p.surname, 
-			p.patronymic, p.gender, p.birthday, p.avatar_path
+			p.patronymic, p.gender, p.birthday, p.image_path
 		FROM 
 			base_profile bp
 		JOIN 
@@ -80,7 +80,7 @@ func (repo *ProfileRepository) FindSenderByID(ctx context.Context, id int64) (*d
 	const query = `
 		SELECT 
 			bp.id, bp.username, bp.domain, 
-			p.name, p.surname, p.avatar_path
+			p.name, p.surname, p.image_path
 		FROM 
 			base_profile bp
 		LEFT JOIN 
@@ -224,7 +224,7 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 		SELECT 
 			bp.id, bp.created_at,
 			p.password_hash, p.auth_version, p.name, p.surname, 
-			p.patronymic, p.gender, p.birthday, p.avatar_path
+			p.patronymic, p.gender, p.birthday, p.image_path
 		FROM 
 			base_profile bp
 		JOIN 
@@ -282,7 +282,7 @@ func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64
 		SELECT 
 			bp.id, bp.username, bp.created_at,
 			p.name, p.surname, 
-			p.patronymic, p.gender, p.birthday, p.avatar_path
+			p.patronymic, p.gender, p.birthday, p.image_path
 		FROM 
 			base_profile bp
 		JOIN 
