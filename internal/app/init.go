@@ -91,9 +91,9 @@ func Init() {
 
 	// Создание хэндлеров
 	loginHandler := login.New(profileUCase, log, SECRET)
-	signupHandler := signup.New(profileUCase, SECRET)
-	refreshHandler := refresh.New(SECRET)
-	logoutHandler := logout.New()
+	signupHandler := signup.New(profileUCase, log, SECRET)
+	refreshHandler := refresh.New(SECRET, log)
+	logoutHandler := logout.New(log)
 	inboxHandler := inbox.New(profileUCase, messageUCase, log, SECRET)
 	meHandler := profilepage.New(profileUCase, SECRET, log)
 	messagePageHandler := messagepage.New(profileUCase, messageUCase, SECRET, log)

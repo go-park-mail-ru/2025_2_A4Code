@@ -5,7 +5,9 @@ import (
 
 	profileUcase "2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -25,32 +27,41 @@ type Response struct {
 
 type HandlerSignup struct {
 	profileUCase *profileUcase.ProfileUcase
+	log          *slog.Logger
 	JWTSecret    []byte
 }
 
-func New(ucP *profileUcase.ProfileUcase, secret []byte) *HandlerSignup {
+func New(ucP *profileUcase.ProfileUcase, log *slog.Logger, secret []byte) *HandlerSignup {
 	return &HandlerSignup{
 		profileUCase: ucP,
+		log:          log,
 		JWTSecret:    secret,
 	}
 }
 
 func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log := h.log
+	log.Info("handle /auth/signup")
 
 	if r.Method != http.MethodPost {
-		resp.SendErrorResponse(w, "Неправильный метод", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		resp.SendErrorResponse(w, "Неправильный запрос", http.StatusBadRequest)
+		resp.SendErrorResponse(w, "invalid request format", http.StatusBadRequest)
 		return
 	}
 
-	// Валидация обязательных полей
+	req.Name = strings.TrimSpace(req.Name)
+	req.Username = strings.TrimSpace(req.Username)
+	req.Birthday = strings.TrimSpace(req.Birthday)
+	req.Gender = strings.TrimSpace(req.Gender)
+	req.Password = strings.TrimSpace(req.Password)
+
 	if req.Username == "" || req.Password == "" || req.Name == "" || req.Gender == "" || req.Birthday == "" {
-		resp.SendErrorResponse(w, "Введите все поля формы", http.StatusBadRequest)
+		resp.SendErrorResponse(w, "all form fields are required", http.StatusBadRequest)
 		return
 	}
 
@@ -63,46 +74,72 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Password: req.Password,
 	}
 
-	// Вызываем usecase для регистрации
 	userID, err := h.profileUCase.Signup(r.Context(), SignupReq)
 	if err != nil {
-		resp.SendErrorResponse(w, "Ошибка: "+err.Error(), http.StatusBadRequest)
+		log.Warn("signup failed", slog.String("username", req.Username))
+		resp.SendErrorResponse(w, "signup failed", http.StatusBadRequest)
 		return
 	}
 
-	// Создаем JWT токен после успешной регистрации
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID,
-		"exp":     time.Now().Add(24 * time.Hour).Unix(),
+		"exp":     time.Now().Add(15 * time.Minute).Unix(), // 15 минут
+		"type":    "access",
 	})
 
-	session, err := token.SignedString(h.JWTSecret)
+	accessTokenString, err := accessToken.SignedString(h.JWTSecret)
 	if err != nil {
-		resp.SendErrorResponse(w, "Ошибка создания сессии", http.StatusInternalServerError)
+		log.Error("failed to sign access token")
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
-	// Устанавливаем cookie
-	cookie := &http.Cookie{
-		Name:     "session_id",
-		Value:    session,
-		MaxAge:   3600,
+	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": userID,
+		"exp":     time.Now().Add(7 * 24 * time.Hour).Unix(), // 7 дней
+		"type":    "refresh",
+	})
+
+	refreshTokenString, err := refreshToken.SignedString(h.JWTSecret)
+	if err != nil {
+		log.Error("failed to sign resfresh token")
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	accessCookie := &http.Cookie{
+		Name:     "access_token",
+		Value:    accessTokenString,
+		MaxAge:   15 * 60, // 15 минут
 		HttpOnly: true,
 		Path:     "/",
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
 	}
-	http.SetCookie(w, cookie)
+	http.SetCookie(w, accessCookie)
 
-	// Отправляем успешный ответ
+	refreshCookie := &http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshTokenString,
+		MaxAge:   7 * 24 * 3600, // 7  дней
+		HttpOnly: true,
+		Path:     "/",
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	}
+	http.SetCookie(w, refreshCookie)
+
 	w.Header().Set("Content-Type", "application/json")
 	response := Response{
 		Response: resp.Response{
-			Status:  "200",
-			Message: "Вы успешно зарегистрировались",
+			Status:  http.StatusText(http.StatusOK),
+			Message: "signup successful",
 			Body:    struct{}{},
 		},
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		resp.SendErrorResponse(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
+		log.Error("failed to encode response")
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 }
