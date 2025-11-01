@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,30 +24,36 @@ type File struct {
 
 type HandlerUploadFile struct {
 	uploadPath string // куда сохраняем
+	log        *slog.Logger
 }
 
-func New(uploadPath string) (*HandlerUploadFile, error) {
+func New(uploadPath string, log *slog.Logger) (*HandlerUploadFile, error) {
 	// проверка существования директории (пока сохраняем просто в директории)
 	err := os.MkdirAll(uploadPath, os.ModePerm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create upload directory '%s': %w", uploadPath, err)
 	}
-	return &HandlerUploadFile{uploadPath: uploadPath}, nil
+	return &HandlerUploadFile{uploadPath: uploadPath, log: log}, nil
 }
 
 func (h *HandlerUploadFile) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log := h.log
+	log.Info("handle upload file")
+
 	if r.Method != http.MethodPost {
-		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		resp.SendErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		log.Error(err.Error())
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		resp.SendErrorResponse(w, "Unable to save file: "+err.Error(), http.StatusInternalServerError)
+		log.Error(err.Error())
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 	}
 	defer file.Close()
 
@@ -55,7 +62,8 @@ func (h *HandlerUploadFile) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Генерация уникального имя файла
 	randBytes := make([]byte, 16)
 	if _, err := rand.Read(randBytes); err != nil {
-		resp.SendErrorResponse(w, "Unable to name file: "+err.Error(), http.StatusInternalServerError)
+		log.Error("unable to name file: " + err.Error())
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 	uniqName := fmt.Sprintf("%x%s", randBytes, ext)
@@ -63,20 +71,23 @@ func (h *HandlerUploadFile) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	dst, err := os.Create(storagePath)
 	if err != nil {
-		resp.SendErrorResponse(w, "Unable to save file: "+err.Error(), http.StatusInternalServerError)
+		log.Error(err.Error())
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 	defer dst.Close()
 
 	size, err := io.Copy(dst, file)
 	if err != nil {
-		resp.SendErrorResponse(w, "Unable to save file: "+err.Error(), http.StatusInternalServerError)
+		log.Error(err.Error())
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
 	response := Response{
 		Response: resp.Response{
-			Status: http.StatusText(http.StatusOK),
+			Status:  http.StatusText(http.StatusOK),
+			Message: "success",
 			Body: File{
 				FileType:    header.Header.Get("Content-Type"),
 				Size:        size,

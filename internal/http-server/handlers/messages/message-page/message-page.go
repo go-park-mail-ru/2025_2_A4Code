@@ -6,12 +6,11 @@ import (
 	"2025_2_a4code/internal/usecase/message"
 	"2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 )
-
-var SECRET = []byte("secret") // TODO: убрать отсюда
 
 type Sender struct {
 	Email    string `json:"email"`
@@ -44,37 +43,44 @@ type HandlerMessagePage struct {
 	profileUCase *profile.ProfileUcase
 	messageUCase *message.MessageUcase
 	secret       []byte
+	log          *slog.Logger
 }
 
-func New(ucP *profile.ProfileUcase, usM *message.MessageUcase, SECRET []byte) *HandlerMessagePage {
+func New(profileUCase *profile.ProfileUcase, messageUCase *message.MessageUcase, SECRET []byte, log *slog.Logger) *HandlerMessagePage {
 	return &HandlerMessagePage{
-		profileUCase: ucP,
-		messageUCase: usM,
+		profileUCase: profileUCase,
+		messageUCase: messageUCase,
 		secret:       SECRET,
+		log:          log,
 	}
 }
 
 func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log := h.log
+	log.Info("handle message-page")
+
 	if r.Method != http.MethodGet {
-		resp.SendErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
-	id, err := session.GetProfileID(r, SECRET)
+	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
-		resp.SendErrorResponse(w, err.Error(), http.StatusUnauthorized)
+		resp.SendErrorResponse(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 
 	messageID, err := strconv.Atoi(r.URL.Query().Get("message_id"))
 	if err != nil {
-		resp.SendErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		log.Error(err.Error())
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
 	fullMessage, err := h.messageUCase.FindFullByMessageID(r.Context(), int64(messageID), id)
 	if err != nil {
-		resp.SendErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		log.Error(err.Error())
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
@@ -103,7 +109,7 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	response := Response{
 		Response: resp.Response{
 			Status:  http.StatusText(http.StatusOK),
-			Message: "Письмо отправлено",
+			Message: "success",
 			Body:    messageResponse,
 		},
 	}

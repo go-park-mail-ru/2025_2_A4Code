@@ -50,15 +50,13 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Info("handle /messages/inbox")
 
 	if r.Method != http.MethodGet {
-		log.Error(http.StatusText(http.StatusMethodNotAllowed))
 		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
 	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
-		log.Error(err.Error())
-		resp.SendErrorResponse(w, err.Error(), http.StatusUnauthorized)
+		resp.SendErrorResponse(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 
@@ -66,7 +64,7 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	messages, err := h.messageUCase.FindByProfileID(r.Context(), id)
 	if err != nil {
 		log.Error(err.Error())
-		resp.SendErrorResponse(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 	for _, m := range messages {
@@ -86,7 +84,7 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	messagesInfo, err := h.messageUCase.GetMessagesInfo(r.Context(), id)
 	if err != nil {
 		log.Error(err.Error())
-		resp.SendErrorResponse(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 	messagesInfo.Messages = messagesResponse
@@ -94,7 +92,7 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	response := Response{
 		Response: resp.Response{
 			Status:  http.StatusText(http.StatusOK),
-			Message: "Письма получены",
+			Message: "success",
 			Body:    messagesInfo,
 		},
 	}
@@ -104,7 +102,7 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
 		log.Error(err.Error())
-		resp.SendErrorResponse(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 }

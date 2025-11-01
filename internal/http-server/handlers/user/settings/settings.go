@@ -5,6 +5,7 @@ import (
 	"2025_2_a4code/internal/lib/session"
 	"2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 )
 
@@ -24,30 +25,40 @@ type Signatures []string
 type HandlerSettings struct {
 	profileUCase *profile.ProfileUcase
 	secret       []byte
+	log          *slog.Logger
 }
 
-func New(profileUCase *profile.ProfileUcase, SECRET []byte) *HandlerSettings {
+func New(profileUCase *profile.ProfileUcase, SECRET []byte, log *slog.Logger) *HandlerSettings {
 	return &HandlerSettings{
 		profileUCase: profileUCase,
 		secret:       SECRET,
+		log:          log,
 	}
 }
 
 func (h *HandlerSettings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log := h.log
+	log.Info("handle settings")
+
 	if r.Method != http.MethodGet {
-		resp.SendErrorResponse(w, "Метод не разрешен", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
 	id, err := session.GetProfileID(r, h.secret)
-
-	settings, err := h.profileUCase.FindSettingsByProfileId(r.Context(), id)
 	if err != nil {
-		resp.SendErrorResponse(w, err.Error(), http.StatusBadRequest)
+		resp.SendErrorResponse(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 
-	settingsResponse := Settings{ // TODO: поменять наполнение
+	settings, err := h.profileUCase.FindSettingsByProfileId(r.Context(), id)
+	if err != nil {
+		log.Error(err.Error())
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	settingsResponse := Settings{
 		NotificationTolerance: settings.NotificationTolerance,
 		Language:              settings.Language,
 		Theme:                 settings.Theme,
@@ -57,12 +68,12 @@ func (h *HandlerSettings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reponse := Response{
 		Response: resp.Response{
 			Status:  http.StatusText(http.StatusOK),
-			Message: "Настройки получены",
+			Message: "success",
 			Body:    settingsResponse,
 		},
 	}
 
 	if err := json.NewEncoder(w).Encode(reponse); err != nil {
-		resp.SendErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 	}
 }

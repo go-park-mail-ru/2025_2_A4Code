@@ -95,12 +95,12 @@ func Init() {
 	refreshHandler := refresh.New(SECRET)
 	logoutHandler := logout.New()
 	inboxHandler := inbox.New(profileUCase, messageUCase, log, SECRET)
-	meHandler := profilepage.New(profileUCase, SECRET)
-	messagePageHandler := messagepage.New(profileUCase, messageUCase, SECRET)
-	sendMessageHandler := send.New(messageUCase, SECRET)
-	uploadFileHandler, err := uploadfile.New(FileUploadPath)
-	settingsHandler := settings.New(profileUCase, SECRET)
-	replyHandler := reply.New(messageUCase, SECRET)
+	meHandler := profilepage.New(profileUCase, SECRET, log)
+	messagePageHandler := messagepage.New(profileUCase, messageUCase, SECRET, log)
+	sendMessageHandler := send.New(messageUCase, SECRET, log)
+	uploadFileHandler, err := uploadfile.New(FileUploadPath, log)
+	settingsHandler := settings.New(profileUCase, SECRET, log)
+	replyHandler := reply.New(messageUCase, SECRET, log)
 
 	// настройка corsMiddleware
 	corsMiddleware := cors.New()

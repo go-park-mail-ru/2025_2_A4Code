@@ -5,6 +5,7 @@ import (
 	"2025_2_a4code/internal/lib/session"
 	"2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -26,29 +27,36 @@ type Response struct {
 type HandlerMe struct {
 	profileUCase *profile.ProfileUcase
 	secret       []byte
+	log          *slog.Logger
 }
 
-func New(ucP *profile.ProfileUcase, SECRET []byte) *HandlerMe {
-	return &HandlerMe{profileUCase: ucP,
-		secret: SECRET,
+func New(profileUCase *profile.ProfileUcase, SECRET []byte, log *slog.Logger) *HandlerMe {
+	return &HandlerMe{
+		profileUCase: profileUCase,
+		secret:       SECRET,
+		log:          log,
 	}
 }
 
 func (h *HandlerMe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log := h.log
+	log.Info("handle profile page")
+
 	if r.Method != http.MethodGet {
-		resp.SendErrorResponse(w, "Метод не разрешен", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
 	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
-		resp.SendErrorResponse(w, err.Error(), http.StatusUnauthorized)
+		resp.SendErrorResponse(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
 
 	profileInfo, err := h.profileUCase.FindInfoByID(r.Context(), id)
 	if err != nil {
-		resp.SendErrorResponse(w, err.Error(), http.StatusNotFound)
+		log.Error(err.Error())
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
@@ -66,7 +74,7 @@ func (h *HandlerMe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	response := Response{
 		Response: resp.Response{
 			Status:  http.StatusText(http.StatusOK),
-			Message: "Страница пользователя получена",
+			Message: "success",
 			Body:    profileInfoResponse,
 		},
 	}
@@ -75,7 +83,7 @@ func (h *HandlerMe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
-		resp.SendErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 }
