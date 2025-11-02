@@ -3,6 +3,7 @@ package response
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 )
 
 type Response struct {
@@ -14,7 +15,7 @@ type Response struct {
 func SendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
 
 	response := Response{
-		Status:  statusCode,
+		Status:  strconv.Itoa(statusCode),
 		Message: errorMsg,
 		Body:    struct{}{},
 	}
