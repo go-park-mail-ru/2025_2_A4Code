@@ -17,8 +17,8 @@ var (
 	ErrorWrongTokenType  = errors.New("wrong token type")
 )
 
-func CheckToken(r *http.Request, SECRET []byte, cookieName, expectedType string) (jwt.MapClaims, error) {
-	const op = "session.CheckToken"
+func CheckSessionWithToken(r *http.Request, SECRET []byte, cookieName, expectedType string) (jwt.MapClaims, error) {
+	const op = "session.CheckSessionWithToken"
 
 	cookie, err := r.Cookie(cookieName)
 	if err != nil {
@@ -58,16 +58,17 @@ func CheckToken(r *http.Request, SECRET []byte, cookieName, expectedType string)
 	return claims, nil
 }
 
-func CheckAccessToken(r *http.Request, SECRET []byte) (jwt.MapClaims, error) {
-	return CheckToken(r, SECRET, "access_token", "access")
+// Т.к. во всех handlers кроме refresh используем эту функцию, то название упрощено
+func CheckSession(r *http.Request, SECRET []byte) (jwt.MapClaims, error) {
+	return CheckSessionWithToken(r, SECRET, "access_token", "access")
 }
 
-func CheckRefreshToken(r *http.Request, SECRET []byte) (jwt.MapClaims, error) {
-	return CheckToken(r, SECRET, "refresh_token", "refresh")
+func CheckSessionWithRefreshToken(r *http.Request, SECRET []byte) (jwt.MapClaims, error) {
+	return CheckSessionWithToken(r, SECRET, "refresh_token", "refresh")
 }
 
-func GetProfileID(r *http.Request, SECRET []byte, cookieName, expectedType string) (int64, error) {
-	claims, err := CheckToken(r, SECRET, cookieName, expectedType)
+func GetProfileIDFromToken(r *http.Request, SECRET []byte, cookieName, expectedType string) (int64, error) {
+	claims, err := CheckSessionWithToken(r, SECRET, cookieName, expectedType)
 	if err != nil {
 		return -1, err
 	}
@@ -80,10 +81,11 @@ func GetProfileID(r *http.Request, SECRET []byte, cookieName, expectedType strin
 	return int64(id), nil
 }
 
-func GetProfileIDFromAccess(r *http.Request, SECRET []byte) (int64, error) {
-	return GetProfileID(r, SECRET, "access_token", "access")
+// Т.к. во всех handlers кроме refresh используем эту функцию, то название упрощено
+func GetProfileID(r *http.Request, SECRET []byte) (int64, error) {
+	return GetProfileIDFromToken(r, SECRET, "access_token", "access")
 }
 
 func GetProfileIDFromRefresh(r *http.Request, SECRET []byte) (int64, error) {
-	return GetProfileID(r, SECRET, "refresh_token", "refresh")
+	return GetProfileIDFromToken(r, SECRET, "refresh_token", "refresh")
 }

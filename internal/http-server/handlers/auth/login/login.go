@@ -2,13 +2,16 @@ package login
 
 import (
 	resp "2025_2_a4code/internal/lib/api/response"
+	valid "2025_2_a4code/internal/lib/validation"
 	"log/slog"
 	"strings"
 
 	profileUcase "2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
+	"unicode"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -36,6 +39,46 @@ func New(ucP *profileUcase.ProfileUcase, log *slog.Logger, secret []byte) *Handl
 	}
 }
 
+func (h *HandlerLogin) validateRequest(login, password string) (string, error) {
+	if login == "" || password == "" {
+		return "", fmt.Errorf("all fields are required")
+	}
+
+	username := login
+	if strings.Contains(login, "@") {
+		parts := strings.Split(login, "@")
+		if len(parts) > 0 && parts[0] != "" {
+			username = strings.TrimSpace(parts[0])
+		} else {
+			return "", fmt.Errorf("invalid login or email format")
+		}
+	}
+
+	if len(username) < 3 || len(username) > 50 {
+		return "", fmt.Errorf("username must be between 3 and 50 characters")
+	}
+
+	for _, char := range username {
+		if !unicode.IsLetter(char) && !unicode.IsDigit(char) && char != '_' {
+			return "", fmt.Errorf("username can only contain letters, numbers and underscores")
+		}
+	}
+
+	if valid.HasDangerousCharacters(username) {
+		return "", fmt.Errorf("username contains invalid characters")
+	}
+
+	if len(password) < 6 {
+		return "", fmt.Errorf("password must be at least 6 characters")
+	}
+
+	if valid.HasDangerousCharacters(password) {
+		return "", fmt.Errorf("password contains invalid characters")
+	}
+
+	return username, nil
+}
+
 func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := h.log
 	log.Info("handle /auth/login")
@@ -54,20 +97,10 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	req.Login = strings.TrimSpace(req.Login)
 	req.Password = strings.TrimSpace(req.Password)
 
-	if req.Login == "" || req.Password == "" {
-		resp.SendErrorResponse(w, "all form fields are required", http.StatusBadRequest)
+	username, err := h.validateRequest(req.Login, req.Password)
+	if err != nil {
+		resp.SendErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
-	}
-
-	username := req.Login
-	if strings.Contains(req.Login, "@") {
-		parts := strings.Split(req.Login, "@")
-		if len(parts) > 0 && parts[0] != "" {
-			username = strings.TrimSpace(parts[0])
-		} else {
-			resp.SendErrorResponse(w, "invalid login or email format", http.StatusBadRequest)
-			return
-		}
 	}
 
 	// Преобразуем в UseCase запрос
@@ -78,7 +111,9 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	userID, err := h.profileUCase.Login(r.Context(), LoginReq)
 	if err != nil {
-		log.Warn("login failed", slog.String("username", username))
+		log.Warn("login failed",
+			slog.String("username", username),
+			slog.String("error", err.Error()))
 		resp.SendErrorResponse(w, "invalid login or password", http.StatusBadRequest)
 		return
 	}
