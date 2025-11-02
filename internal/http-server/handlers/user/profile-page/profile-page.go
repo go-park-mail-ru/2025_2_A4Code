@@ -24,21 +24,21 @@ type Response struct {
 	resp.Response
 }
 
-type HandlerMe struct {
+type HandlerProfile struct {
 	profileUCase *profile.ProfileUcase
 	secret       []byte
 	log          *slog.Logger
 }
 
-func New(profileUCase *profile.ProfileUcase, SECRET []byte, log *slog.Logger) *HandlerMe {
-	return &HandlerMe{
+func New(profileUCase *profile.ProfileUcase, SECRET []byte, log *slog.Logger) *HandlerProfile {
+	return &HandlerProfile{
 		profileUCase: profileUCase,
 		secret:       SECRET,
 		log:          log,
 	}
 }
 
-func (h *HandlerMe) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerProfile) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := h.log
 	log.Info("handle profile page")
 

@@ -12,26 +12,32 @@ import (
 	"2025_2_a4code/internal/http-server/handlers/messages/send"
 	profilepage "2025_2_a4code/internal/http-server/handlers/user/profile-page"
 	"2025_2_a4code/internal/http-server/handlers/user/settings"
-	uploadfile "2025_2_a4code/internal/http-server/handlers/user/upload-file"
+	uploadavatar "2025_2_a4code/internal/http-server/handlers/user/upload/upload-avatar"
+	uploadfile "2025_2_a4code/internal/http-server/handlers/user/upload/upload-file"
 	"2025_2_a4code/internal/http-server/middleware/cors"
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	e "2025_2_a4code/internal/lib/wrapper"
+	avatarrepository "2025_2_a4code/internal/storage/minio/avatar-repository"
 	messagerepository "2025_2_a4code/internal/storage/postgres/message-repository"
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
+	avatarUcase "2025_2_a4code/internal/usecase/avatar"
 	messageUcase "2025_2_a4code/internal/usecase/message"
 	profileUcase "2025_2_a4code/internal/usecase/profile"
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/lib/pq"
-	"go.uber.org/zap"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 const (
@@ -47,7 +53,11 @@ type Storage struct {
 
 func Init() {
 	// Читаем конфиг
-	cfg := config.GetConfig()
+	cfg, err := config.GetConfig()
+	if err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
 
 	var SECRET = []byte(cfg.AppConfig.Secret)
 
@@ -56,7 +66,7 @@ func Init() {
 	log.Debug("debug messages are enabled")
 	loggerMiddleware := logger.New(log)
 
-	// Установка соединения с базой
+	// Установка соединения с бд
 	connection, err := newDbConnection(cfg.DBConfig)
 	if err != nil {
 		log.Error("error connecting to database")
@@ -69,25 +79,20 @@ func Init() {
 		log.Error(err.Error())
 	}
 
+	client, err := newMinioConnection(cfg.MinioConfig.Endpoint, cfg.MinioConfig.User, cfg.MinioConfig.Password, cfg.MinioConfig.UseSSL)
+	if err != nil {
+		log.Error("error connecting to minio")
+	}
+
 	// Создание репозиториев
 	messageRepository := messagerepository.New(connection)
 	profileRepository := profilerepository.New(connection)
+	avatarRepository := avatarrepository.New(client, cfg.MinioConfig.BucketName)
 
 	// Создание юзкейсов
 	messageUCase := messageUcase.New(messageRepository)
 	profileUCase := profileUcase.New(profileRepository)
-
-	//lg, err := zap.NewProduction()
-	//if err != nil {
-	//	slog.Error(err.Error())
-	//}
-	//defer lg.Sync()
-	//
-	//sugar := lg.Sugar()
-	//appLogger := sugar.With(zap.String("service", "app"))
-	//
-	//accessLogger := sugar.With(zap.String("service", "access_log"))
-	//zlog := logger.Zap{Log: accessLogger}
+	avatarUCase := avatarUcase.New(avatarRepository)
 
 	// Создание хэндлеров
 	loginHandler := login.New(profileUCase, log, SECRET)
@@ -95,17 +100,18 @@ func Init() {
 	refreshHandler := refresh.New(SECRET)
 	logoutHandler := logout.New()
 	inboxHandler := inbox.New(profileUCase, messageUCase, log, SECRET)
-	meHandler := profilepage.New(profileUCase, SECRET, log)
+	profileHandler := profilepage.New(profileUCase, SECRET, log)
 	messagePageHandler := messagepage.New(profileUCase, messageUCase, SECRET, log)
 	sendMessageHandler := send.New(messageUCase, SECRET, log)
 	uploadFileHandler, err := uploadfile.New(FileUploadPath, log)
 	settingsHandler := settings.New(profileUCase, SECRET, log)
 	replyHandler := reply.New(messageUCase, SECRET, log)
+	uploadAvatarHanler := uploadavatar.New(avatarUCase, log, SECRET)
 
 	// настройка corsMiddleware
 	corsMiddleware := cors.New()
 
-	slog.Info("Starting server...", zap.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.Port))
+	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.Port))
 
 	// роутинг + настройка middleware
 	http.Handle("/auth/login", loggerMiddleware(corsMiddleware(http.HandlerFunc(loginHandler.ServeHTTP))))
@@ -113,17 +119,18 @@ func Init() {
 	http.Handle("/auth/refresh", loggerMiddleware(corsMiddleware(http.HandlerFunc(refreshHandler.ServeHTTP))))
 	http.Handle("/auth/logout", loggerMiddleware(corsMiddleware(http.HandlerFunc(logoutHandler.ServeHTTP))))
 	http.Handle("/messages/inbox", loggerMiddleware(corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP))))
-	http.Handle("/user/profile", loggerMiddleware(corsMiddleware(http.HandlerFunc(meHandler.ServeHTTP))))
+	http.Handle("/user/profile", loggerMiddleware(corsMiddleware(http.HandlerFunc(profileHandler.ServeHTTP))))
 	http.Handle("/messages/{message_id}", loggerMiddleware(corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP))))
 	http.Handle("/messages/compose", loggerMiddleware(corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP))))
-	http.Handle("/upload", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
+	http.Handle("/upload/file", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
 	http.Handle("/user/settings", loggerMiddleware(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
 	http.Handle("/messages/reply", loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
+	http.Handle("/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHanler.ServeHTTP))))
 
-	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
+	//err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
-	// err = http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", nil)
 	slog.Info("Server has started working...")
 
 	if err != nil {
@@ -205,4 +212,24 @@ func setupLogger(env string) *slog.Logger {
 	}
 
 	return log
+}
+
+func newMinioConnection(endpoint, accessKey, secretKey string, useSSL bool) (*minio.Client, error) {
+	minioClient, err := minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
+		Secure: useSSL,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, err = minioClient.ListBuckets(ctx)
+	if err != nil {
+		slog.Warn("Could not connect to MinIO: " + err.Error())
+	}
+
+	return minioClient, nil
 }

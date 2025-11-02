@@ -1,7 +1,7 @@
 package config
 
 import (
-	"log"
+	e "2025_2_a4code/internal/lib/wrapper"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -9,8 +9,9 @@ import (
 )
 
 type Config struct {
-	AppConfig *AppConfig
-	DBConfig  *DBConfig
+	AppConfig   *AppConfig
+	DBConfig    *DBConfig
+	MinioConfig *MinioConfig
 }
 
 type AppConfig struct {
@@ -28,7 +29,17 @@ type DBConfig struct {
 	SSLMode  string `yaml:"sslmode"`
 }
 
-func GetConfig() Config {
+type MinioConfig struct {
+	Host       string `yaml:"host"`
+	Port       string `yaml:"port"`
+	User       string `yaml:"user"`
+	Password   string `yaml:"password"`
+	BucketName string `yaml:"bucket_name"`
+	Endpoint   string `yaml:"endpoint"`
+	UseSSL     bool   `yaml:"use_ssl"`
+}
+
+func GetConfig() (Config, error) {
 	err := godotenv.Load(".env")
 	if err != nil {
 		panic("Message loading .env file")
@@ -41,29 +52,22 @@ func GetConfig() Config {
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		log.Fatalf("Message reading config file %s: %v", configPath, err)
+		return Config{}, e.Wrap("Can not read config file: ", err)
 	}
 
 	var yamlStruct struct {
-		App AppConfig `yaml:"app"`
-		DB  DBConfig  `yaml:"db"`
+		App   AppConfig   `yaml:"app"`
+		DB    DBConfig    `yaml:"db"`
+		Minio MinioConfig `yaml:"minio"`
 	}
 
 	if err := yaml.Unmarshal(data, &yamlStruct); err != nil {
-		log.Fatalf("Message parsing YAML config: %v", err)
+		return Config{}, e.Wrap("Can not parse config file: ", err)
 	}
 
 	return Config{
-		AppConfig: &yamlStruct.App,
-		DBConfig:  &yamlStruct.DB,
-	}
-	// return Config{
-	// 	AppConfig: GetAppConfig(),
-	// }
+		AppConfig:   &yamlStruct.App,
+		DBConfig:    &yamlStruct.DB,
+		MinioConfig: &yamlStruct.Minio,
+	}, nil
 }
-
-// func GetAppConfig() *AppConfig {
-// 	return &AppConfig{
-// 		ConfigPath: os.Getenv("CONFIG_PATH"),
-// 	}
-// }

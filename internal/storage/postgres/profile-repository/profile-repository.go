@@ -385,3 +385,25 @@ func (repo *ProfileRepository) FindSettingsByProfileId(ctx context.Context, prof
 
 	return settings, nil
 }
+
+func (repo *ProfileRepository) InsertProfileAvatar(ctx context.Context, profileID int64, avatarURL string) error {
+	const op = "storage.postgres.profile-repository.InsertProfileAvatar"
+
+	const query = `
+		UPDATE profile
+		SET image_path = $1
+		WHERE id = $2
+		`
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.ExecContext(ctx, avatarURL, profileID)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+	return nil
+}

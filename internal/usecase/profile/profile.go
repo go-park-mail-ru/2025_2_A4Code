@@ -41,6 +41,7 @@ type ProfileRepository interface {
 	FindByUsernameAndDomain(ctx context.Context, username string, domain string) (*domain.Profile, error)
 	FindInfoByID(ctx context.Context, id int64) (domain.ProfileInfo, error)
 	FindSettingsByProfileId(ctx context.Context, profileID int64) (domain.Settings, error)
+	InsertProfileAvatar(ctx context.Context, profileID int64, avatarURL string) error
 }
 
 type ProfileUcase struct {
@@ -135,4 +136,8 @@ func (uc *ProfileUcase) FindByUsernameAndDomain(ctx context.Context, username st
 
 func (uc *ProfileUcase) FindSettingsByProfileId(ctx context.Context, profileID int64) (domain.Settings, error) {
 	return uc.repo.FindSettingsByProfileId(ctx, profileID)
+}
+
+func (uc *ProfileUcase) InsertProfileAvatar(ctx context.Context, profileID int64, avatarURL string) error {
+	return uc.repo.InsertProfileAvatar(ctx, profileID, avatarURL)
 }
