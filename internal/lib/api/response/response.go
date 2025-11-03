@@ -3,11 +3,10 @@ package response
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 )
 
 type Response struct {
-	Status  string      `json:"status"`
+	Status  int         `json:"status"`
 	Message string      `json:"message"`
 	Body    interface{} `json:"body,omitempty"`
 }
@@ -15,7 +14,7 @@ type Response struct {
 func SendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
 
 	response := Response{
-		Status:  strconv.Itoa(statusCode),
+		Status:  statusCode,
 		Message: errorMsg,
 		Body:    struct{}{},
 	}

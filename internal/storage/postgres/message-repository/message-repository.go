@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -450,12 +451,13 @@ func (repo *MessageRepository) SaveFile(ctx context.Context, messageID int64, fi
 	return fileID, nil
 }
 
-func (repo *MessageRepository) SaveThread(ctx context.Context, messageID int64, threadRoot string) (threadID int64, err error) {
+func (repo *MessageRepository) SaveThread(ctx context.Context, messageID int64) (threadID int64, err error) {
 	const op = "storage.postgresql.message.SaveThread"
 
 	const query = `
 		INSERT INTO thread (root_message_id, created_at, updated_at)
-		VALUES ($1, $2, $3)`
+		VALUES ($1, $2, $3)
+		RETURNING id`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
@@ -505,13 +507,13 @@ func (repo *MessageRepository) GetMessagesStats(ctx context.Context, profileID i
 
 	const query = `
         SELECT 
-            COUNT(*) as total_count,
-            COUNT(CASE WHEN pm.read_status = false THEN 1 END) as unread_count
-        FROM message m
-        JOIN folder_profile_message fpm ON m.id = fpm.message_id
-        JOIN folder f ON fpm.folder_id = f.id
-        JOIN profile_message pm ON m.id = pm.message_id
-        WHERE f.profile_id = $1 AND pm.profile_id = $1`
+            COUNT(DISTINCT pm.message_id) as total_count,
+            COUNT(DISTINCT CASE WHEN pm.read_status = false THEN pm.message_id END) as unread_count
+        FROM profile_message pm
+        JOIN profile p ON pm.profile_id = p.id
+        WHERE p.base_profile_id = $1`
+
+	slog.Warn(fmt.Sprintf("searching by id = %d", profileID))
 
 	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
@@ -520,7 +522,7 @@ func (repo *MessageRepository) GetMessagesStats(ctx context.Context, profileID i
 	defer stmt.Close()
 
 	var totalCount, unreadCount int
-	err = repo.db.QueryRowContext(ctx, query, profileID).Scan(&totalCount, &unreadCount)
+	err = stmt.QueryRowContext(ctx, profileID).Scan(&totalCount, &unreadCount)
 	if err != nil {
 		return 0, 0, e.Wrap(op, err)
 	}

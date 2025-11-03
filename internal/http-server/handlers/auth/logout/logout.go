@@ -52,13 +52,11 @@ func (h *HandlerLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	response := Response{
 		Response: resp.Response{
-			Status:  http.StatusText(http.StatusOK),
-			Message: "logout successful",
+			Status:  http.StatusOK,
+			Message: "success",
 			Body:    struct{}{},
 		},
 	}
-
-	log.Info("logout completed successfully")
 
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(response)

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -70,7 +71,11 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	messageID, err := strconv.Atoi(r.URL.Query().Get("message_id"))
+	path := r.URL.Path
+	messageIDStr := strings.TrimPrefix(path, "/messages/")
+	messageIDStr = strings.TrimSuffix(messageIDStr, "/")
+
+	messageID, err := strconv.Atoi(messageIDStr)
 	if err != nil {
 		log.Error(err.Error())
 		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
@@ -108,7 +113,7 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	response := Response{
 		Response: resp.Response{
-			Status:  http.StatusText(http.StatusOK),
+			Status:  http.StatusOK,
 			Message: "success",
 			Body:    messageResponse,
 		},

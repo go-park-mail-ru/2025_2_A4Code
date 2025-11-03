@@ -268,8 +268,8 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	response := Response{
 		Response: resp.Response{
-			Status:  http.StatusText(http.StatusOK),
-			Message: "signup successful",
+			Status:  http.StatusOK,
+			Message: "success",
 			Body:    struct{}{},
 		},
 	}

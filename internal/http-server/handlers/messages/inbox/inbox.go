@@ -152,7 +152,7 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	response := Response{
 		Response: resp.Response{
-			Status:  http.StatusText(http.StatusOK),
+			Status:  http.StatusOK,
 			Message: "success",
 			Body:    inboxResponse,
 		},

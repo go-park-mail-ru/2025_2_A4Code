@@ -2,7 +2,7 @@ package profile_repository
 
 import (
 	"2025_2_a4code/internal/domain"
-	common_e "2025_2_a4code/internal/lib/errors"
+	commonE "2025_2_a4code/internal/lib/errors"
 	e "2025_2_a4code/internal/lib/wrapper"
 	"context"
 	"database/sql"
@@ -50,7 +50,7 @@ func (repo *ProfileRepository) FindByID(ctx context.Context, id int64) (*domain.
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, e.Wrap(op, common_e.ErrNotFound)
+			return nil, e.Wrap(op, commonE.ErrNotFound)
 		}
 		return nil, e.Wrap(op, err)
 	}
@@ -105,7 +105,7 @@ func (repo *ProfileRepository) FindSenderByID(ctx context.Context, id int64) (*d
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, e.Wrap(op, common_e.ErrNotFound)
+			return nil, e.Wrap(op, commonE.ErrNotFound)
 		}
 		return nil, e.Wrap(op, err)
 	}
@@ -152,7 +152,7 @@ func (repo *ProfileRepository) UserExists(ctx context.Context, username string) 
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return false, e.Wrap(op, common_e.ErrNotFound)
+			return false, e.Wrap(op, commonE.ErrNotFound)
 		}
 		return false, e.Wrap(op, err)
 	}
@@ -251,7 +251,7 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, e.Wrap(op, common_e.ErrNotFound)
+			return nil, e.Wrap(op, commonE.ErrNotFound)
 		}
 		return nil, e.Wrap(op, err)
 	}
@@ -307,7 +307,7 @@ func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return domain.ProfileInfo{}, e.Wrap(op, common_e.ErrNotFound)
+			return domain.ProfileInfo{}, e.Wrap(op, commonE.ErrNotFound)
 		}
 		return domain.ProfileInfo{}, e.Wrap(op, err)
 	}
@@ -350,18 +350,19 @@ func (repo *ProfileRepository) FindSettingsByProfileId(ctx context.Context, prof
 	var settings domain.Settings
 	var actualProfileID int64
 	var settingsID sql.NullInt64
+	var settingsProfileID sql.NullInt64
 	var notificationTolerance, language, theme sql.NullString
 	var signatureNullable sql.NullString
 
 	err = stmt.QueryRowContext(ctx, profileID).Scan(
-		&settingsID, &settings.ProfileID, &notificationTolerance,
+		&settingsID, &settingsProfileID, &notificationTolerance,
 		&language, &theme, &signatureNullable,
 		&actualProfileID,
 	)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return domain.Settings{}, e.Wrap(op, common_e.ErrNotFound)
+			return domain.Settings{}, e.Wrap(op, commonE.ErrNotFound)
 		}
 		return domain.Settings{}, e.Wrap(op, err)
 	}
@@ -372,7 +373,9 @@ func (repo *ProfileRepository) FindSettingsByProfileId(ctx context.Context, prof
 	}
 
 	settings.ID = settingsID.Int64
+
 	settings.ProfileID = actualProfileID
+
 	settings.NotificationTolerance = notificationTolerance.String
 	settings.Language = language.String
 	settings.Theme = theme.String

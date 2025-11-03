@@ -13,7 +13,7 @@ type MessageRepository interface {
 	FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
 	SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
 	SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
-	SaveThread(ctx context.Context, messageID int64, threadId string) (threadID int64, err error)
+	SaveThread(ctx context.Context, messageID int64) (threadID int64, err error)
 	SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error
 	FindByProfileIDWithKeysetPagination(ctx context.Context, profileID int64, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
 	GetMessagesStats(ctx context.Context, profileID int64) (int, int, error)
@@ -94,10 +94,14 @@ func (uc *MessageUcase) SaveFile(ctx context.Context, messageID int64, fileName,
 	return uc.repo.SaveFile(ctx, messageID, fileName, fileType, storagePath, size)
 }
 
-func (uc *MessageUcase) SaveThread(ctx context.Context, messageID int64, threadId string) (threadID int64, err error) {
-	return uc.repo.SaveThread(ctx, messageID, threadId)
+func (uc *MessageUcase) SaveThread(ctx context.Context, messageID int64) (threadID int64, err error) {
+	return uc.repo.SaveThread(ctx, messageID)
 }
 
 func (uc *MessageUcase) SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error {
 	return uc.repo.SaveThreadIdToMessage(ctx, messageID, threadID)
+}
+
+func (uc *MessageUcase) GetMessagesStats(ctx context.Context, profileID int64) (int, int, error) {
+	return uc.repo.GetMessagesStats(ctx, profileID)
 }

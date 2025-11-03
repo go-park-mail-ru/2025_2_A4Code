@@ -67,7 +67,7 @@ func (h *HandlerSettings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	reponse := Response{
 		Response: resp.Response{
-			Status:  http.StatusText(http.StatusOK),
+			Status:  http.StatusOK,
 			Message: "success",
 			Body:    settingsResponse,
 		},

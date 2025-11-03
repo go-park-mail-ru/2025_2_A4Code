@@ -86,7 +86,7 @@ func (h *HandlerUploadFile) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	response := Response{
 		Response: resp.Response{
-			Status:  http.StatusText(http.StatusOK),
+			Status:  http.StatusOK,
 			Message: "success",
 			Body: File{
 				FileType:    header.Header.Get("Content-Type"),

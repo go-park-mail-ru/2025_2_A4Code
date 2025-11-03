@@ -27,7 +27,7 @@ type Request struct {
 	RootMessageID int64     `json:"root_message_id"`
 	Topic         string    `json:"topic"`
 	Text          string    `json:"text"`
-	ThreadRoot    string    `json:"thread_root"`
+	ThreadRoot    int64     `json:"thread_root"`
 	Receivers     Receivers `json:"receivers"`
 	Files         Files     `json:"files"`
 }
@@ -61,11 +61,13 @@ func (h *HandlerReply) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var req Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Error("decode request body", "error", err)
 		resp.SendErrorResponse(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
 	if req.Text == "" || req.Receivers == nil || len(req.Receivers) == 0 {
+		log.Error("empty request body")
 		resp.SendErrorResponse(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
@@ -84,8 +86,7 @@ func (h *HandlerReply) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		threadId, err := h.messageUCase.SaveThread(r.Context(), req.RootMessageID, req.ThreadRoot) // TODO: проверка на существование треда
-		err = h.messageUCase.SaveThreadIdToMessage(r.Context(), messageID, threadId)
+		err = h.messageUCase.SaveThreadIdToMessage(r.Context(), messageID, req.ThreadRoot)
 		if err != nil {
 			log.Error(err.Error())
 			resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
@@ -103,7 +104,7 @@ func (h *HandlerReply) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	response := Response{
 		Response: resp.Response{
-			Status:  http.StatusText(http.StatusOK),
+			Status:  http.StatusOK,
 			Message: "success",
 			Body:    struct{}{},
 		},

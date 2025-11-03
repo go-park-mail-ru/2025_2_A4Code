@@ -76,8 +76,8 @@ func (h *HandlerRefresh) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	response := Response{
 		Response: resp.Response{
-			Status:  http.StatusText(http.StatusOK),
-			Message: "token refreshed successfully",
+			Status:  http.StatusOK,
+			Message: "success",
 			Body:    struct{}{},
 		},
 	}

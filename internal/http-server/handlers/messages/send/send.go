@@ -80,6 +80,14 @@ func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 			return
 		}
+		threadID, err := h.messageUCase.SaveThread(r.Context(), messageID)
+		if err != nil {
+			log.Error(err.Error())
+			resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+			return
+		}
+
+		err = h.messageUCase.SaveThreadIdToMessage(r.Context(), messageID, threadID)
 
 		for _, file := range req.Files {
 			_, err = h.messageUCase.SaveFile(r.Context(), messageID, file.Name, file.FileType, file.StoragePath, file.Size)
@@ -93,7 +101,7 @@ func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	response := Response{
 		Response: resp.Response{
-			Status:  http.StatusText(http.StatusOK),
+			Status:  http.StatusOK,
 			Message: "success",
 			Body:    struct{}{},
 		},

@@ -84,13 +84,14 @@ func (uc *ProfileUcase) Signup(ctx context.Context, SignupReq SignupRequest) (in
 		Name:         SignupReq.Name,
 		Username:     SignupReq.Username,
 		Birthday:     birthday,
+		Domain:       "flintmail.ru",
 		Gender:       SignupReq.Gender,
 		PasswordHash: string(PasswordHash),
 	}
 
 	userId, err := uc.repo.CreateUser(ctx, profile)
 	if err != nil {
-		return 0, e.Wrap(op, ErrUserCreationFailed)
+		return 0, e.Wrap(op+": "+err.Error(), ErrUserCreationFailed)
 	}
 
 	return userId, nil
@@ -101,13 +102,13 @@ func (uc *ProfileUcase) Login(ctx context.Context, req LoginRequest) (int64, err
 	profile, err := uc.repo.FindByUsernameAndDomain(ctx, req.Username, "flintmail.ru")
 	if err != nil {
 		if errors.Is(err, common_e.ErrNotFound) {
-			return 0, e.Wrap(op, ErrUserNotFound)
+			return 0, e.Wrap(op+": "+err.Error(), ErrUserNotFound)
 		}
 		return 0, e.Wrap(op, err)
 	}
 
 	if !uc.checkPassword(req.Password, profile.PasswordHash) {
-		return 0, e.Wrap(op, ErrWrongPassword)
+		return 0, e.Wrap(op+": "+err.Error(), ErrWrongPassword)
 	}
 
 	return profile.ID, nil

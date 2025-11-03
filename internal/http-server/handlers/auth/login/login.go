@@ -139,7 +139,7 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	refreshTokenString, err := refreshToken.SignedString(h.JWTSecret)
 	if err != nil {
-		log.Error("failed to sign resfresh token")
+		log.Error("failed to sign refresh token")
 		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
@@ -169,8 +169,8 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	response := Response{
 		Response: resp.Response{
-			Status:  http.StatusText(http.StatusOK),
-			Message: "login successful",
+			Status:  http.StatusOK,
+			Message: "success",
 			Body:    struct{}{},
 		},
 	}
