@@ -80,7 +80,11 @@ func (h *HandlerUploadAvatar) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		resp.Response{
 			Status:  http.StatusOK,
 			Message: "success",
-			Body:    avatarURL,
+			Body: struct {
+				AvatarPath string `json:"avatar_path"`
+			}{
+				AvatarPath: avatarURL,
+			},
 		},
 	}
 	err = json.NewEncoder(w).Encode(response)

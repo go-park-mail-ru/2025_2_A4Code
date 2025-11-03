@@ -14,6 +14,6 @@ minio:
   port: 8060
   user: minio
   password: miniominio
-  bucket_name: avatar
+  bucket_name: "avatars"
   endpoint: 217.16.16.26:8060
   use_ssl: false

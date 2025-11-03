@@ -24,8 +24,11 @@ type AvatarUcase struct {
 	profileRepo profile.ProfileRepository
 }
 
-func New(storage AvatarRepository) *AvatarUcase {
-	return &AvatarUcase{avatarRepo: storage}
+func New(storage AvatarRepository, profileRepo profile.ProfileRepository) *AvatarUcase {
+	return &AvatarUcase{
+		avatarRepo:  storage,
+		profileRepo: profileRepo,
+	}
 }
 
 func (uc *AvatarUcase) UploadAvatar(ctx context.Context, userID string, file io.Reader, size int64, originalFilename string) (string, error) {

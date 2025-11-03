@@ -80,9 +80,15 @@ func Init() {
 		log.Error(err.Error())
 	}
 
+	// Подключение MinIO
 	client, err := newMinioConnection(cfg.MinioConfig.Endpoint, cfg.MinioConfig.User, cfg.MinioConfig.Password, cfg.MinioConfig.UseSSL)
 	if err != nil {
 		log.Error("error connecting to minio")
+	}
+
+	err = bucketExists(client, cfg.MinioConfig.BucketName)
+	if err != nil {
+		log.Error("error checking bucket: " + err.Error())
 	}
 
 	// Создание репозиториев
@@ -93,7 +99,7 @@ func Init() {
 	// Создание юзкейсов
 	messageUCase := messageUcase.New(messageRepository)
 	profileUCase := profileUcase.New(profileRepository)
-	avatarUCase := avatarUcase.New(avatarRepository)
+	avatarUCase := avatarUcase.New(avatarRepository, profileRepository)
 
 	// Создание хэндлеров
 	loginHandler := login.New(profileUCase, log, SECRET)
@@ -125,10 +131,10 @@ func Init() {
 	http.Handle("/messages/{message_id}", loggerMiddleware(corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP))))
 	http.Handle("/messages/send", loggerMiddleware(corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP))))
 	http.Handle("/messages/threads", loggerMiddleware(corsMiddleware(http.HandlerFunc(threadsHandler.ServeHTTP))))
-	http.Handle("/upload/file", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
+	http.Handle("/user/upload/file", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
 	http.Handle("/user/settings", loggerMiddleware(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
 	http.Handle("/messages/reply", loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
-	http.Handle("/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHanler.ServeHTTP))))
+	http.Handle("/user/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHanler.ServeHTTP))))
 
 	//err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
@@ -234,5 +240,30 @@ func newMinioConnection(endpoint, accessKey, secretKey string, useSSL bool) (*mi
 		slog.Warn("Could not connect to MinIO: " + err.Error())
 	}
 
+	slog.Info("Connected to MinIO successfully")
+
 	return minioClient, nil
+}
+
+func bucketExists(client *minio.Client, bucketName string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	exists, err := client.BucketExists(ctx, bucketName)
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		slog.Info("Creating bucket...", "bucket", bucketName)
+		err = client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to create bucket %s: %w", bucketName, err)
+		}
+		slog.Info("Bucket created successfully", "bucket", bucketName)
+	} else {
+		slog.Info("Bucket already exists", "bucket", bucketName)
+	}
+
+	return nil
 }
