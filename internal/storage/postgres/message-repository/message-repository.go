@@ -181,21 +181,23 @@ func (repo *MessageRepository) FindByProfileID(ctx context.Context, profileID in
             m.id, m.topic, m.text, m.date_of_dispatch,
             pm.read_status,
             bp.id, bp.username, bp.domain,
-            p.name, p.surname, p.image_path
+            sender_profile.name, sender_profile.surname, sender_profile.image_path
         FROM
             message m
         JOIN
-            folder_profile_message fpm ON m.id = fpm.message_id
-        JOIN
-            folder f ON fpm.folder_id = f.id
-        JOIN
             profile_message pm ON m.id = pm.message_id
+        JOIN
+            profile recipient_profile ON pm.profile_id = recipient_profile.id
+        LEFT JOIN
+            folder_profile_message fpm ON m.id = fpm.message_id
+        LEFT JOIN
+            folder f ON fpm.folder_id = f.id AND f.profile_id = recipient_profile.id
         JOIN
             base_profile bp ON m.sender_base_profile_id = bp.id
         LEFT JOIN
-            profile p ON bp.id = p.base_profile_id
+            profile sender_profile ON bp.id = sender_profile.base_profile_id
         WHERE
-            f.profile_id = $1 AND pm.profile_id = $1
+            recipient_profile.base_profile_id = $1
         GROUP BY 
             m.id, 
             m.topic, 
@@ -205,9 +207,9 @@ func (repo *MessageRepository) FindByProfileID(ctx context.Context, profileID in
             bp.id, 
             bp.username, 
             bp.domain,
-            p.name, 
-            p.surname, 
-            p.image_path
+            sender_profile.name, 
+            sender_profile.surname, 
+            sender_profile.image_path
         ORDER BY
             m.date_of_dispatch DESC`
 
@@ -276,21 +278,23 @@ func (repo *MessageRepository) FindByProfileIDWithKeysetPagination(
             m.id, m.topic, m.text, m.date_of_dispatch,
             pm.read_status,
             bp.id, bp.username, bp.domain,
-            p.name, p.surname, p.image_path
+            sender_profile.name, sender_profile.surname, sender_profile.image_path
         FROM
             message m
         JOIN
-            folder_profile_message fpm ON m.id = fpm.message_id
-        JOIN
-            folder f ON fpm.folder_id = f.id
-        JOIN
             profile_message pm ON m.id = pm.message_id
+        JOIN
+            profile recipient_profile ON pm.profile_id = recipient_profile.id
+        LEFT JOIN
+            folder_profile_message fpm ON m.id = fpm.message_id
+        LEFT JOIN
+            folder f ON fpm.folder_id = f.id AND f.profile_id = recipient_profile.id
         JOIN
             base_profile bp ON m.sender_base_profile_id = bp.id
         LEFT JOIN
-            profile p ON bp.id = p.base_profile_id
+            profile sender_profile ON bp.id = sender_profile.base_profile_id
         WHERE
-            f.profile_id = $1 AND pm.profile_id = $1
+            recipient_profile.base_profile_id = $1
 			AND (($2 = 0 AND $3 = 0) OR (m.date_of_dispatch, m.id) < (to_timestamp($3), $2))
         GROUP BY 
             m.id, 
@@ -301,9 +305,9 @@ func (repo *MessageRepository) FindByProfileIDWithKeysetPagination(
             bp.id, 
             bp.username, 
             bp.domain,
-            p.name, 
-            p.surname, 
-            p.image_path
+            sender_profile.name, 
+            sender_profile.surname, 
+            sender_profile.image_path
         ORDER BY
             m.date_of_dispatch DESC, m.id DESC
 		FETCH FIRST $4 ROWS ONLY`

@@ -1,4 +1,4 @@
-package profile_page
+﻿package profile_page
 
 import (
 	resp "2025_2_a4code/internal/lib/api/response"

@@ -1,4 +1,4 @@
-package profile
+﻿package profile
 
 import (
 	"2025_2_a4code/internal/domain"

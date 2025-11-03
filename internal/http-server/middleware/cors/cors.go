@@ -1,13 +1,18 @@
 package cors
 
-import "net/http"
+import (
+	"net/http"
+)
 
 func New() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
+			origin := r.Header.Get("Origin")
+			if allowOrigin(origin) {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			}
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept")
 			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 
 			if r.Method == "OPTIONS" {
@@ -19,5 +24,14 @@ func New() func(http.Handler) http.Handler {
 		}
 
 		return http.HandlerFunc(fn)
+	}
+}
+
+func allowOrigin(origin string) bool {
+	switch origin {
+	case "http://localhost:8080", "http://127.0.0.1:8080":
+		return true
+	default:
+		return false
 	}
 }
