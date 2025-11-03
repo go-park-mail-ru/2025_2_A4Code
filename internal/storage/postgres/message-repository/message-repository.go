@@ -529,3 +529,61 @@ func (repo *MessageRepository) GetMessagesStats(ctx context.Context, profileID i
 
 	return totalCount, unreadCount, nil
 }
+
+func (repo *MessageRepository) FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error) {
+	const op = "storage.postgresql.message.FindThreadsByProfileID"
+
+	const query = `
+        SELECT 
+            t.id as thread_id,
+            t.root_message_id,
+            MAX(m.date_of_dispatch) as last_activity
+        FROM
+            thread t
+        JOIN
+            message m ON t.id = m.thread_id
+        JOIN
+            folder_profile_message fpm ON m.id = fpm.message_id
+        JOIN
+            folder f ON fpm.folder_id = f.id
+        JOIN
+            profile p ON f.profile_id = p.id
+        JOIN
+            profile_message pm ON m.id = pm.message_id AND pm.profile_id = p.id
+        WHERE
+            p.base_profile_id = $1
+        GROUP BY 
+            t.id, t.root_message_id
+        ORDER BY
+            last_activity DESC`
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	rows, err := stmt.QueryContext(ctx, profileID)
+	if err != nil {
+		return nil, e.Wrap(op+": failed to execute query: ", err)
+	}
+	defer rows.Close()
+
+	var threads []domain.ThreadInfo
+	for rows.Next() {
+		var threadInfo domain.ThreadInfo
+
+		err := rows.Scan(&threadInfo.ID, &threadInfo.RootMessage, &threadInfo.LastActivity)
+		if err != nil {
+			return nil, e.Wrap(op, err)
+		}
+
+		threads = append(threads, threadInfo)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, e.Wrap(op, err)
+	}
+
+	return threads, nil
+}

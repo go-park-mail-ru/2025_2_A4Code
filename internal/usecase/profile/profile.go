@@ -108,14 +108,19 @@ func (uc *ProfileUcase) Login(ctx context.Context, req LoginRequest) (int64, err
 	}
 
 	if !uc.checkPassword(req.Password, profile.PasswordHash) {
-		return 0, e.Wrap(op+": "+err.Error(), ErrWrongPassword)
+		return 0, e.Wrap(op, ErrWrongPassword)
 	}
 
 	return profile.ID, nil
 }
 
 func (uc *ProfileUcase) checkPassword(password, hash string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+	if hash == "" {
+		return false
+	}
+
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
 }
 
 func (uc *ProfileUcase) FindInfoByID(ctx context.Context, profileID int64) (domain.ProfileInfo, error) {

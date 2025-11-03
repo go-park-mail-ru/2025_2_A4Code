@@ -83,6 +83,14 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := h.log
 	log.Info("handle /auth/login")
 
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("panic recovered",
+				slog.String("recover", fmt.Sprintf("%v", r)))
+			resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		}
+	}()
+
 	if r.Method != http.MethodPost {
 		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -93,6 +101,8 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp.SendErrorResponse(w, "invalid request format", http.StatusBadRequest)
 		return
 	}
+
+	defer r.Body.Close()
 
 	req.Login = strings.TrimSpace(req.Login)
 	req.Password = strings.TrimSpace(req.Password)
@@ -112,8 +122,7 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	userID, err := h.profileUCase.Login(r.Context(), LoginReq)
 	if err != nil {
 		log.Warn("login failed",
-			slog.String("username", username),
-			slog.String("error", err.Error()))
+			slog.String("username", username))
 		resp.SendErrorResponse(w, "invalid login or password", http.StatusBadRequest)
 		return
 	}

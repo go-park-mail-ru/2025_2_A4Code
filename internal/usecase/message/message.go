@@ -17,6 +17,7 @@ type MessageRepository interface {
 	SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error
 	FindByProfileIDWithKeysetPagination(ctx context.Context, profileID int64, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
 	GetMessagesStats(ctx context.Context, profileID int64) (int, int, error)
+	FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error)
 }
 
 type MessageUcase struct {
@@ -104,4 +105,8 @@ func (uc *MessageUcase) SaveThreadIdToMessage(ctx context.Context, messageID int
 
 func (uc *MessageUcase) GetMessagesStats(ctx context.Context, profileID int64) (int, int, error) {
 	return uc.repo.GetMessagesStats(ctx, profileID)
+}
+
+func (uc *MessageUcase) FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error) {
+	return uc.repo.FindThreadsByProfileID(ctx, profileID)
 }
