@@ -4,6 +4,7 @@ import (
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -15,70 +16,75 @@ type Response struct {
 }
 
 type HandlerRefresh struct {
+	log       *slog.Logger
 	JWTSecret []byte
 }
 
-func New(secret []byte) *HandlerRefresh {
+func New(log *slog.Logger, secret []byte) *HandlerRefresh {
 	return &HandlerRefresh{
+		log:       log,
 		JWTSecret: secret,
 	}
 }
 
 func (h *HandlerRefresh) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log := h.log
+	log.Info("handle /auth/refresh")
+
 	if r.Method != http.MethodPost {
-		resp.SendErrorResponse(w, "Неправильный метод", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Проверяем текущую сессию
-	claims, err := session.CheckSession(r, h.JWTSecret)
+	userID, err := session.GetProfileIDFromRefresh(r, h.JWTSecret)
 	if err != nil {
-		resp.SendErrorResponse(w, "refresh token просрочен", http.StatusUnauthorized)
+		log.Warn("invalid refresh token", slog.String("error", err.Error()))
+		http.SetCookie(w, &http.Cookie{
+			Name:   "refresh_token",
+			Value:  "",
+			MaxAge: -1,
+			Path:   "/",
+		})
+		resp.SendErrorResponse(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// Извлекаем user_id из claims
-	userID, ok := claims["user_id"].(float64)
-	if !ok {
-		resp.SendErrorResponse(w, "Неверный токен", http.StatusUnauthorized)
-		return
-	}
-
-	// Создаем новый JWT токен
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": int64(userID),
-		"exp":     time.Now().Add(24 * time.Hour).Unix(),
+	newAccessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": userID,
+		"exp":     time.Now().Add(15 * time.Minute).Unix(),
+		"type":    "access",
 	})
 
-	newSession, err := token.SignedString(h.JWTSecret)
+	newAccessTokenString, err := newAccessToken.SignedString(h.JWTSecret)
 	if err != nil {
-		resp.SendErrorResponse(w, "Ошибка создания сессии", http.StatusInternalServerError)
+		log.Error("failed to sign new access token")
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
-	// Устанавливаем новую cookie
-	cookie := &http.Cookie{
-		Name:     "session_id",
-		Value:    newSession,
-		MaxAge:   3600,
+	accessCookie := &http.Cookie{
+		Name:     "access_token",
+		Value:    newAccessTokenString,
+		MaxAge:   15 * 60,
 		HttpOnly: true,
 		Path:     "/",
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
 	}
-	http.SetCookie(w, cookie)
+	http.SetCookie(w, accessCookie)
 
-	// Отправляем успешный ответ
+	w.Header().Set("Content-Type", "application/json")
 	response := Response{
 		Response: resp.Response{
-			Status:  "200",
-			Message: "Refresh token получен",
+			Status:  http.StatusText(http.StatusOK),
+			Message: "token refreshed successfully",
 			Body:    struct{}{},
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(response)
-	if err != nil {
-		resp.SendErrorResponse(w, "Внутренния ошибка сервера", http.StatusInternalServerError)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Error("failed to encode response")
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 }

@@ -28,3 +28,9 @@ type Messages struct {
 	MessageUnread int         `json:"message_unread"`
 	Messages      interface{} `json:"messages"`
 }
+
+type PaginatedMessages struct {
+	NextCursor string `json:"next_cursor"`
+	HasNext    bool   `json:"has_next"`
+	Messages
+}

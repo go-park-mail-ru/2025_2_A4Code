@@ -13,7 +13,6 @@ import (
 
 var (
 	ErrUserAlreadyExists  = errors.New("user already exists")
-	ErrInvalidDateFormat  = errors.New("invalid date format")
 	ErrUserNotFound       = errors.New("user not found")
 	ErrWrongPassword      = errors.New("wrong password")
 	ErrPasswordHashFailed = errors.New("password hash failed")

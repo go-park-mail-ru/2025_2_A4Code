@@ -4,6 +4,7 @@ import (
 	"2025_2_a4code/internal/domain"
 	e "2025_2_a4code/internal/lib/wrapper"
 	"context"
+	"time"
 )
 
 type MessageRepository interface {
@@ -14,6 +15,8 @@ type MessageRepository interface {
 	SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
 	SaveThread(ctx context.Context, messageID int64, threadId string) (threadID int64, err error)
 	SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error
+	FindByProfileIDWithKeysetPagination(ctx context.Context, profileID int64, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
+	GetMessagesStats(ctx context.Context, profileID int64) (int, int, error)
 }
 
 type MessageUcase struct {
@@ -30,6 +33,16 @@ func (uc *MessageUcase) FindByMessageID(ctx context.Context, messageID int64) (*
 
 func (uc *MessageUcase) FindByProfileID(ctx context.Context, profileID int64) ([]domain.Message, error) {
 	return uc.repo.FindByProfileID(ctx, profileID)
+}
+
+func (uc *MessageUcase) FindByProfileIDWithKeysetPagination(
+	ctx context.Context,
+	profileID int64,
+	lastMessageID int64,
+	lastDatetime time.Time,
+	limit int,
+) ([]domain.Message, error) {
+	return uc.repo.FindByProfileIDWithKeysetPagination(ctx, profileID, lastMessageID, lastDatetime, limit)
 }
 
 func (uc *MessageUcase) GetMessagesInfo(ctx context.Context, profileID int64) (domain.Messages, error) {
@@ -51,6 +64,21 @@ func (uc *MessageUcase) GetMessagesInfo(ctx context.Context, profileID int64) (d
 		MessageTotal:  len(messages),
 		MessageUnread: unread,
 		Messages:      messages,
+	}, nil
+}
+
+func (uc *MessageUcase) GetMessagesInfoWithPagination(ctx context.Context, profileID int64) (domain.Messages, error) {
+	const op = "usecase.message.GetMessagesInfoWithPagination"
+
+	messageTotal, messageUnread, err := uc.repo.GetMessagesStats(ctx, profileID)
+	if err != nil {
+		return domain.Messages{}, e.Wrap(op, err)
+	}
+
+	return domain.Messages{
+		MessageTotal:  messageTotal,
+		MessageUnread: messageUnread,
+		Messages:      nil,
 	}, nil
 }
 
