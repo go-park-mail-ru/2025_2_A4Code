@@ -260,6 +260,109 @@ func (repo *MessageRepository) FindByProfileID(ctx context.Context, profileID in
 	return messages, nil
 }
 
+func (repo *MessageRepository) FindByProfileIDWithKeysetPagination(
+	ctx context.Context,
+	profileID int64,
+	lastMessageID int64,
+	lastDatetime time.Time,
+	limit int,
+) ([]domain.Message, error) {
+
+	const op = "storage.postgresql.message.FindByProfileID"
+
+	const query = `
+        SELECT
+            m.id, m.topic, m.text, m.date_of_dispatch,
+            pm.read_status,
+            bp.id, bp.username, bp.domain,
+            p.name, p.surname, p.image_path
+        FROM
+            message m
+        JOIN
+            folder_profile_message fpm ON m.id = fpm.message_id
+        JOIN
+            folder f ON fpm.folder_id = f.id
+        JOIN
+            profile_message pm ON m.id = pm.message_id
+        JOIN
+            base_profile bp ON m.sender_base_profile_id = bp.id
+        LEFT JOIN
+            profile p ON bp.id = p.base_profile_id
+        WHERE
+            f.profile_id = $1 AND pm.profile_id = $1
+			AND (($2 = 0 AND $3 = 0) OR (m.date_of_dispatch, m.id) < (to_timestamp($3), $2))
+        GROUP BY 
+            m.id, 
+            m.topic, 
+            m.text, 
+            m.date_of_dispatch,
+            pm.read_status,
+            bp.id, 
+            bp.username, 
+            bp.domain,
+            p.name, 
+            p.surname, 
+            p.image_path
+        ORDER BY
+            m.date_of_dispatch DESC, m.id DESC
+		FETCH FIRST $4 ROWS ONLY`
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	var lastDatetimeUnix int64
+	if !lastDatetime.IsZero() {
+		lastDatetimeUnix = lastDatetime.Unix()
+	}
+
+	rows, err := stmt.QueryContext(ctx, profileID, lastMessageID, lastDatetimeUnix, limit)
+	if err != nil {
+		return nil, e.Wrap(op+": failed to execute query: ", err)
+	}
+	defer rows.Close()
+
+	var messages []domain.Message
+	for rows.Next() {
+		var message domain.Message
+		var messageIdInt int64
+		var senderId int64
+		var senderUsername, senderDomain string
+		var senderName, senderSurname, senderAvatar sql.NullString
+		var text string
+
+		err := rows.Scan(
+			&messageIdInt, &message.Topic, &text, &message.Datetime, &message.IsRead,
+			&senderId, &senderUsername, &senderDomain,
+			&senderName, &senderSurname, &senderAvatar,
+		)
+		if err != nil {
+			return nil, e.Wrap(op, err)
+		}
+		message.ID = strconv.FormatInt(messageIdInt, 10)
+		if len(text) > 40 {
+			message.Snippet = text[:40] + "..."
+		} else {
+			message.Snippet = text
+		}
+		message.Sender = domain.Sender{
+			Id:    senderId,
+			Email: fmt.Sprintf("%s@%s", senderUsername, senderDomain),
+			Username: strings.TrimSpace(fmt.Sprintf("%s %s",
+				senderName.String, senderSurname.String)),
+			Avatar: senderAvatar.String,
+		}
+		messages = append(messages, message)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, e.Wrap(op, err)
+	}
+
+	return messages, nil
+}
+
 func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (messageID int64, err error) {
 	const op = "storage.postgresql.message.SaveMessage"
 
@@ -395,4 +498,32 @@ func (repo *MessageRepository) SaveThreadIdToMessage(ctx context.Context, messag
 		return e.Wrap(op+": failed to insert to message (no rows affected): ", err)
 	}
 	return nil
+}
+
+func (repo *MessageRepository) GetMessagesStats(ctx context.Context, profileID int64) (int, int, error) {
+	const op = "storage.postgresql.message.GetMessagesStats"
+
+	const query = `
+        SELECT 
+            COUNT(*) as total_count,
+            COUNT(CASE WHEN pm.read_status = false THEN 1 END) as unread_count
+        FROM message m
+        JOIN folder_profile_message fpm ON m.id = fpm.message_id
+        JOIN folder f ON fpm.folder_id = f.id
+        JOIN profile_message pm ON m.id = pm.message_id
+        WHERE f.profile_id = $1 AND pm.profile_id = $1`
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return 0, 0, e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	var totalCount, unreadCount int
+	err = repo.db.QueryRowContext(ctx, query, profileID).Scan(&totalCount, &unreadCount)
+	if err != nil {
+		return 0, 0, e.Wrap(op, err)
+	}
+
+	return totalCount, unreadCount, nil
 }
