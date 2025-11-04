@@ -10,6 +10,7 @@ import (
 	messagepage "2025_2_a4code/internal/http-server/handlers/messages/message-page"
 	"2025_2_a4code/internal/http-server/handlers/messages/reply"
 	"2025_2_a4code/internal/http-server/handlers/messages/send"
+	"2025_2_a4code/internal/http-server/handlers/messages/sent"
 	"2025_2_a4code/internal/http-server/handlers/messages/threads"
 	profilepage "2025_2_a4code/internal/http-server/handlers/user/profile-page"
 	"2025_2_a4code/internal/http-server/handlers/user/settings"
@@ -115,6 +116,7 @@ func Init() {
 	settingsHandler := settings.New(profileUCase, SECRET)
 	replyHandler := reply.New(messageUCase, SECRET)
 	uploadAvatarHandler := uploadavatar.New(avatarUCase, profileUCase, SECRET)
+	sentHandler := sent.New(profileUCase, messageUCase, avatarUCase, SECRET)
 
 	// настройка corsMiddleware
 	corsMiddleware := cors.New()
@@ -135,6 +137,7 @@ func Init() {
 	http.Handle("/user/settings", loggerMiddleware(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
 	http.Handle("/messages/reply", loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
 	http.Handle("/user/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHandler.ServeHTTP))))
+	http.Handle("/messages/sent", loggerMiddleware(corsMiddleware(http.HandlerFunc(sentHandler.ServeHTTP))))
 
 	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 

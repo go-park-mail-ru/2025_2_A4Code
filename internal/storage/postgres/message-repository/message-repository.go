@@ -642,3 +642,135 @@ func (repo *MessageRepository) FindThreadsByProfileID(ctx context.Context, profi
 
 	return threads, nil
 }
+
+func (repo *MessageRepository) FindSentMessagesByProfileIDWithKeysetPagination(
+	ctx context.Context,
+	profileID int64,
+	lastMessageID int64,
+	lastDatetime time.Time,
+	limit int,
+) ([]domain.Message, error) {
+
+	const op = "storage.postgresql.message.FindSentMessagesByProfileIDWithKeysetPagination" // Renamed op for clarity
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	// UPDATED QUERY
+	const query = `
+        SELECT
+            m.id, m.topic, m.text, m.date_of_dispatch,
+            -- Check if *any* recipient has read the message
+            EXISTS (
+                SELECT 1 
+                FROM profile_message pm 
+                WHERE pm.message_id = m.id AND pm.read_status = TRUE
+            ) as read_status,
+            bp.id, bp.username, bp.domain,
+            sender_profile.name, sender_profile.surname, sender_profile.image_path
+        FROM
+            message m
+        JOIN
+            base_profile bp ON m.sender_base_profile_id = bp.id
+        LEFT JOIN
+            profile sender_profile ON bp.id = sender_profile.base_profile_id
+        WHERE
+            m.sender_base_profile_id = $1  -- Filter by SENDER's base_profile_id
+			AND (($2 = 0 AND $3 = 0) OR (m.date_of_dispatch, m.id) < (to_timestamp($3), $2))
+        ORDER BY
+            m.date_of_dispatch DESC, m.id DESC
+		FETCH FIRST $4 ROWS ONLY`
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	var lastDatetimeUnix int64
+	if !lastDatetime.IsZero() {
+		lastDatetimeUnix = lastDatetime.Unix()
+	}
+
+	log.Debug("Executing FindSentMessagesByProfileIDWithKeysetPagination query...")
+	rows, err := stmt.QueryContext(ctx, profileID, lastMessageID, lastDatetimeUnix, limit)
+	if err != nil {
+		return nil, e.Wrap(op+": failed to execute query: ", err)
+	}
+	defer rows.Close()
+
+	var messages []domain.Message
+	for rows.Next() {
+		var message domain.Message
+		var messageIdInt int64
+		var senderId int64
+		var senderUsername, senderDomain string
+		var senderName, senderSurname, senderAvatar sql.NullString
+		var text string
+
+		err := rows.Scan(
+			&messageIdInt, &message.Topic, &text, &message.Datetime, &message.IsRead,
+			&senderId, &senderUsername, &senderDomain,
+			&senderName, &senderSurname, &senderAvatar,
+		)
+		if err != nil {
+			return nil, e.Wrap(op, err)
+		}
+		message.ID = strconv.FormatInt(messageIdInt, 10)
+		if len(text) > 40 {
+			message.Snippet = text[:40] + "..."
+		} else {
+			message.Snippet = text
+		}
+		message.Sender = domain.Sender{
+			Id:    senderId,
+			Email: fmt.Sprintf("%s@%s", senderUsername, senderDomain),
+			Username: strings.TrimSpace(fmt.Sprintf("%s %s",
+				senderName.String, senderSurname.String)),
+			Avatar: senderAvatar.String,
+		}
+		messages = append(messages, message)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, e.Wrap(op, err)
+	}
+
+	return messages, nil
+}
+
+func (repo *MessageRepository) GetSentMessagesStats(ctx context.Context, profileID int64) (int, int, error) {
+	const op = "storage.postgresql.message.GetSentMessagesStats"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+        SELECT 
+            -- Total number of messages sent by this user
+            COUNT(m.id) as total_count,
+            
+            -- Count of messages where NO recipient has read_status = TRUE
+            COUNT(m.id) FILTER (
+                WHERE NOT EXISTS (
+                    SELECT 1 
+                    FROM profile_message pm 
+                    WHERE pm.message_id = m.id AND pm.read_status = TRUE
+                )
+            ) as unread_count
+        FROM 
+            message m
+        WHERE 
+            m.sender_base_profile_id = $1
+    `
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return 0, 0, e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	var totalCount, unreadCount int
+	log.Debug("Executing GetSentMessagesStats query...")
+	err = stmt.QueryRowContext(ctx, profileID).Scan(&totalCount, &unreadCount)
+	if err != nil {
+		return 0, 0, e.Wrap(op, err)
+	}
+
+	return totalCount, unreadCount, nil
+}

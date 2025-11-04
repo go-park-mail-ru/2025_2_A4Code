@@ -1,4 +1,4 @@
-package inbox
+package sent
 
 import (
 	"2025_2_a4code/internal/domain"
@@ -49,15 +49,15 @@ type Response struct {
 	resp.Response
 }
 
-type HandlerInbox struct {
+type HandlerSent struct {
 	profileUCase profile.ProfileUsecase
 	messageUCase message.MessageUsecase
 	avatarUCase  *avatar.AvatarUcase
 	secret       []byte
 }
 
-func New(profileUCase profile.ProfileUsecase, messageUCase message.MessageUsecase, avatarUCase *avatar.AvatarUcase, SECRET []byte) *HandlerInbox {
-	return &HandlerInbox{
+func New(profileUCase profile.ProfileUsecase, messageUCase message.MessageUsecase, avatarUCase *avatar.AvatarUcase, SECRET []byte) *HandlerSent {
+	return &HandlerSent{
 		profileUCase: profileUCase,
 		messageUCase: messageUCase,
 		avatarUCase:  avatarUCase,
@@ -65,9 +65,9 @@ func New(profileUCase profile.ProfileUsecase, messageUCase message.MessageUsecas
 	}
 }
 
-func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *HandlerSent) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(r.Context())
-	log.Info("handle /messages/inbox")
+	log.Info("handle /messages/sent")
 
 	if r.Method != http.MethodGet {
 		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
@@ -106,14 +106,14 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	messages, err := h.messageUCase.FindByProfileIDWithKeysetPagination(r.Context(), id, lastMessageID, lastDatetime, limit)
+	messages, err := h.messageUCase.FindSentMessagesByProfileIDWithKeysetPagination(r.Context(), id, lastMessageID, lastDatetime, limit)
 	if err != nil {
 		log.Error(err.Error())
 		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
-	messagesInfo, err := h.messageUCase.GetMessagesInfoWithPagination(r.Context(), id)
+	messagesInfo, err := h.messageUCase.GetSentMessagesInfoWithPagination(r.Context(), id)
 	if err != nil {
 		log.Error(err.Error())
 		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
@@ -175,7 +175,7 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *HandlerInbox) enrichSenderAvatar(ctx context.Context, sender *domain.Sender) error {
+func (h *HandlerSent) enrichSenderAvatar(ctx context.Context, sender *domain.Sender) error {
 	if sender == nil || sender.Avatar == "" {
 		return nil
 	}
