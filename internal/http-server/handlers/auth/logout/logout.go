@@ -1,9 +1,9 @@
 package logout
 
 import (
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 )
 
@@ -12,18 +12,15 @@ type Response struct {
 }
 
 type HandlerLogout struct {
-	log *slog.Logger
 }
 
-func New(log *slog.Logger) *HandlerLogout {
-	return &HandlerLogout{
-		log: log,
-	}
+func New() *HandlerLogout {
+	return &HandlerLogout{}
 }
 
 func (h *HandlerLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log := h.log
-	log.Info("handle /auth/logout")
+	log := logger.GetLogger(r.Context())
+	log.Debug("handle /auth/logout")
 
 	if r.Method != http.MethodPost {
 		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)

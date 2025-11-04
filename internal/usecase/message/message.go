@@ -19,27 +19,8 @@ type MessageRepository interface {
 	GetMessagesStats(ctx context.Context, profileID int64) (int, int, error)
 	FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error)
 	MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error
-}
-
-type MessageUsecase interface {
-	FindByMessageID(ctx context.Context, messageID int64) (*domain.Message, error)
-	FindByProfileID(ctx context.Context, profileID int64) ([]domain.Message, error)
-	FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
-	FindByProfileIDWithKeysetPagination(
-		ctx context.Context,
-		profileID int64,
-		lastMessageID int64,
-		lastDatetime time.Time,
-		limit int,
-	) ([]domain.Message, error)
-	SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
-	SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
-	SaveThread(ctx context.Context, messageID int64) (threadID int64, err error)
-	SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error
-	GetMessagesStats(ctx context.Context, profileID int64) (int, int, error)
-	FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error)
-	GetMessagesInfoWithPagination(ctx context.Context, profileID int64) (domain.Messages, error)
-	MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error
+	FindSentMessagesByProfileIDWithKeysetPagination(ctx context.Context, profileID int64, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
+	GetSentMessagesStats(ctx context.Context, profileID int64) (int, int, error)
 }
 
 type MessageUcase struct {
@@ -135,4 +116,27 @@ func (uc *MessageUcase) FindThreadsByProfileID(ctx context.Context, profileID in
 
 func (uc *MessageUcase) MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error {
 	return uc.repo.MarkMessageAsRead(ctx, messageID, profileID)
+}
+
+func (uc *MessageUcase) FindSentMessagesByProfileIDWithKeysetPagination(ctx context.Context, profileID int64, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error) {
+	return uc.repo.FindSentMessagesByProfileIDWithKeysetPagination(ctx, profileID, lastMessageID, lastDatetime, limit)
+}
+
+func (uc *MessageUcase) GetSentMessagesStats(ctx context.Context, profileID int64) (int, int, error) {
+	return uc.repo.GetSentMessagesStats(ctx, profileID)
+}
+
+func (uc *MessageUcase) GetSentMessagesInfoWithPagination(ctx context.Context, profileID int64) (domain.Messages, error) {
+	const op = "usecase.message.GetSentMessagesInfoWithPagination"
+
+	messageTotal, messageUnread, err := uc.repo.GetSentMessagesStats(ctx, profileID)
+	if err != nil {
+		return domain.Messages{}, e.Wrap(op, err)
+	}
+
+	return domain.Messages{
+		MessageTotal:  messageTotal,
+		MessageUnread: messageUnread,
+		Messages:      nil,
+	}, nil
 }

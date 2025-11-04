@@ -2,12 +2,14 @@ package profile_repository
 
 import (
 	"2025_2_a4code/internal/domain"
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	commonE "2025_2_a4code/internal/lib/errors"
 	e "2025_2_a4code/internal/lib/wrapper"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 )
 
@@ -21,6 +23,7 @@ func New(db *sql.DB) *ProfileRepository {
 
 func (repo *ProfileRepository) FindByID(ctx context.Context, id int64) (*domain.Profile, error) {
 	const op = "storage.postgres.profile-repository.FindByID"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
 		SELECT 
@@ -43,6 +46,7 @@ func (repo *ProfileRepository) FindByID(ctx context.Context, id int64) (*domain.
 	var profile domain.Profile
 	var profileSurname, profilePatronymic, profileAvatar sql.NullString
 
+	log.Debug("Executing FindByID query...")
 	err = stmt.QueryRowContext(ctx, id).Scan(
 		&profile.ID, &profile.Username, &profile.Domain, &profile.CreatedAt,
 		&profile.PasswordHash, &profile.AuthVersion, &profile.Name, &profileSurname,
@@ -77,6 +81,7 @@ func (repo *ProfileRepository) FindByID(ctx context.Context, id int64) (*domain.
 
 func (repo *ProfileRepository) FindSenderByID(ctx context.Context, id int64) (*domain.Sender, error) {
 	const op = "storage.postgres.profile-repository.FindSenderByID"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
 		SELECT 
@@ -99,6 +104,7 @@ func (repo *ProfileRepository) FindSenderByID(ctx context.Context, id int64) (*d
 	var senderLogin, senderDomain string
 	var senderName, senderSurname, senderAvatar sql.NullString
 
+	log.Debug("Executing FindSender query...")
 	err = stmt.QueryRowContext(ctx, id).Scan(
 		&sender.Id, &senderLogin, &senderDomain,
 		&senderName, &senderSurname, &senderAvatar,
@@ -131,6 +137,7 @@ func (repo *ProfileRepository) FindSenderByID(ctx context.Context, id int64) (*d
 
 func (repo *ProfileRepository) UserExists(ctx context.Context, username string) (bool, error) {
 	const op = "storage.postgres.profile-repository.UserExists"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
 		SELECT EXISTS (
@@ -147,6 +154,7 @@ func (repo *ProfileRepository) UserExists(ctx context.Context, username string) 
 
 	var user_exists bool
 
+	log.Debug("Executing UserExists query...")
 	err = stmt.QueryRowContext(ctx, username).Scan(
 		&user_exists,
 	)
@@ -163,6 +171,7 @@ func (repo *ProfileRepository) UserExists(ctx context.Context, username string) 
 
 func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Profile) (int64, error) {
 	const op = "storage.postgres.profile-repository.CreateUser"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	tx, err := repo.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -183,6 +192,7 @@ func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Pr
 
 	var newBaseProfileId int64
 
+	log.Debug("Executing CreateBaseProfile query...")
 	err = stmt.QueryRowContext(ctx, profile.Username, profile.Domain).Scan(
 		&newBaseProfileId,
 	)
@@ -203,6 +213,7 @@ func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Pr
 
 	var newProfileId int64
 
+	log.Debug("Executing CreateProfile query...")
 	err = stmt.QueryRowContext(ctx, newBaseProfileId, profile.PasswordHash, profile.Name, profile.Surname, profile.Patronymic, profile.Gender, profile.Birthday).Scan(
 		&newProfileId,
 	)
@@ -220,6 +231,7 @@ func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Pr
 
 func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, username string, emailDomain string) (*domain.Profile, error) {
 	const op = "storage.postgres.profile-repository.FindByUsernameAndDomain"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
 		SELECT 
@@ -244,6 +256,7 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 	profile.Domain = emailDomain
 	var profileSurname, profilePatronymic, profileAvatar sql.NullString
 
+	log.Debug("Executing FindByUsernameAndDomain query...")
 	err = stmt.QueryRowContext(ctx, username, emailDomain).Scan(
 		&profile.ID, &profile.CreatedAt,
 		&profile.PasswordHash, &profile.AuthVersion, &profile.Name, &profileSurname,
@@ -278,6 +291,7 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 
 func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64) (domain.ProfileInfo, error) {
 	const op = "storage.postgres.profile-repository.FindInfoByID"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
 		SELECT 
@@ -300,6 +314,7 @@ func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64
 	var profileInfo domain.ProfileInfo
 	var profileInfoSurname, profileInfoPatronymic, profileInfoAvatar sql.NullString
 
+	log.Debug("Executing FindInfoByID query...")
 	err = stmt.QueryRowContext(ctx, profileID).Scan(
 		&profileInfo.ID, &profileInfo.Username, &profileInfo.CreatedAt,
 		&profileInfo.Name, &profileInfoSurname,
@@ -328,6 +343,7 @@ func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64
 
 func (repo *ProfileRepository) FindSettingsByProfileId(ctx context.Context, profileID int64) (domain.Settings, error) {
 	const op = "storage.postgres.profile-repository.FindSettingsById"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
         SELECT 
@@ -355,6 +371,7 @@ func (repo *ProfileRepository) FindSettingsByProfileId(ctx context.Context, prof
 	var notificationTolerance, language, theme sql.NullString
 	var signatureNullable sql.NullString
 
+	log.Debug("Executing FindSettingsByProfileId query...")
 	err = stmt.QueryRowContext(ctx, profileID).Scan(
 		&settingsID, &settingsProfileID, &notificationTolerance,
 		&language, &theme, &signatureNullable,
@@ -392,6 +409,7 @@ func (repo *ProfileRepository) FindSettingsByProfileId(ctx context.Context, prof
 
 func (repo *ProfileRepository) UpdateProfileInfo(ctx context.Context, profileID int64, info domain.ProfileUpdate) error {
 	const op = "storage.postgres.profile-repository.UpdateProfileInfo"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
 		UPDATE profile
@@ -422,6 +440,7 @@ func (repo *ProfileRepository) UpdateProfileInfo(ctx context.Context, profileID 
 		}
 	}
 
+	log.Debug("Executing UpdateProfileInfo query...")
 	_, err = stmt.ExecContext(ctx, name, surname, patronymic, gender, birthday, profileID)
 	if err != nil {
 		return e.Wrap(op, err)
@@ -432,6 +451,7 @@ func (repo *ProfileRepository) UpdateProfileInfo(ctx context.Context, profileID 
 
 func (repo *ProfileRepository) InsertProfileAvatar(ctx context.Context, profileID int64, avatarURL string) error {
 	const op = "storage.postgres.profile-repository.InsertProfileAvatar"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
 		UPDATE profile
@@ -445,6 +465,7 @@ func (repo *ProfileRepository) InsertProfileAvatar(ctx context.Context, profileI
 	}
 	defer stmt.Close()
 
+	log.Debug("Executing InsertProfileAvatar query...")
 	_, err = stmt.ExecContext(ctx, avatarURL, profileID)
 	if err != nil {
 		return e.Wrap(op, err)

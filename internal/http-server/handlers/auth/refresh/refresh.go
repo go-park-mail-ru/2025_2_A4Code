@@ -1,6 +1,7 @@
 package refresh
 
 import (
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
 	"encoding/json"
@@ -16,20 +17,18 @@ type Response struct {
 }
 
 type HandlerRefresh struct {
-	log       *slog.Logger
 	JWTSecret []byte
 }
 
-func New(log *slog.Logger, secret []byte) *HandlerRefresh {
+func New(secret []byte) *HandlerRefresh {
 	return &HandlerRefresh{
-		log:       log,
 		JWTSecret: secret,
 	}
 }
 
 func (h *HandlerRefresh) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log := h.log
-	log.Info("handle /auth/refresh")
+	log := logger.GetLogger(r.Context())
+	log.Debug("handle /auth/refresh")
 
 	if r.Method != http.MethodPost {
 		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)

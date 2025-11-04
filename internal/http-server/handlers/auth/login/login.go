@@ -1,12 +1,16 @@
 package login
 
+//go:generate mockgen -source=$GOFILE -destination=./mocks/mock_profile_usecase.go -package=mocks
+
 import (
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	valid "2025_2_a4code/internal/lib/validation"
+	"context"
 	"log/slog"
 	"strings"
 
-	profileUcase "2025_2_a4code/internal/usecase/profile"
+	"2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -21,67 +25,29 @@ type Request struct {
 	Password string `json:"password"`
 }
 
+type ProfileUsecase interface {
+	Login(ctx context.Context, req profile.LoginRequest) (int64, error)
+}
+
 type Response struct {
 	resp.Response
 }
 
 type HandlerLogin struct {
-	profileUCase *profileUcase.ProfileUcase
-	log          *slog.Logger
+	profileUCase ProfileUsecase
 	JWTSecret    []byte
 }
 
-func New(ucP *profileUcase.ProfileUcase, log *slog.Logger, secret []byte) *HandlerLogin {
+func New(profileUCase ProfileUsecase, secret []byte) *HandlerLogin {
 	return &HandlerLogin{
-		profileUCase: ucP,
-		log:          log,
+		profileUCase: profileUCase,
 		JWTSecret:    secret,
 	}
 }
 
-func (h *HandlerLogin) validateRequest(login, password string) (string, error) {
-	if login == "" || password == "" {
-		return "", fmt.Errorf("all fields are required")
-	}
-
-	username := login
-	if strings.Contains(login, "@") {
-		parts := strings.Split(login, "@")
-		if len(parts) > 0 && parts[0] != "" {
-			username = strings.TrimSpace(parts[0])
-		} else {
-			return "", fmt.Errorf("invalid login or email format")
-		}
-	}
-
-	if len(username) < 3 || len(username) > 50 {
-		return "", fmt.Errorf("username must be between 3 and 50 characters")
-	}
-
-	for _, char := range username {
-		if !unicode.IsLetter(char) && !unicode.IsDigit(char) && char != '_' {
-			return "", fmt.Errorf("username can only contain letters, numbers and underscores")
-		}
-	}
-
-	if valid.HasDangerousCharacters(username) {
-		return "", fmt.Errorf("username contains invalid characters")
-	}
-
-	if len(password) < 6 {
-		return "", fmt.Errorf("password must be at least 6 characters")
-	}
-
-	if valid.HasDangerousCharacters(password) {
-		return "", fmt.Errorf("password contains invalid characters")
-	}
-
-	return username, nil
-}
-
 func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log := h.log
-	log.Info("handle /auth/login")
+	log := logger.GetLogger(r.Context())
+	log.Debug("handle /auth/login")
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -114,7 +80,7 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Преобразуем в UseCase запрос
-	LoginReq := profileUcase.LoginRequest{
+	LoginReq := profile.LoginRequest{
 		Username: username,
 		Password: req.Password,
 	}
@@ -189,4 +155,44 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
+}
+
+func (h *HandlerLogin) validateRequest(login, password string) (string, error) {
+	if login == "" || password == "" {
+		return "", fmt.Errorf("all fields are required")
+	}
+
+	username := login
+	if strings.Contains(login, "@") {
+		parts := strings.Split(login, "@")
+		if len(parts) > 0 && parts[0] != "" {
+			username = strings.TrimSpace(parts[0])
+		} else {
+			return "", fmt.Errorf("invalid login or email format")
+		}
+	}
+
+	if len(username) < 3 || len(username) > 50 {
+		return "", fmt.Errorf("username must be between 3 and 50 characters")
+	}
+
+	for _, char := range username {
+		if !unicode.IsLetter(char) && !unicode.IsDigit(char) && char != '_' {
+			return "", fmt.Errorf("username can only contain letters, numbers and underscores")
+		}
+	}
+
+	if valid.HasDangerousCharacters(username) {
+		return "", fmt.Errorf("username contains invalid characters")
+	}
+
+	if len(password) < 6 {
+		return "", fmt.Errorf("password must be at least 6 characters")
+	}
+
+	if valid.HasDangerousCharacters(password) {
+		return "", fmt.Errorf("password contains invalid characters")
+	}
+
+	return username, nil
 }

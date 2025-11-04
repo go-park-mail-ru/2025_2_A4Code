@@ -1,13 +1,14 @@
 package upload_avatar
 
+//go:generate mockgen -source=$GOFILE -destination=./mocks/mock_profile_usecase.go -package=mocks
+
 import (
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
-	"2025_2_a4code/internal/usecase/avatar"
-	"2025_2_a4code/internal/usecase/profile"
 	"context"
 	"encoding/json"
-	"log/slog"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -16,29 +17,35 @@ import (
 // Максимальный размер загружаемого файла - 5 Мб
 const maxAvatarSize = 5 << 20
 
+type AvatarUsecase interface {
+	UploadAvatar(ctx context.Context, userID string, file io.Reader, size int64, originalFilename string) (string, string, error)
+}
+
+type ProfileUsecase interface {
+	InsertProfileAvatar(ctx context.Context, profileID int64, avatarURL string) error
+}
+
 type Response struct {
 	resp.Response
 }
 
 type HandlerUploadAvatar struct {
-	avatarUcase  *avatar.AvatarUcase
-	profileUcase profile.ProfileUsecase
-	log          *slog.Logger
+	avatarUcase  AvatarUsecase
+	profileUcase ProfileUsecase
 	secret       []byte
 }
 
-func New(avatarUcase *avatar.AvatarUcase, profileUcase profile.ProfileUsecase, log *slog.Logger, secret []byte) *HandlerUploadAvatar {
+func New(avatarUcase AvatarUsecase, profileUcase ProfileUsecase, secret []byte) *HandlerUploadAvatar {
 	return &HandlerUploadAvatar{
 		avatarUcase:  avatarUcase,
 		profileUcase: profileUcase,
-		log:          log,
 		secret:       secret,
 	}
 }
 
 func (h *HandlerUploadAvatar) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log := h.log
-	log.Info("Handling upload avatar")
+	log := logger.GetLogger(r.Context())
+	log.Debug("Handling user/upload/avatar")
 
 	if r.Method != http.MethodPost {
 		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)

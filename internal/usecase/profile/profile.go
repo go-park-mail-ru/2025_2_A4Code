@@ -54,20 +54,6 @@ type ProfileRepository interface {
 	UpdateProfileInfo(ctx context.Context, profileID int64, info domain.ProfileUpdate) error
 }
 
-type ProfileUsecase interface {
-	FindByID(ctx context.Context, id int64) (*domain.Profile, error)
-	FindSenderByID(ctx context.Context, id int64) (*domain.Sender, error)
-	Signup(ctx context.Context, SignupReq SignupRequest) (int64, error)
-	Login(ctx context.Context, req LoginRequest) (int64, error)
-	FindInfoByID(ctx context.Context, id int64) (domain.ProfileInfo, error)
-	UserExists(ctx context.Context, username string) (bool, error)
-	CreateUser(ctx context.Context, profile domain.Profile) (int64, error)
-	FindByUsernameAndDomain(ctx context.Context, username string, domain string) (*domain.Profile, error)
-	FindSettingsByProfileId(ctx context.Context, profileID int64) (domain.Settings, error)
-	InsertProfileAvatar(ctx context.Context, profileID int64, avatarURL string) error
-	UpdateProfileInfo(ctx context.Context, profileID int64, req UpdateProfileRequest) error
-}
-
 type ProfileUcase struct {
 	repo ProfileRepository
 }
