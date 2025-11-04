@@ -1,18 +1,24 @@
-package login
+package login_test
 
 import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"2025_2_a4code/internal/http-server/handlers/auth/login"
 	"2025_2_a4code/internal/http-server/handlers/auth/login/mocks"
-	"2025_2_a4code/internal/usecase/profile"
 
 	"github.com/golang/mock/gomock"
 )
+
+func createTestLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 func TestHandlerLogin_ServeHTTP(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -20,8 +26,9 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 
 	mockProfileUsecase := mocks.NewMockProfileUsecase(ctrl)
 	secret := []byte("test-secret")
+	logger := createTestLogger()
 
-	handler := New(mockProfileUsecase, nil, secret)
+	handler := login.New(mockProfileUsecase, logger, secret)
 
 	tests := []struct {
 		name            string
@@ -33,13 +40,13 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 	}{
 		{
 			name: "Success login with username",
-			requestBody: Request{
+			requestBody: login.Request{
 				Login:    "testuser",
 				Password: "password123",
 			},
 			setupMocks: func() {
 				mockProfileUsecase.EXPECT().
-					Login(gomock.Any(), profile.LoginRequest{
+					Login(gomock.Any(), login.LoginRequest{
 						Username: "testuser",
 						Password: "password123",
 					}).
@@ -51,13 +58,13 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "Success login with email",
-			requestBody: Request{
+			requestBody: login.Request{
 				Login:    "test@example.com",
 				Password: "password123",
 			},
 			setupMocks: func() {
 				mockProfileUsecase.EXPECT().
-					Login(gomock.Any(), profile.LoginRequest{
+					Login(gomock.Any(), login.LoginRequest{
 						Username: "test",
 						Password: "password123",
 					}).
@@ -69,13 +76,13 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "Login failure - email not found",
-			requestBody: Request{
+			requestBody: login.Request{
 				Login:    "test@example.com",
 				Password: "password123",
 			},
 			setupMocks: func() {
 				mockProfileUsecase.EXPECT().
-					Login(gomock.Any(), profile.LoginRequest{
+					Login(gomock.Any(), login.LoginRequest{
 						Username: "test",
 						Password: "password123",
 					}).
@@ -87,7 +94,7 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 		},
 		{
 			name:            "Invalid HTTP method",
-			requestBody:     Request{},
+			requestBody:     login.Request{},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusMethodNotAllowed,
 			expectedMessage: "method not allowed",
@@ -103,7 +110,7 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "Empty login",
-			requestBody: Request{
+			requestBody: login.Request{
 				Login:    "",
 				Password: "password123",
 			},
@@ -114,7 +121,7 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "Empty password",
-			requestBody: Request{
+			requestBody: login.Request{
 				Login:    "testuser",
 				Password: "",
 			},
@@ -125,13 +132,13 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "Login failure - wrong credentials",
-			requestBody: Request{
+			requestBody: login.Request{
 				Login:    "testuser",
 				Password: "wrongpassword",
 			},
 			setupMocks: func() {
 				mockProfileUsecase.EXPECT().
-					Login(gomock.Any(), profile.LoginRequest{
+					Login(gomock.Any(), login.LoginRequest{
 						Username: "testuser",
 						Password: "wrongpassword",
 					}).

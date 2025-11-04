@@ -3,18 +3,19 @@ package login
 import (
 	resp "2025_2_a4code/internal/lib/api/response"
 	valid "2025_2_a4code/internal/lib/validation"
-	"log/slog"
-	"strings"
-
-	"2025_2_a4code/internal/usecase/profile"
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 	"unicode"
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+//go:generate mockgen -source=$GOFILE -destination=./mocks/mock_profile_usecase.go -package=mocks
 
 type Request struct {
 	Login    string `json:"login"`
@@ -26,12 +27,21 @@ type Response struct {
 }
 
 type HandlerLogin struct {
-	profileUCase profile.ProfileUsecase
+	profileUCase ProfileUsecase
 	log          *slog.Logger
 	JWTSecret    []byte
 }
 
-func New(ucP profile.ProfileUsecase, log *slog.Logger, secret []byte) *HandlerLogin {
+type LoginRequest struct {
+	Username string
+	Password string
+}
+
+type ProfileUsecase interface {
+	Login(ctx context.Context, req LoginRequest) (int64, error)
+}
+
+func New(ucP ProfileUsecase, log *slog.Logger, secret []byte) *HandlerLogin {
 	return &HandlerLogin{
 		profileUCase: ucP,
 		log:          log,
@@ -113,13 +123,12 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Преобразуем в UseCase запрос
-	LoginReq := profile.LoginRequest{
+	loginReq := LoginRequest{
 		Username: username,
 		Password: req.Password,
 	}
 
-	userID, err := h.profileUCase.Login(r.Context(), LoginReq)
+	userID, err := h.profileUCase.Login(r.Context(), loginReq)
 	if err != nil {
 		log.Warn("login failed",
 			slog.String("username", username))
