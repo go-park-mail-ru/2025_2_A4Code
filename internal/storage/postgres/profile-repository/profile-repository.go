@@ -1,4 +1,4 @@
-﻿package profile_repository
+package profile_repository
 
 import (
 	"2025_2_a4code/internal/domain"
@@ -395,7 +395,7 @@ func (repo *ProfileRepository) InsertProfileAvatar(ctx context.Context, profileI
 	const query = `
 		UPDATE profile
 		SET image_path = $1
-		WHERE id = $2
+		WHERE base_profile_id = $2
 		`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)

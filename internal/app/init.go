@@ -114,7 +114,7 @@ func Init() {
 	uploadFileHandler, err := uploadfile.New(FileUploadPath, log)
 	settingsHandler := settings.New(profileUCase, SECRET, log)
 	replyHandler := reply.New(messageUCase, SECRET, log)
-	uploadAvatarHanler := uploadavatar.New(avatarUCase, log, SECRET)
+	uploadAvatarHandler := uploadavatar.New(avatarUCase, profileUCase, log, SECRET)
 
 	// настройка corsMiddleware
 	corsMiddleware := cors.New()
@@ -134,12 +134,13 @@ func Init() {
 	http.Handle("/user/upload/file", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
 	http.Handle("/user/settings", loggerMiddleware(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
 	http.Handle("/messages/reply", loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
-	http.Handle("/user/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHanler.ServeHTTP))))
+	http.Handle("/user/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHandler.ServeHTTP))))
 
 	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
-	//err = http.ListenAndServe(":5000", nil)
+	//err = http.ListenAndServe(":8080", nil)
+
 	slog.Info("Server has started working...")
 
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
 	"2025_2_a4code/internal/usecase/avatar"
+	"2025_2_a4code/internal/usecase/profile"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -20,16 +21,18 @@ type Response struct {
 }
 
 type HandlerUploadAvatar struct {
-	avatarUcase *avatar.AvatarUcase
-	log         *slog.Logger
-	secret      []byte
+	avatarUcase  *avatar.AvatarUcase
+	profileUcase profile.ProfileUsecase
+	log          *slog.Logger
+	secret       []byte
 }
 
-func New(avatarUcase *avatar.AvatarUcase, log *slog.Logger, secret []byte) *HandlerUploadAvatar {
+func New(avatarUcase *avatar.AvatarUcase, profileUcase profile.ProfileUsecase, log *slog.Logger, secret []byte) *HandlerUploadAvatar {
 	return &HandlerUploadAvatar{
-		avatarUcase: avatarUcase,
-		log:         log,
-		secret:      secret,
+		avatarUcase:  avatarUcase,
+		profileUcase: profileUcase,
+		log:          log,
+		secret:       secret,
 	}
 }
 
@@ -71,6 +74,13 @@ func (h *HandlerUploadAvatar) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	avatarURL, err := h.avatarUcase.UploadAvatar(ctx, stringId, file, header.Size, header.Filename)
 	if err != nil {
 		log.Error("Error uploading avatar: " + err.Error())
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	err = h.profileUcase.InsertProfileAvatar(ctx, id, avatarURL)
+	if err != nil {
+		log.Error("Error inserting avatar: " + err.Error())
 		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}

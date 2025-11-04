@@ -1,8 +1,8 @@
-﻿package profile
+package profile
 
 import (
 	"2025_2_a4code/internal/domain"
-	common_e "2025_2_a4code/internal/lib/errors"
+	commone "2025_2_a4code/internal/lib/errors"
 	e "2025_2_a4code/internal/lib/wrapper"
 	"context"
 	"errors"
@@ -39,6 +39,19 @@ type ProfileRepository interface {
 	CreateUser(ctx context.Context, profile domain.Profile) (int64, error)
 	FindByUsernameAndDomain(ctx context.Context, username string, domain string) (*domain.Profile, error)
 	FindInfoByID(ctx context.Context, id int64) (domain.ProfileInfo, error)
+	FindSettingsByProfileId(ctx context.Context, profileID int64) (domain.Settings, error)
+	InsertProfileAvatar(ctx context.Context, profileID int64, avatarURL string) error
+}
+
+type ProfileUsecase interface {
+	FindByID(ctx context.Context, id int64) (*domain.Profile, error)
+	FindSenderByID(ctx context.Context, id int64) (*domain.Sender, error)
+	Signup(ctx context.Context, SignupReq SignupRequest) (int64, error)
+	Login(ctx context.Context, req LoginRequest) (int64, error)
+	FindInfoByID(ctx context.Context, id int64) (domain.ProfileInfo, error)
+	UserExists(ctx context.Context, username string) (bool, error)
+	CreateUser(ctx context.Context, profile domain.Profile) (int64, error)
+	FindByUsernameAndDomain(ctx context.Context, username string, domain string) (*domain.Profile, error)
 	FindSettingsByProfileId(ctx context.Context, profileID int64) (domain.Settings, error)
 	InsertProfileAvatar(ctx context.Context, profileID int64, avatarURL string) error
 }
@@ -101,7 +114,7 @@ func (uc *ProfileUcase) Login(ctx context.Context, req LoginRequest) (int64, err
 	const op = "usecase.profile.Login"
 	profile, err := uc.repo.FindByUsernameAndDomain(ctx, req.Username, "flintmail.ru")
 	if err != nil {
-		if errors.Is(err, common_e.ErrNotFound) {
+		if errors.Is(err, commone.ErrNotFound) {
 			return 0, e.Wrap(op+": "+err.Error(), ErrUserNotFound)
 		}
 		return 0, e.Wrap(op, err)

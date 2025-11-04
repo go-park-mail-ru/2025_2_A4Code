@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/url"
 	"path/filepath"
-	"strconv"
 	"time"
 )
 
@@ -55,12 +54,15 @@ func (uc *AvatarUcase) UploadAvatar(ctx context.Context, userID string, file io.
 		return "", e.Wrap(op+" could not get presigned URL: ", err)
 	}
 
-	intID, err := strconv.Atoi(userID)
 	if err != nil {
 		return "", e.Wrap(op, err)
 	}
 	stringURL := url.String()
-	err = uc.profileRepo.InsertProfileAvatar(ctx, int64(intID), stringURL)
+	//intID, err := strconv.Atoi(userID)
+	//err = uc.profileRepo.InsertProfileAvatar(ctx, int64(intID), stringURL)
+	//if err != nil {
+	//	return "", e.Wrap(op+" could not save avatar to postgres: ", err)
+	//}
 
 	return stringURL, nil
 }

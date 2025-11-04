@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	messageUcase "2025_2_a4code/internal/usecase/message"
-	profileUcase "2025_2_a4code/internal/usecase/profile"
+	"2025_2_a4code/internal/usecase/message"
+	"2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -46,13 +46,13 @@ type Response struct {
 }
 
 type HandlerInbox struct {
-	profileUCase *profileUcase.ProfileUcase
-	messageUCase *messageUcase.MessageUcase
+	profileUCase profile.ProfileUsecase // Use interface
+	messageUCase message.MessageUsecase
 	log          *slog.Logger
 	secret       []byte
 }
 
-func New(profileUCase *profileUcase.ProfileUcase, messageUCase *messageUcase.MessageUcase, log *slog.Logger, SECRET []byte) *HandlerInbox {
+func New(profileUCase profile.ProfileUsecase, messageUCase message.MessageUsecase, log *slog.Logger, SECRET []byte) *HandlerInbox {
 	return &HandlerInbox{
 		profileUCase: profileUCase,
 		messageUCase: messageUCase,
