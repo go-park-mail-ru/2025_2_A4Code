@@ -1,5 +1,7 @@
 package login
 
+//go:generate mockgen -source=$GOFILE -destination=./mocks/mock_profile_usecase.go -package=mocks
+
 import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
