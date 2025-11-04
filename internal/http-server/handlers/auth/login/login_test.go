@@ -1,110 +1,238 @@
 package login
 
 import (
-	handlers2 "2025_2_a4code/internal/http-server/handlers"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"2025_2_a4code/internal/http-server/handlers/auth/login/mocks"
+	"2025_2_a4code/internal/usecase/profile"
+
+	"github.com/golang/mock/gomock"
 )
 
-func TestLoginHandler(t *testing.T) {
-	h := handlers2.New()
-	defer h.Reset()
+func TestHandlerLogin_ServeHTTP(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockProfileUsecase := mocks.NewMockProfileUsecase(ctrl)
+	secret := []byte("test-secret")
+
+	handler := New(mockProfileUsecase, nil, secret)
 
 	tests := []struct {
-		name           string
-		method         string
-		body           map[string]string
-		expectedStatus int
+		name            string
+		requestBody     interface{}
+		setupMocks      func()
+		expectedStatus  int
+		expectedMessage string
+		checkCookies    bool
 	}{
 		{
-			name:           "Wrong method",
-			method:         "GET",
-			body:           map[string]string{"login": "test", "password": "test"},
-			expectedStatus: http.StatusMethodNotAllowed,
+			name: "Success login with username",
+			requestBody: Request{
+				Login:    "testuser",
+				Password: "password123",
+			},
+			setupMocks: func() {
+				mockProfileUsecase.EXPECT().
+					Login(gomock.Any(), profile.LoginRequest{
+						Username: "testuser",
+						Password: "password123",
+					}).
+					Return(int64(1), nil)
+			},
+			expectedStatus:  http.StatusOK,
+			expectedMessage: "success",
+			checkCookies:    true,
 		},
 		{
-			name:           "Invalid JSON",
-			method:         "POST",
-			body:           nil,
-			expectedStatus: http.StatusBadRequest,
+			name: "Success login with email",
+			requestBody: Request{
+				Login:    "test@example.com",
+				Password: "password123",
+			},
+			setupMocks: func() {
+				mockProfileUsecase.EXPECT().
+					Login(gomock.Any(), profile.LoginRequest{
+						Username: "test",
+						Password: "password123",
+					}).
+					Return(int64(1), nil)
+			},
+			expectedStatus:  http.StatusOK,
+			expectedMessage: "success",
+			checkCookies:    true,
 		},
 		{
-			name:           "Missing login field",
-			method:         "POST",
-			body:           map[string]string{"password": "test"},
-			expectedStatus: http.StatusUnauthorized,
+			name: "Login failure - email not found",
+			requestBody: Request{
+				Login:    "test@example.com",
+				Password: "password123",
+			},
+			setupMocks: func() {
+				mockProfileUsecase.EXPECT().
+					Login(gomock.Any(), profile.LoginRequest{
+						Username: "test",
+						Password: "password123",
+					}).
+					Return(int64(0), errors.New("user not found"))
+			},
+			expectedStatus:  http.StatusBadRequest,
+			expectedMessage: "invalid login or password",
+			checkCookies:    false,
 		},
 		{
-			name:           "Missing password field",
-			method:         "POST",
-			body:           map[string]string{"login": "test"},
-			expectedStatus: http.StatusUnauthorized,
+			name:            "Invalid HTTP method",
+			requestBody:     Request{},
+			setupMocks:      func() {},
+			expectedStatus:  http.StatusMethodNotAllowed,
+			expectedMessage: "method not allowed",
+			checkCookies:    false,
 		},
 		{
-			name:           "Invalid credentials",
-			method:         "POST",
-			body:           map[string]string{"login": "nonexistent", "password": "wrong"},
-			expectedStatus: http.StatusUnauthorized,
+			name:            "Invalid JSON",
+			requestBody:     "invalid json {",
+			setupMocks:      func() {},
+			expectedStatus:  http.StatusBadRequest,
+			expectedMessage: "invalid request format",
+			checkCookies:    false,
+		},
+		{
+			name: "Empty login",
+			requestBody: Request{
+				Login:    "",
+				Password: "password123",
+			},
+			setupMocks:      func() {},
+			expectedStatus:  http.StatusBadRequest,
+			expectedMessage: "all fields are required",
+			checkCookies:    false,
+		},
+		{
+			name: "Empty password",
+			requestBody: Request{
+				Login:    "testuser",
+				Password: "",
+			},
+			setupMocks:      func() {},
+			expectedStatus:  http.StatusBadRequest,
+			expectedMessage: "all fields are required",
+			checkCookies:    false,
+		},
+		{
+			name: "Login failure - wrong credentials",
+			requestBody: Request{
+				Login:    "testuser",
+				Password: "wrongpassword",
+			},
+			setupMocks: func() {
+				mockProfileUsecase.EXPECT().
+					Login(gomock.Any(), profile.LoginRequest{
+						Username: "testuser",
+						Password: "wrongpassword",
+					}).
+					Return(int64(0), errors.New("invalid credentials"))
+			},
+			expectedStatus:  http.StatusBadRequest,
+			expectedMessage: "invalid login or password",
+			checkCookies:    false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.setupMocks()
+
 			var bodyBytes []byte
-			if tt.body != nil {
-				bodyBytes, _ = json.Marshal(tt.body)
+			var err error
+
+			switch body := tt.requestBody.(type) {
+			case string:
+				bodyBytes = []byte(body)
+			default:
+				bodyBytes, err = json.Marshal(body)
+				if err != nil {
+					t.Fatalf("Failed to marshal request body: %v", err)
+				}
 			}
 
-			req := httptest.NewRequest(tt.method, "/login", bytes.NewReader(bodyBytes))
-			w := httptest.NewRecorder()
+			var req *http.Request
+			if tt.name == "Invalid HTTP method" {
+				req = httptest.NewRequest("GET", "/auth/login", bytes.NewReader(bodyBytes))
+			} else {
+				req = httptest.NewRequest("POST", "/auth/login", bytes.NewReader(bodyBytes))
+			}
+			req.Header.Set("Content-Type", "application/json")
 
-			h.LoginHandler(w, req)
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
 
-			if w.Code != tt.expectedStatus {
-				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Body: %s", tt.expectedStatus, rr.Code, rr.Body.String())
+			}
+
+			var response struct {
+				Status  int         `json:"status"`
+				Message string      `json:"message"`
+				Body    interface{} `json:"body"`
+			}
+
+			if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+				t.Fatalf("Failed to unmarshal response: %v. Body: %s", err, rr.Body.String())
+			}
+
+			if response.Status != tt.expectedStatus {
+				t.Errorf("Response status = %d, want %d", response.Status, tt.expectedStatus)
+			}
+
+			if response.Message != tt.expectedMessage {
+				t.Errorf("Response message = %s, want %s", response.Message, tt.expectedMessage)
+			}
+
+			if response.Body != nil {
+				bodyBytes, _ := json.Marshal(response.Body)
+				if string(bodyBytes) != "{}" {
+					t.Errorf("Response body = %s, want {}", string(bodyBytes))
+				}
+			}
+
+			cookies := rr.Result().Cookies()
+			if tt.checkCookies {
+				if len(cookies) != 2 {
+					t.Errorf("Expected 2 cookies, got %d", len(cookies))
+				}
+
+				var accessTokenFound, refreshTokenFound bool
+				for _, cookie := range cookies {
+					if cookie.Name == "access_token" {
+						accessTokenFound = true
+						if cookie.Value == "" {
+							t.Error("Access token cookie value is empty")
+						}
+					}
+					if cookie.Name == "refresh_token" {
+						refreshTokenFound = true
+						if cookie.Value == "" {
+							t.Error("Refresh token cookie value is empty")
+						}
+					}
+				}
+
+				if !accessTokenFound {
+					t.Error("Access token cookie not found")
+				}
+				if !refreshTokenFound {
+					t.Error("Refresh token cookie not found")
+				}
+			} else {
+				if len(cookies) > 0 {
+					t.Errorf("Expected no cookies for error response, but got %d cookies", len(cookies))
+				}
 			}
 		})
-	}
-}
-
-func TestLoginHandler_Success(t *testing.T) {
-	h := handlers2.New()
-	defer h.Reset()
-
-	users := h.GetUsers()
-	testUser := map[string]string{
-		"login":    "testuser",
-		"password": "testpass",
-	}
-	h.SetUsers(append(users, testUser))
-
-	body := map[string]string{
-		"login":    "testuser",
-		"password": "testpass",
-	}
-	bodyBytes, _ := json.Marshal(body)
-
-	req := httptest.NewRequest("POST", "/login", bytes.NewReader(bodyBytes))
-	w := httptest.NewRecorder()
-
-	h.LoginHandler(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
-	}
-
-	cookies := w.Result().Cookies()
-	foundSessionCookie := false
-	for _, cookie := range cookies {
-		if cookie.Name == "session_id" && cookie.Value != "" {
-			foundSessionCookie = true
-			break
-		}
-	}
-	if !foundSessionCookie {
-		t.Error("Session cookie was not set during successful login")
 	}
 }

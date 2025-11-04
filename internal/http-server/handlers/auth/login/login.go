@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	profileUcase "2025_2_a4code/internal/usecase/profile"
+	"2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -26,12 +26,12 @@ type Response struct {
 }
 
 type HandlerLogin struct {
-	profileUCase *profileUcase.ProfileUcase
+	profileUCase profile.ProfileUsecase
 	log          *slog.Logger
 	JWTSecret    []byte
 }
 
-func New(ucP *profileUcase.ProfileUcase, log *slog.Logger, secret []byte) *HandlerLogin {
+func New(ucP profile.ProfileUsecase, log *slog.Logger, secret []byte) *HandlerLogin {
 	return &HandlerLogin{
 		profileUCase: ucP,
 		log:          log,
@@ -114,7 +114,7 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Преобразуем в UseCase запрос
-	LoginReq := profileUcase.LoginRequest{
+	LoginReq := profile.LoginRequest{
 		Username: username,
 		Password: req.Password,
 	}
