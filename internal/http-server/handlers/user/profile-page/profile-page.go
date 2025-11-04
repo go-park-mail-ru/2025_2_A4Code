@@ -2,13 +2,13 @@ package profile_page
 
 import (
 	"2025_2_a4code/internal/domain"
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
 	avatar "2025_2_a4code/internal/usecase/avatar"
 	"2025_2_a4code/internal/usecase/profile"
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -42,15 +42,13 @@ type HandlerProfile struct {
 	profileUCase *profile.ProfileUcase
 	avatarUCase  *avatar.AvatarUcase
 	secret       []byte
-	log          *slog.Logger
 }
 
-func New(profileUCase *profile.ProfileUcase, avatarUCase *avatar.AvatarUcase, SECRET []byte, log *slog.Logger) *HandlerProfile {
+func New(profileUCase *profile.ProfileUcase, avatarUCase *avatar.AvatarUcase, SECRET []byte) *HandlerProfile {
 	return &HandlerProfile{
 		profileUCase: profileUCase,
 		avatarUCase:  avatarUCase,
 		secret:       SECRET,
-		log:          log,
 	}
 }
 
@@ -66,8 +64,8 @@ func (h *HandlerProfile) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HandlerProfile) handleGet(w http.ResponseWriter, r *http.Request) {
-	log := h.log
-	log.Info("handle profile page (GET)")
+	log := logger.GetLogger(r.Context())
+	log.Info("handle user/profile (GET)")
 
 	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
@@ -90,8 +88,8 @@ func (h *HandlerProfile) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HandlerProfile) handleUpdate(w http.ResponseWriter, r *http.Request) {
-	log := h.log
-	log.Info("handle profile page (PUT)")
+	log := logger.GetLogger(r.Context())
+	log.Info("handle user/profile (PUT)")
 
 	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {

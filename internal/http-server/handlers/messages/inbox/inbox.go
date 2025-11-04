@@ -2,6 +2,7 @@ package inbox
 
 import (
 	"2025_2_a4code/internal/domain"
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
 	avatar "2025_2_a4code/internal/usecase/avatar"
@@ -9,7 +10,6 @@ import (
 	"2025_2_a4code/internal/usecase/profile"
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -53,22 +53,20 @@ type HandlerInbox struct {
 	profileUCase profile.ProfileUsecase // Use interface
 	messageUCase message.MessageUsecase
 	avatarUCase  *avatar.AvatarUcase
-	log          *slog.Logger
 	secret       []byte
 }
 
-func New(profileUCase profile.ProfileUsecase, messageUCase message.MessageUsecase, avatarUCase *avatar.AvatarUcase, log *slog.Logger, SECRET []byte) *HandlerInbox {
+func New(profileUCase profile.ProfileUsecase, messageUCase message.MessageUsecase, avatarUCase *avatar.AvatarUcase, SECRET []byte) *HandlerInbox {
 	return &HandlerInbox{
 		profileUCase: profileUCase,
 		messageUCase: messageUCase,
 		avatarUCase:  avatarUCase,
-		log:          log,
 		secret:       SECRET,
 	}
 }
 
 func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log := h.log
+	log := logger.GetLogger(r.Context())
 	log.Info("handle /messages/inbox")
 
 	if r.Method != http.MethodGet {

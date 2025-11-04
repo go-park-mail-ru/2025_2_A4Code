@@ -1,11 +1,11 @@
 package settings
 
 import (
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
 	"2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 )
 
@@ -25,20 +25,18 @@ type Signatures []string
 type HandlerSettings struct {
 	profileUCase *profile.ProfileUcase
 	secret       []byte
-	log          *slog.Logger
 }
 
-func New(profileUCase *profile.ProfileUcase, SECRET []byte, log *slog.Logger) *HandlerSettings {
+func New(profileUCase *profile.ProfileUcase, SECRET []byte) *HandlerSettings {
 	return &HandlerSettings{
 		profileUCase: profileUCase,
 		secret:       SECRET,
-		log:          log,
 	}
 }
 
 func (h *HandlerSettings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log := h.log
-	log.Info("handle settings")
+	log := logger.GetLogger(r.Context())
+	log.Info("handle user/settings")
 
 	if r.Method != http.MethodGet {
 		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)

@@ -1,11 +1,11 @@
 package reply
 
 import (
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
 	"2025_2_a4code/internal/usecase/message"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 )
 
@@ -39,20 +39,18 @@ type Response struct {
 type HandlerReply struct {
 	messageUCase *message.MessageUcase
 	secret       []byte
-	log          *slog.Logger
 }
 
-func New(messageUCase *message.MessageUcase, SECRET []byte, log *slog.Logger) *HandlerReply {
+func New(messageUCase *message.MessageUcase, SECRET []byte) *HandlerReply {
 	return &HandlerReply{
 		messageUCase: messageUCase,
 		secret:       SECRET,
-		log:          log,
 	}
 }
 
 func (h *HandlerReply) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log := h.log
-	log.Info("handle reply")
+	log := logger.GetLogger(r.Context())
+	log.Info("handle messages/reply")
 
 	if r.Method != http.MethodPost {
 		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)

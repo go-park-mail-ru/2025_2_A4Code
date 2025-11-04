@@ -1,12 +1,12 @@
 package upload_file
 
 import (
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,22 +23,21 @@ type File struct {
 }
 
 type HandlerUploadFile struct {
-	uploadPath string // куда сохраняем
-	log        *slog.Logger
+	uploadPath string
 }
 
-func New(uploadPath string, log *slog.Logger) (*HandlerUploadFile, error) {
+func New(uploadPath string) (*HandlerUploadFile, error) {
 	// проверка существования директории (пока сохраняем просто в директории)
 	err := os.MkdirAll(uploadPath, os.ModePerm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create upload directory '%s': %w", uploadPath, err)
 	}
-	return &HandlerUploadFile{uploadPath: uploadPath, log: log}, nil
+	return &HandlerUploadFile{uploadPath: uploadPath}, nil
 }
 
 func (h *HandlerUploadFile) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log := h.log
-	log.Info("handle upload file")
+	log := logger.GetLogger(r.Context())
+	log.Info("handle user/upload/file")
 
 	if r.Method != http.MethodPost {
 		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
