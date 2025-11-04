@@ -65,6 +65,7 @@ func Init() {
 
 	// Создание логгера
 	log := setupLogger(envLocal)
+	slog.SetDefault(log)
 	log.Debug("debug messages are enabled")
 	loggerMiddleware := logger.New(log)
 
@@ -107,16 +108,16 @@ func Init() {
 	signupHandler := signup.New(profileUCase, SECRET)
 	refreshHandler := refresh.New(SECRET)
 	logoutHandler := logout.New()
-	inboxHandler := inbox.New(profileUCase, messageUCase, avatarUCase, SECRET)
+	inboxHandler := inbox.New(messageUCase, avatarUCase, SECRET)
 	profileHandler := profilepage.New(profileUCase, avatarUCase, SECRET)
-	messagePageHandler := messagepage.New(profileUCase, messageUCase, avatarUCase, SECRET)
+	messagePageHandler := messagepage.New(messageUCase, avatarUCase, SECRET)
 	sendMessageHandler := send.New(messageUCase, SECRET)
-	threadsHandler := threads.New(profileUCase, messageUCase, SECRET)
+	threadsHandler := threads.New(messageUCase, SECRET)
 	uploadFileHandler, err := uploadfile.New(FileUploadPath)
 	settingsHandler := settings.New(profileUCase, SECRET)
 	replyHandler := reply.New(messageUCase, SECRET)
 	uploadAvatarHandler := uploadavatar.New(avatarUCase, profileUCase, SECRET)
-	sentHandler := sent.New(profileUCase, messageUCase, avatarUCase, SECRET)
+	sentHandler := sent.New(messageUCase, avatarUCase, SECRET)
 
 	// настройка corsMiddleware
 	corsMiddleware := cors.New()
@@ -139,10 +140,10 @@ func Init() {
 	http.Handle("/user/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHandler.ServeHTTP))))
 	http.Handle("/messages/sent", loggerMiddleware(corsMiddleware(http.HandlerFunc(sentHandler.ServeHTTP))))
 
-	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
+	//err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
-	//err = http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", nil)
 
 	slog.Info("Server has started working...")
 

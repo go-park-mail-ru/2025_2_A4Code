@@ -5,9 +5,6 @@ import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
-	avatar "2025_2_a4code/internal/usecase/avatar"
-	"2025_2_a4code/internal/usecase/message"
-	"2025_2_a4code/internal/usecase/profile"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -16,6 +13,15 @@ import (
 	"strings"
 	"time"
 )
+
+type MessageUsecase interface {
+	MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error
+	FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
+}
+
+type AvatarUsecase interface {
+	GetAvatarPresignedURL(ctx context.Context, objectName string, duration time.Duration) (*url.URL, error)
+}
 
 type Sender struct {
 	Email    string `json:"email"`
@@ -45,15 +51,13 @@ type Response struct {
 }
 
 type HandlerMessagePage struct {
-	profileUCase *profile.ProfileUcase
-	messageUCase *message.MessageUcase
-	avatarUCase  *avatar.AvatarUcase
+	messageUCase MessageUsecase
+	avatarUCase  AvatarUsecase
 	secret       []byte
 }
 
-func New(profileUCase *profile.ProfileUcase, messageUCase *message.MessageUcase, avatarUCase *avatar.AvatarUcase, SECRET []byte) *HandlerMessagePage {
+func New(messageUCase MessageUsecase, avatarUCase AvatarUsecase, SECRET []byte) *HandlerMessagePage {
 	return &HandlerMessagePage{
-		profileUCase: profileUCase,
 		messageUCase: messageUCase,
 		avatarUCase:  avatarUCase,
 		secret:       SECRET,
@@ -62,7 +66,7 @@ func New(profileUCase *profile.ProfileUcase, messageUCase *message.MessageUcase,
 
 func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(r.Context())
-	log.Info("handle messages/{message_id}")
+	log.Debug("handle messages/{message_id}")
 
 	if r.Method != http.MethodGet {
 		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)

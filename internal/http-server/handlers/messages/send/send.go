@@ -4,10 +4,17 @@ import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
-	"2025_2_a4code/internal/usecase/message"
+	"context"
 	"encoding/json"
 	"net/http"
 )
+
+type MessageUsecase interface {
+	SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
+	SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
+	SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error
+	SaveThread(ctx context.Context, messageID int64) (threadID int64, err error)
+}
 
 type File struct {
 	Name        string `json:"name"`
@@ -35,11 +42,11 @@ type Response struct {
 }
 
 type HandlerSend struct {
-	messageUCase *message.MessageUcase
+	messageUCase MessageUsecase
 	secret       []byte
 }
 
-func New(messageUCase *message.MessageUcase, SECRET []byte) *HandlerSend {
+func New(messageUCase MessageUsecase, SECRET []byte) *HandlerSend {
 	return &HandlerSend{
 		messageUCase: messageUCase,
 		secret:       SECRET,
@@ -48,7 +55,7 @@ func New(messageUCase *message.MessageUcase, SECRET []byte) *HandlerSend {
 
 func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(r.Context())
-	log.Info("handle messages/send")
+	log.Debug("handle messages/send")
 
 	if r.Method != http.MethodPost {
 		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)

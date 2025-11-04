@@ -1,13 +1,18 @@
 package settings
 
 import (
+	"2025_2_a4code/internal/domain"
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
-	"2025_2_a4code/internal/usecase/profile"
+	"context"
 	"encoding/json"
 	"net/http"
 )
+
+type ProfileUsecase interface {
+	FindSettingsByProfileId(ctx context.Context, profileID int64) (domain.Settings, error)
+}
 
 type Settings struct {
 	NotificationTolerance string   `json:"notification_tolerance"`
@@ -23,11 +28,11 @@ type Response struct {
 type Signatures []string
 
 type HandlerSettings struct {
-	profileUCase *profile.ProfileUcase
+	profileUCase ProfileUsecase
 	secret       []byte
 }
 
-func New(profileUCase *profile.ProfileUcase, SECRET []byte) *HandlerSettings {
+func New(profileUCase ProfileUsecase, SECRET []byte) *HandlerSettings {
 	return &HandlerSettings{
 		profileUCase: profileUCase,
 		secret:       SECRET,
@@ -36,7 +41,7 @@ func New(profileUCase *profile.ProfileUcase, SECRET []byte) *HandlerSettings {
 
 func (h *HandlerSettings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(r.Context())
-	log.Info("handle user/settings")
+	log.Debug("handle user/settings")
 
 	if r.Method != http.MethodGet {
 		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)

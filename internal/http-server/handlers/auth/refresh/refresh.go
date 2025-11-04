@@ -28,7 +28,7 @@ func New(secret []byte) *HandlerRefresh {
 
 func (h *HandlerRefresh) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(r.Context())
-	log.Info("handle /auth/refresh")
+	log.Debug("handle /auth/refresh")
 
 	if r.Method != http.MethodPost {
 		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)

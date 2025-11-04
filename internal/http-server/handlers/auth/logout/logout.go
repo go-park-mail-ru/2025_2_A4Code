@@ -20,7 +20,7 @@ func New() *HandlerLogout {
 
 func (h *HandlerLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(r.Context())
-	log.Info("handle /auth/logout")
+	log.Debug("handle /auth/logout")
 
 	if r.Method != http.MethodPost {
 		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)

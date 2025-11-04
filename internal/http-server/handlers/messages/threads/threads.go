@@ -1,17 +1,21 @@
 package threads
 
 import (
+	"2025_2_a4code/internal/domain"
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
+	"context"
 	"strconv"
 	"time"
 
-	messageUcase "2025_2_a4code/internal/usecase/message"
-	profileUcase "2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
 	"net/http"
 )
+
+type MessageUsecase interface {
+	FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error)
+}
 
 type Response struct {
 	resp.Response
@@ -29,14 +33,12 @@ type threadsList struct {
 }
 
 type HandlerThreads struct {
-	profileUCase *profileUcase.ProfileUcase
-	messageUCase *messageUcase.MessageUcase
+	messageUCase MessageUsecase
 	secret       []byte
 }
 
-func New(profileUCase *profileUcase.ProfileUcase, messageUCase *messageUcase.MessageUcase, SECRET []byte) *HandlerThreads {
+func New(messageUCase MessageUsecase, SECRET []byte) *HandlerThreads {
 	return &HandlerThreads{
-		profileUCase: profileUCase,
 		messageUCase: messageUCase,
 		secret:       SECRET,
 	}
@@ -44,7 +46,7 @@ func New(profileUCase *profileUcase.ProfileUcase, messageUCase *messageUcase.Mes
 
 func (h *HandlerThreads) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(r.Context())
-	log.Info("handle /messages/threads")
+	log.Debug("handle /messages/threads")
 
 	if r.Method != http.MethodGet {
 		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)

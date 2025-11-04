@@ -5,7 +5,6 @@ import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
-	avatar "2025_2_a4code/internal/usecase/avatar"
 	"2025_2_a4code/internal/usecase/profile"
 	"context"
 	"encoding/json"
@@ -14,6 +13,15 @@ import (
 	"strings"
 	"time"
 )
+
+type AvatarUsecase interface {
+	GetAvatarPresignedURL(ctx context.Context, objectName string, duration time.Duration) (*url.URL, error)
+}
+
+type ProfileUsecase interface {
+	FindInfoByID(ctx context.Context, id int64) (domain.ProfileInfo, error)
+	UpdateProfileInfo(ctx context.Context, profileID int64, req profile.UpdateProfileRequest) error
+}
 
 type Profile struct {
 	Username   string    `json:"username"`
@@ -39,12 +47,12 @@ type UpdateProfileRequest struct {
 }
 
 type HandlerProfile struct {
-	profileUCase *profile.ProfileUcase
-	avatarUCase  *avatar.AvatarUcase
+	profileUCase ProfileUsecase
+	avatarUCase  AvatarUsecase
 	secret       []byte
 }
 
-func New(profileUCase *profile.ProfileUcase, avatarUCase *avatar.AvatarUcase, SECRET []byte) *HandlerProfile {
+func New(profileUCase ProfileUsecase, avatarUCase AvatarUsecase, SECRET []byte) *HandlerProfile {
 	return &HandlerProfile{
 		profileUCase: profileUCase,
 		avatarUCase:  avatarUCase,
@@ -65,7 +73,7 @@ func (h *HandlerProfile) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *HandlerProfile) handleGet(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(r.Context())
-	log.Info("handle user/profile (GET)")
+	log.Debug("handle user/profile (GET)")
 
 	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {

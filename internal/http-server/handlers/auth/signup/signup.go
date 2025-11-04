@@ -3,9 +3,10 @@ package signup
 import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
+	"context"
 
 	valid "2025_2_a4code/internal/lib/validation"
-	profileUcase "2025_2_a4code/internal/usecase/profile"
+	"2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,25 +28,28 @@ type Request struct {
 	Password string `json:"password"`
 }
 
+type ProfileUsecase interface {
+	Signup(ctx context.Context, SignupReq profile.SignupRequest) (int64, error)
+}
 type Response struct {
 	resp.Response
 }
 
 type HandlerSignup struct {
-	profileUCase *profileUcase.ProfileUcase
+	profileUCase ProfileUsecase
 	JWTSecret    []byte
 }
 
-func New(ucP *profileUcase.ProfileUcase, secret []byte) *HandlerSignup {
+func New(profileUCase ProfileUsecase, secret []byte) *HandlerSignup {
 	return &HandlerSignup{
-		profileUCase: ucP,
+		profileUCase: profileUCase,
 		JWTSecret:    secret,
 	}
 }
 
 func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(r.Context())
-	log.Info("handle /auth/signup")
+	log.Debug("handle /auth/signup")
 
 	if r.Method != http.MethodPost {
 		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -70,7 +74,7 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Преобразуем в UseCase запрос
-	SignupReq := profileUcase.SignupRequest{
+	SignupReq := profile.SignupRequest{
 		Name:     req.Name,
 		Username: req.Username,
 		Birthday: req.Birthday,
@@ -85,7 +89,7 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.String("error", err.Error()))
 
 		switch {
-		case errors.Is(err, profileUcase.ErrUserAlreadyExists):
+		case errors.Is(err, profile.ErrUserAlreadyExists):
 			resp.SendErrorResponse(w, "user with this username already exists", http.StatusBadRequest)
 		default:
 			log.Error("unexpected signup error",

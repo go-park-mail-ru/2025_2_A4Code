@@ -23,29 +23,6 @@ type MessageRepository interface {
 	GetSentMessagesStats(ctx context.Context, profileID int64) (int, int, error)
 }
 
-type MessageUsecase interface {
-	FindByMessageID(ctx context.Context, messageID int64) (*domain.Message, error)
-	FindByProfileID(ctx context.Context, profileID int64) ([]domain.Message, error)
-	FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
-	FindByProfileIDWithKeysetPagination(
-		ctx context.Context,
-		profileID int64,
-		lastMessageID int64,
-		lastDatetime time.Time,
-		limit int,
-	) ([]domain.Message, error)
-	SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
-	SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
-	SaveThread(ctx context.Context, messageID int64) (threadID int64, err error)
-	SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error
-	GetMessagesStats(ctx context.Context, profileID int64) (int, int, error)
-	FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error)
-	GetMessagesInfoWithPagination(ctx context.Context, profileID int64) (domain.Messages, error)
-	MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error
-	FindSentMessagesByProfileIDWithKeysetPagination(ctx context.Context, profileID int64, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
-	GetSentMessagesInfoWithPagination(ctx context.Context, profileID int64) (domain.Messages, error)
-}
-
 type MessageUcase struct {
 	repo MessageRepository
 }

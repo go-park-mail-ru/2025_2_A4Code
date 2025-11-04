@@ -4,10 +4,11 @@ import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	valid "2025_2_a4code/internal/lib/validation"
+	"context"
 	"log/slog"
 	"strings"
 
-	profileUcase "2025_2_a4code/internal/usecase/profile"
+	"2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -22,25 +23,29 @@ type Request struct {
 	Password string `json:"password"`
 }
 
+type ProfileUsecase interface {
+	Login(ctx context.Context, req profile.LoginRequest) (int64, error)
+}
+
 type Response struct {
 	resp.Response
 }
 
 type HandlerLogin struct {
-	profileUCase *profileUcase.ProfileUcase
+	profileUCase ProfileUsecase
 	JWTSecret    []byte
 }
 
-func New(ucP *profileUcase.ProfileUcase, secret []byte) *HandlerLogin {
+func New(profileUCase ProfileUsecase, secret []byte) *HandlerLogin {
 	return &HandlerLogin{
-		profileUCase: ucP,
+		profileUCase: profileUCase,
 		JWTSecret:    secret,
 	}
 }
 
 func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(r.Context())
-	log.Info("handle /auth/login")
+	log.Debug("handle /auth/login")
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -73,7 +78,7 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Преобразуем в UseCase запрос
-	LoginReq := profileUcase.LoginRequest{
+	LoginReq := profile.LoginRequest{
 		Username: username,
 		Password: req.Password,
 	}

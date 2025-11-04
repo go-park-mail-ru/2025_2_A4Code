@@ -84,6 +84,12 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 	const op = "storage.postgresql.message.FindFullByMessageID"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.FullMessage{}, e.Wrap(op+": failed to begin transaction: ", err)
+	}
+	defer tx.Rollback()
+
 	const query = `
         SELECT
             m.id, m.topic, m.text, m.date_of_dispatch,
@@ -117,7 +123,7 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 	var folderName, folderType sql.NullString
 
 	log.Debug("Executing FindFullByMessageID query...")
-	err := repo.db.QueryRowContext(ctx, query, messageID, profileID).Scan(
+	err = repo.db.QueryRowContext(ctx, query, messageID, profileID).Scan(
 		&messageIdInt, &msg.Topic, &msg.Text, &msg.Datetime,
 		&senderId, &senderUsername, &senderDomain,
 		&senderName, &senderSurname, &senderAvatar,
@@ -175,6 +181,9 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 	}
 
 	msg.Files = files
+	if err := tx.Commit(); err != nil {
+		return domain.FullMessage{}, e.Wrap(op+": failed to commit transaction: ", err)
+	}
 
 	return msg, nil
 }
