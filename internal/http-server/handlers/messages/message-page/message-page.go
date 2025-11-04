@@ -1,12 +1,12 @@
 package message_page
 
 import (
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
 	"2025_2_a4code/internal/usecase/message"
 	"2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -44,21 +44,19 @@ type HandlerMessagePage struct {
 	profileUCase *profile.ProfileUcase
 	messageUCase *message.MessageUcase
 	secret       []byte
-	log          *slog.Logger
 }
 
-func New(profileUCase *profile.ProfileUcase, messageUCase *message.MessageUcase, SECRET []byte, log *slog.Logger) *HandlerMessagePage {
+func New(profileUCase *profile.ProfileUcase, messageUCase *message.MessageUcase, SECRET []byte) *HandlerMessagePage {
 	return &HandlerMessagePage{
 		profileUCase: profileUCase,
 		messageUCase: messageUCase,
 		secret:       SECRET,
-		log:          log,
 	}
 }
 
 func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log := h.log
-	log.Info("handle message-page")
+	log := logger.GetLogger(r.Context())
+	log.Info("handle messages/{message_id}")
 
 	if r.Method != http.MethodGet {
 		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)

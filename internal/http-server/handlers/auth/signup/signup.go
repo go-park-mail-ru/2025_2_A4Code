@@ -1,6 +1,7 @@
 package signup
 
 import (
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 
 	valid "2025_2_a4code/internal/lib/validation"
@@ -32,15 +33,129 @@ type Response struct {
 
 type HandlerSignup struct {
 	profileUCase *profileUcase.ProfileUcase
-	log          *slog.Logger
 	JWTSecret    []byte
 }
 
-func New(ucP *profileUcase.ProfileUcase, log *slog.Logger, secret []byte) *HandlerSignup {
+func New(ucP *profileUcase.ProfileUcase, secret []byte) *HandlerSignup {
 	return &HandlerSignup{
 		profileUCase: ucP,
-		log:          log,
 		JWTSecret:    secret,
+	}
+}
+
+func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	log := logger.GetLogger(r.Context())
+	log.Info("handle /auth/signup")
+
+	if r.Method != http.MethodPost {
+		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req Request
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		resp.SendErrorResponse(w, "invalid request format", http.StatusBadRequest)
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	req.Username = strings.TrimSpace(req.Username)
+	req.Birthday = strings.TrimSpace(req.Birthday)
+	req.Gender = strings.TrimSpace(req.Gender)
+	req.Password = strings.TrimSpace(req.Password)
+
+	if err := h.validateRequest(&req); err != nil {
+		resp.SendErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Преобразуем в UseCase запрос
+	SignupReq := profileUcase.SignupRequest{
+		Name:     req.Name,
+		Username: req.Username,
+		Birthday: req.Birthday,
+		Gender:   req.Gender,
+		Password: req.Password,
+	}
+
+	userID, err := h.profileUCase.Signup(r.Context(), SignupReq)
+	if err != nil {
+		log.Warn("signup failed",
+			slog.String("username", req.Username),
+			slog.String("error", err.Error()))
+
+		switch {
+		case errors.Is(err, profileUcase.ErrUserAlreadyExists):
+			resp.SendErrorResponse(w, "user with this username already exists", http.StatusBadRequest)
+		default:
+			log.Error("unexpected signup error",
+				slog.String("error", err.Error()),
+				slog.String("username", req.Username))
+			resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": userID,
+		"exp":     time.Now().Add(15 * time.Minute).Unix(), // 15 минут
+		"type":    "access",
+	})
+
+	accessTokenString, err := accessToken.SignedString(h.JWTSecret)
+	if err != nil {
+		log.Error("failed to sign access token")
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": userID,
+		"exp":     time.Now().Add(7 * 24 * time.Hour).Unix(), // 7 дней
+		"type":    "refresh",
+	})
+
+	refreshTokenString, err := refreshToken.SignedString(h.JWTSecret)
+	if err != nil {
+		log.Error("failed to sign refresh token")
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	accessCookie := &http.Cookie{
+		Name:     "access_token",
+		Value:    accessTokenString,
+		MaxAge:   15 * 60, // 15 минут
+		HttpOnly: true,
+		Path:     "/",
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	}
+	http.SetCookie(w, accessCookie)
+
+	refreshCookie := &http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshTokenString,
+		MaxAge:   7 * 24 * 3600, // 7  дней
+		HttpOnly: true,
+		Path:     "/",
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	}
+	http.SetCookie(w, refreshCookie)
+
+	w.Header().Set("Content-Type", "application/json")
+	response := Response{
+		Response: resp.Response{
+			Status:  http.StatusOK,
+			Message: "success",
+			Body:    struct{}{},
+		},
+	}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Error("failed to encode response")
+		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -77,7 +192,7 @@ func (h *HandlerSignup) validateRequest(req *Request) error {
 		return fmt.Errorf("username contains invalid characters")
 	}
 
-	// Валдация даты
+	// Валидация даты
 	if len(req.Birthday) != 10 {
 		return fmt.Errorf("birthday must be in DD.MM.YYYY format")
 	}
@@ -162,120 +277,4 @@ func (h *HandlerSignup) validateRequest(req *Request) error {
 	}
 
 	return nil
-}
-
-func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log := h.log
-	log.Info("handle /auth/signup")
-
-	if r.Method != http.MethodPost {
-		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req Request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		resp.SendErrorResponse(w, "invalid request format", http.StatusBadRequest)
-		return
-	}
-
-	req.Name = strings.TrimSpace(req.Name)
-	req.Username = strings.TrimSpace(req.Username)
-	req.Birthday = strings.TrimSpace(req.Birthday)
-	req.Gender = strings.TrimSpace(req.Gender)
-	req.Password = strings.TrimSpace(req.Password)
-
-	if err := h.validateRequest(&req); err != nil {
-		resp.SendErrorResponse(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Преобразуем в UseCase запрос
-	SignupReq := profileUcase.SignupRequest{
-		Name:     req.Name,
-		Username: req.Username,
-		Birthday: req.Birthday,
-		Gender:   req.Gender,
-		Password: req.Password,
-	}
-
-	userID, err := h.profileUCase.Signup(r.Context(), SignupReq)
-	if err != nil {
-		log.Warn("signup failed",
-			slog.String("username", req.Username),
-			slog.String("error", err.Error()))
-
-		switch {
-		case errors.Is(err, profileUcase.ErrUserAlreadyExists):
-			resp.SendErrorResponse(w, "user with this username already exists", http.StatusBadRequest)
-		default:
-			log.Error("unexpected signup error",
-				slog.String("error", err.Error()),
-				slog.String("username", req.Username))
-			resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
-		}
-		return
-	}
-
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": userID,
-		"exp":     time.Now().Add(15 * time.Minute).Unix(), // 15 минут
-		"type":    "access",
-	})
-
-	accessTokenString, err := accessToken.SignedString(h.JWTSecret)
-	if err != nil {
-		log.Error("failed to sign access token")
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
-		return
-	}
-
-	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": userID,
-		"exp":     time.Now().Add(7 * 24 * time.Hour).Unix(), // 7 дней
-		"type":    "refresh",
-	})
-
-	refreshTokenString, err := refreshToken.SignedString(h.JWTSecret)
-	if err != nil {
-		log.Error("failed to sign resfresh token")
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
-		return
-	}
-
-	accessCookie := &http.Cookie{
-		Name:     "access_token",
-		Value:    accessTokenString,
-		MaxAge:   15 * 60, // 15 минут
-		HttpOnly: true,
-		Path:     "/",
-		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
-	}
-	http.SetCookie(w, accessCookie)
-
-	refreshCookie := &http.Cookie{
-		Name:     "refresh_token",
-		Value:    refreshTokenString,
-		MaxAge:   7 * 24 * 3600, // 7  дней
-		HttpOnly: true,
-		Path:     "/",
-		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
-	}
-	http.SetCookie(w, refreshCookie)
-
-	w.Header().Set("Content-Type", "application/json")
-	response := Response{
-		Response: resp.Response{
-			Status:  http.StatusOK,
-			Message: "success",
-			Body:    struct{}{},
-		},
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Error("failed to encode response")
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
-		return
-	}
 }

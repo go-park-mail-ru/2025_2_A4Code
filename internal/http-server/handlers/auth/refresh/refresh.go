@@ -1,6 +1,7 @@
 package refresh
 
 import (
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
 	"encoding/json"
@@ -16,19 +17,17 @@ type Response struct {
 }
 
 type HandlerRefresh struct {
-	log       *slog.Logger
-	JWTSecret []byte
+	secret []byte
 }
 
-func New(log *slog.Logger, secret []byte) *HandlerRefresh {
+func New(secret []byte) *HandlerRefresh {
 	return &HandlerRefresh{
-		log:       log,
-		JWTSecret: secret,
+		secret: secret,
 	}
 }
 
 func (h *HandlerRefresh) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log := h.log
+	log := logger.GetLogger(r.Context())
 	log.Info("handle /auth/refresh")
 
 	if r.Method != http.MethodPost {
@@ -36,7 +35,7 @@ func (h *HandlerRefresh) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := session.GetProfileIDFromRefresh(r, h.JWTSecret)
+	userID, err := session.GetProfileIDFromRefresh(r, h.secret)
 	if err != nil {
 		log.Warn("invalid refresh token", slog.String("error", err.Error()))
 		http.SetCookie(w, &http.Cookie{
@@ -55,7 +54,7 @@ func (h *HandlerRefresh) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"type":    "access",
 	})
 
-	newAccessTokenString, err := newAccessToken.SignedString(h.JWTSecret)
+	newAccessTokenString, err := newAccessToken.SignedString(h.secret)
 	if err != nil {
 		log.Error("failed to sign new access token")
 		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)

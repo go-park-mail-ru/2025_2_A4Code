@@ -48,10 +48,6 @@ const (
 	envProd        = "prod"
 )
 
-type Storage struct {
-	db *sql.DB
-}
-
 func Init() {
 	// Читаем конфиг
 	cfg, err := config.GetConfig()
@@ -64,6 +60,7 @@ func Init() {
 
 	// Создание логгера
 	log := setupLogger(envLocal)
+	slog.SetDefault(log)
 	log.Debug("debug messages are enabled")
 	loggerMiddleware := logger.New(log)
 
@@ -102,18 +99,18 @@ func Init() {
 	avatarUCase := avatarUcase.New(avatarRepository, profileRepository)
 
 	// Создание хэндлеров
-	loginHandler := login.New(profileUCase, log, SECRET)
-	signupHandler := signup.New(profileUCase, log, SECRET)
-	refreshHandler := refresh.New(log, SECRET)
-	logoutHandler := logout.New(log)
-	inboxHandler := inbox.New(profileUCase, messageUCase, log, SECRET)
+	loginHandler := login.New(profileUCase, SECRET)
+	signupHandler := signup.New(profileUCase, SECRET)
+	refreshHandler := refresh.New(SECRET)
+	logoutHandler := logout.New()
+	inboxHandler := inbox.New(profileUCase, messageUCase, SECRET)
 	profileHandler := profilepage.New(profileUCase, SECRET, log)
-	messagePageHandler := messagepage.New(profileUCase, messageUCase, SECRET, log)
-	sendMessageHandler := send.New(messageUCase, SECRET, log)
-	threadsHandler := threads.New(profileUCase, messageUCase, log, SECRET)
+	messagePageHandler := messagepage.New(profileUCase, messageUCase, SECRET)
+	sendMessageHandler := send.New(messageUCase, SECRET)
+	threadsHandler := threads.New(profileUCase, messageUCase, SECRET)
 	uploadFileHandler, err := uploadfile.New(FileUploadPath, log)
 	settingsHandler := settings.New(profileUCase, SECRET, log)
-	replyHandler := reply.New(messageUCase, SECRET, log)
+	replyHandler := reply.New(messageUCase, SECRET)
 	uploadAvatarHandler := uploadavatar.New(avatarUCase, profileUCase, log, SECRET)
 
 	// настройка corsMiddleware
@@ -136,10 +133,10 @@ func Init() {
 	http.Handle("/messages/reply", loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
 	http.Handle("/user/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHandler.ServeHTTP))))
 
-	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
+	//err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
-	//err = http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", nil)
 
 	slog.Info("Server has started working...")
 
@@ -202,22 +199,31 @@ func runMigrations(db *sql.DB, migrationsDir string) error {
 func setupLogger(env string) *slog.Logger {
 	var log *slog.Logger
 
+	replaceAttrFunc := func(groups []string, a slog.Attr) slog.Attr {
+		if a.Key == slog.TimeKey && len(groups) == 0 {
+			if t, ok := a.Value.Any().(time.Time); ok {
+				a.Value = slog.StringValue(t.Format("2006/01/02 15:04:05"))
+			}
+		}
+		return a
+	}
+
 	switch env {
 	case envLocal:
 		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
+			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: replaceAttrFunc}),
 		)
 	case envDev:
 		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
+			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: replaceAttrFunc}),
 		)
 	case envProd:
 		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
+			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo, ReplaceAttr: replaceAttrFunc}),
 		)
-	default: // If env config is invalid, set prod settings by default due to security
+	default:
 		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
+			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo, ReplaceAttr: replaceAttrFunc}),
 		)
 	}
 

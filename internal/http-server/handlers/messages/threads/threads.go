@@ -1,9 +1,9 @@
 package threads
 
 import (
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
-	"log/slog"
 	"strconv"
 	"time"
 
@@ -31,21 +31,19 @@ type threadsList struct {
 type HandlerThreads struct {
 	profileUCase *profileUcase.ProfileUcase
 	messageUCase *messageUcase.MessageUcase
-	log          *slog.Logger
 	secret       []byte
 }
 
-func New(profileUCase *profileUcase.ProfileUcase, messageUCase *messageUcase.MessageUcase, log *slog.Logger, SECRET []byte) *HandlerThreads {
+func New(profileUCase *profileUcase.ProfileUcase, messageUCase *messageUcase.MessageUcase, SECRET []byte) *HandlerThreads {
 	return &HandlerThreads{
 		profileUCase: profileUCase,
 		messageUCase: messageUCase,
-		log:          log,
 		secret:       SECRET,
 	}
 }
 
 func (h *HandlerThreads) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log := h.log
+	log := logger.GetLogger(r.Context())
 	log.Info("handle /messages/threads")
 
 	if r.Method != http.MethodGet {

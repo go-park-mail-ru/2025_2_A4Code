@@ -1,6 +1,7 @@
 package login
 
 import (
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	valid "2025_2_a4code/internal/lib/validation"
 	"log/slog"
@@ -27,60 +28,18 @@ type Response struct {
 
 type HandlerLogin struct {
 	profileUCase *profileUcase.ProfileUcase
-	log          *slog.Logger
 	JWTSecret    []byte
 }
 
-func New(ucP *profileUcase.ProfileUcase, log *slog.Logger, secret []byte) *HandlerLogin {
+func New(ucP *profileUcase.ProfileUcase, secret []byte) *HandlerLogin {
 	return &HandlerLogin{
 		profileUCase: ucP,
-		log:          log,
 		JWTSecret:    secret,
 	}
 }
 
-func (h *HandlerLogin) validateRequest(login, password string) (string, error) {
-	if login == "" || password == "" {
-		return "", fmt.Errorf("all fields are required")
-	}
-
-	username := login
-	if strings.Contains(login, "@") {
-		parts := strings.Split(login, "@")
-		if len(parts) > 0 && parts[0] != "" {
-			username = strings.TrimSpace(parts[0])
-		} else {
-			return "", fmt.Errorf("invalid login or email format")
-		}
-	}
-
-	if len(username) < 3 || len(username) > 50 {
-		return "", fmt.Errorf("username must be between 3 and 50 characters")
-	}
-
-	for _, char := range username {
-		if !unicode.IsLetter(char) && !unicode.IsDigit(char) && char != '_' {
-			return "", fmt.Errorf("username can only contain letters, numbers and underscores")
-		}
-	}
-
-	if valid.HasDangerousCharacters(username) {
-		return "", fmt.Errorf("username contains invalid characters")
-	}
-
-	if len(password) < 6 {
-		return "", fmt.Errorf("password must be at least 6 characters")
-	}
-
-	if valid.HasDangerousCharacters(password) {
-		return "", fmt.Errorf("password contains invalid characters")
-	}
-
-	return username, nil
-}
-
 func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log := h.log
+	log := logger.GetLogger(r.Context())
 	log.Info("handle /auth/login")
 
 	defer func() {
@@ -189,4 +148,44 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
+}
+
+func (h *HandlerLogin) validateRequest(login, password string) (string, error) {
+	if login == "" || password == "" {
+		return "", fmt.Errorf("all fields are required")
+	}
+
+	username := login
+	if strings.Contains(login, "@") {
+		parts := strings.Split(login, "@")
+		if len(parts) > 0 && parts[0] != "" {
+			username = strings.TrimSpace(parts[0])
+		} else {
+			return "", fmt.Errorf("invalid login or email format")
+		}
+	}
+
+	if len(username) < 3 || len(username) > 50 {
+		return "", fmt.Errorf("username must be between 3 and 50 characters")
+	}
+
+	for _, char := range username {
+		if !unicode.IsLetter(char) && !unicode.IsDigit(char) && char != '_' {
+			return "", fmt.Errorf("username can only contain letters, numbers and underscores")
+		}
+	}
+
+	if valid.HasDangerousCharacters(username) {
+		return "", fmt.Errorf("username contains invalid characters")
+	}
+
+	if len(password) < 6 {
+		return "", fmt.Errorf("password must be at least 6 characters")
+	}
+
+	if valid.HasDangerousCharacters(password) {
+		return "", fmt.Errorf("password contains invalid characters")
+	}
+
+	return username, nil
 }
