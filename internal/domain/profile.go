@@ -1,4 +1,4 @@
-﻿package domain
+package domain
 
 import "time"
 
@@ -28,6 +28,14 @@ type ProfileInfo struct {
 	Gender     string    `json:"gender"`
 	Birthday   string    `json:"birthday"`
 	AvatarPath string    `json:"avatar_path"`
+}
+
+type ProfileUpdate struct {
+	Name       string
+	Surname    string
+	Patronymic string
+	Gender     string
+	Birthday   *time.Time
 }
 
 func (p *Profile) Email() string {

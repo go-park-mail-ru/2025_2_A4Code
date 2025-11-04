@@ -71,14 +71,14 @@ func (h *HandlerUploadAvatar) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	defer cancel()
 
 	stringId := strconv.Itoa(int(id))
-	avatarURL, err := h.avatarUcase.UploadAvatar(ctx, stringId, file, header.Size, header.Filename)
+	objectName, presignedURL, err := h.avatarUcase.UploadAvatar(ctx, stringId, file, header.Size, header.Filename)
 	if err != nil {
 		log.Error("Error uploading avatar: " + err.Error())
 		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
-	err = h.profileUcase.InsertProfileAvatar(ctx, id, avatarURL)
+	err = h.profileUcase.InsertProfileAvatar(ctx, id, objectName)
 	if err != nil {
 		log.Error("Error inserting avatar: " + err.Error())
 		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
@@ -93,7 +93,7 @@ func (h *HandlerUploadAvatar) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			Body: struct {
 				AvatarPath string `json:"avatar_path"`
 			}{
-				AvatarPath: avatarURL,
+				AvatarPath: presignedURL,
 			},
 		},
 	}

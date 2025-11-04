@@ -18,6 +18,7 @@ type MessageRepository interface {
 	FindByProfileIDWithKeysetPagination(ctx context.Context, profileID int64, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
 	GetMessagesStats(ctx context.Context, profileID int64) (int, int, error)
 	FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error)
+	MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error
 }
 
 type MessageUsecase interface {
@@ -38,6 +39,7 @@ type MessageUsecase interface {
 	GetMessagesStats(ctx context.Context, profileID int64) (int, int, error)
 	FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error)
 	GetMessagesInfoWithPagination(ctx context.Context, profileID int64) (domain.Messages, error)
+	MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error
 }
 
 type MessageUcase struct {
@@ -129,4 +131,8 @@ func (uc *MessageUcase) GetMessagesStats(ctx context.Context, profileID int64) (
 
 func (uc *MessageUcase) FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error) {
 	return uc.repo.FindThreadsByProfileID(ctx, profileID)
+}
+
+func (uc *MessageUcase) MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error {
+	return uc.repo.MarkMessageAsRead(ctx, messageID, profileID)
 }

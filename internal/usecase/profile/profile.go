@@ -6,6 +6,8 @@ import (
 	e "2025_2_a4code/internal/lib/wrapper"
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -32,6 +34,14 @@ type LoginRequest struct {
 	Password string
 }
 
+type UpdateProfileRequest struct {
+	FirstName  string
+	LastName   string
+	MiddleName string
+	Gender     string
+	Birthday   string
+}
+
 type ProfileRepository interface {
 	FindByID(ctx context.Context, id int64) (*domain.Profile, error)
 	FindSenderByID(ctx context.Context, id int64) (*domain.Sender, error)
@@ -41,6 +51,7 @@ type ProfileRepository interface {
 	FindInfoByID(ctx context.Context, id int64) (domain.ProfileInfo, error)
 	FindSettingsByProfileId(ctx context.Context, profileID int64) (domain.Settings, error)
 	InsertProfileAvatar(ctx context.Context, profileID int64, avatarURL string) error
+	UpdateProfileInfo(ctx context.Context, profileID int64, info domain.ProfileUpdate) error
 }
 
 type ProfileUsecase interface {
@@ -54,6 +65,7 @@ type ProfileUsecase interface {
 	FindByUsernameAndDomain(ctx context.Context, username string, domain string) (*domain.Profile, error)
 	FindSettingsByProfileId(ctx context.Context, profileID int64) (domain.Settings, error)
 	InsertProfileAvatar(ctx context.Context, profileID int64, avatarURL string) error
+	UpdateProfileInfo(ctx context.Context, profileID int64, req UpdateProfileRequest) error
 }
 
 type ProfileUcase struct {
@@ -158,4 +170,37 @@ func (uc *ProfileUcase) FindSettingsByProfileId(ctx context.Context, profileID i
 
 func (uc *ProfileUcase) InsertProfileAvatar(ctx context.Context, profileID int64, avatarURL string) error {
 	return uc.repo.InsertProfileAvatar(ctx, profileID, avatarURL)
+}
+
+func (uc *ProfileUcase) UpdateProfileInfo(ctx context.Context, profileID int64, req UpdateProfileRequest) error {
+	const op = "usecase.profile.UpdateProfileInfo"
+
+	firstName := strings.TrimSpace(req.FirstName)
+	lastName := strings.TrimSpace(req.LastName)
+	middleName := strings.TrimSpace(req.MiddleName)
+
+	gender := strings.ToLower(strings.TrimSpace(req.Gender))
+	if gender != "male" && gender != "female" {
+		gender = ""
+	}
+
+	var birthdayPtr *time.Time
+	birthdayRaw := strings.TrimSpace(req.Birthday)
+	if birthdayRaw != "" {
+		parsed, err := time.Parse("02.01.2006", birthdayRaw)
+		if err != nil {
+			return e.Wrap(op, fmt.Errorf("invalid birthday format: %w", err))
+		}
+		birthdayPtr = &parsed
+	}
+
+	update := domain.ProfileUpdate{
+		Name:       firstName,
+		Surname:    lastName,
+		Patronymic: middleName,
+		Gender:     gender,
+		Birthday:   birthdayPtr,
+	}
+
+	return uc.repo.UpdateProfileInfo(ctx, profileID, update)
 }

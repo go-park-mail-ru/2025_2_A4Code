@@ -106,9 +106,9 @@ func Init() {
 	signupHandler := signup.New(profileUCase, log, SECRET)
 	refreshHandler := refresh.New(log, SECRET)
 	logoutHandler := logout.New(log)
-	inboxHandler := inbox.New(profileUCase, messageUCase, log, SECRET)
-	profileHandler := profilepage.New(profileUCase, SECRET, log)
-	messagePageHandler := messagepage.New(profileUCase, messageUCase, SECRET, log)
+	inboxHandler := inbox.New(profileUCase, messageUCase, avatarUCase, log, SECRET)
+	profileHandler := profilepage.New(profileUCase, avatarUCase, SECRET, log)
+	messagePageHandler := messagepage.New(profileUCase, messageUCase, avatarUCase, SECRET, log)
 	sendMessageHandler := send.New(messageUCase, SECRET, log)
 	threadsHandler := threads.New(profileUCase, messageUCase, log, SECRET)
 	uploadFileHandler, err := uploadfile.New(FileUploadPath, log)
@@ -186,17 +186,40 @@ func runMigrations(db *sql.DB, migrationsDir string) error {
 
 	slog.Info("Applying migrations...")
 	err = m.Up()
-	if err != nil {
+	switch {
+	case err == nil:
+		slog.Info("Migrations are successfully applied")
+		return nil
+	case errors.Is(err, migrate.ErrNoChange):
+		slog.Info("Migrations are already successfully applied")
+		return nil
+	case errors.As(err, new(*migrate.ErrDirty)):
+		version, dirty, vErr := m.Version()
+		if vErr != nil {
+			return e.Wrap(op, vErr)
+		}
+		if dirty {
+			forceVersion := int(version)
+			if forceVersion > 0 {
+				forceVersion--
+			}
+
+			slog.Warn("Detected dirty migration state, forcing database version", "current_version", version, "force_version", forceVersion)
+			if forceErr := m.Force(forceVersion); forceErr != nil {
+				return e.Wrap(op, forceErr)
+			}
+
+			if retryErr := m.Up(); retryErr != nil && !errors.Is(retryErr, migrate.ErrNoChange) {
+				return e.Wrap(op, retryErr)
+			}
+
+			slog.Info("Migrations are successfully applied after resolving dirty state")
+			return nil
+		}
+		return nil
+	default:
 		return e.Wrap(op, err)
 	}
-
-	if errors.Is(err, migrate.ErrNoChange) {
-		slog.Info("Migrations are already successfully applied")
-	} else {
-		slog.Info("Migrations are successfully applied")
-	}
-
-	return nil
 }
 
 func setupLogger(env string) *slog.Logger {

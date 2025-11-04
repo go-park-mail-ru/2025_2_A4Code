@@ -1,13 +1,17 @@
 package message_page
 
 import (
+	"2025_2_a4code/internal/domain"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
+	avatar "2025_2_a4code/internal/usecase/avatar"
 	"2025_2_a4code/internal/usecase/message"
 	"2025_2_a4code/internal/usecase/profile"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -43,14 +47,16 @@ type Response struct {
 type HandlerMessagePage struct {
 	profileUCase *profile.ProfileUcase
 	messageUCase *message.MessageUcase
+	avatarUCase  *avatar.AvatarUcase
 	secret       []byte
 	log          *slog.Logger
 }
 
-func New(profileUCase *profile.ProfileUcase, messageUCase *message.MessageUcase, SECRET []byte, log *slog.Logger) *HandlerMessagePage {
+func New(profileUCase *profile.ProfileUcase, messageUCase *message.MessageUcase, avatarUCase *avatar.AvatarUcase, SECRET []byte, log *slog.Logger) *HandlerMessagePage {
 	return &HandlerMessagePage{
 		profileUCase: profileUCase,
 		messageUCase: messageUCase,
+		avatarUCase:  avatarUCase,
 		secret:       SECRET,
 		log:          log,
 	}
@@ -89,6 +95,14 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := h.messageUCase.MarkMessageAsRead(r.Context(), int64(messageID), id); err != nil {
+		log.Warn("failed to mark message as read: " + err.Error())
+	}
+
+	if err := h.enrichSenderAvatar(r.Context(), &fullMessage.Sender); err != nil {
+		log.Warn("failed to enrich sender avatar: " + err.Error())
+	}
+
 	filesResponse := make([]File, len(fullMessage.Files))
 	for i, file := range fullMessage.Files {
 		filesResponse[i] = File{
@@ -120,4 +134,43 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = json.NewEncoder(w).Encode(response)
+}
+
+func (h *HandlerMessagePage) enrichSenderAvatar(ctx context.Context, sender *domain.Sender) error {
+	if sender == nil || sender.Avatar == "" {
+		return nil
+	}
+
+	objectName := sender.Avatar
+	if strings.HasPrefix(objectName, "http://") || strings.HasPrefix(objectName, "https://") {
+		parsed, err := url.Parse(objectName)
+		if err != nil {
+			return err
+		}
+		objectName = strings.TrimPrefix(parsed.Path, "/")
+	}
+
+	objectName = strings.TrimLeft(objectName, "/")
+	if objectName == "" {
+		return nil
+	}
+
+	if idx := strings.Index(objectName, "/"); idx != -1 {
+		prefix := objectName[:idx]
+		if strings.EqualFold(prefix, "avatars") {
+			objectName = objectName[idx+1:]
+		}
+	}
+
+	if objectName == "" {
+		return nil
+	}
+
+	url, err := h.avatarUCase.GetAvatarPresignedURL(ctx, objectName, 15*time.Minute)
+	if err != nil {
+		return err
+	}
+
+	sender.Avatar = url.String()
+	return nil
 }

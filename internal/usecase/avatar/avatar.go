@@ -30,7 +30,7 @@ func New(storage AvatarRepository, profileRepo profile.ProfileRepository) *Avata
 	}
 }
 
-func (uc *AvatarUcase) UploadAvatar(ctx context.Context, userID string, file io.Reader, size int64, originalFilename string) (string, error) {
+func (uc *AvatarUcase) UploadAvatar(ctx context.Context, userID string, file io.Reader, size int64, originalFilename string) (string, string, error) {
 	const op = "usecase.avatar.UploadAvatar"
 	ext := filepath.Ext(originalFilename)
 	if ext == "" {
@@ -39,32 +39,22 @@ func (uc *AvatarUcase) UploadAvatar(ctx context.Context, userID string, file io.
 
 	randId, err := rand.GenerateRandID()
 	if err != nil {
-		return "", e.Wrap(op, err)
+		return "", "", e.Wrap(op, err)
 	}
 	objectName := fmt.Sprintf("avatar/%s/%s%s", userID, randId, ext)
 	contentType := "application/octet-stream"
 
 	err = uc.avatarRepo.UploadFile(ctx, objectName, file, size, contentType)
 	if err != nil {
-		return "", e.Wrap(op+" could not upload avatar to storage: ", err)
+		return "", "", e.Wrap(op+" could not upload avatar to storage: ", err)
 	}
 
 	url, err := uc.avatarRepo.GetAvatarPresignedURL(ctx, objectName, 15*time.Minute)
 	if err != nil {
-		return "", e.Wrap(op+" could not get presigned URL: ", err)
+		return "", "", e.Wrap(op+" could not get presigned URL: ", err)
 	}
 
-	if err != nil {
-		return "", e.Wrap(op, err)
-	}
-	stringURL := url.String()
-	//intID, err := strconv.Atoi(userID)
-	//err = uc.profileRepo.InsertProfileAvatar(ctx, int64(intID), stringURL)
-	//if err != nil {
-	//	return "", e.Wrap(op+" could not save avatar to postgres: ", err)
-	//}
-
-	return stringURL, nil
+	return objectName, url.String(), nil
 }
 
 func (uc *AvatarUcase) DeleteAvatar(ctx context.Context, objectName string) error {

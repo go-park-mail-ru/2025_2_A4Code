@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type ProfileRepository struct {
@@ -389,6 +390,46 @@ func (repo *ProfileRepository) FindSettingsByProfileId(ctx context.Context, prof
 	return settings, nil
 }
 
+func (repo *ProfileRepository) UpdateProfileInfo(ctx context.Context, profileID int64, info domain.ProfileUpdate) error {
+	const op = "storage.postgres.profile-repository.UpdateProfileInfo"
+
+	const query = `
+		UPDATE profile
+		SET name = $1,
+			surname = $2,
+			patronymic = $3,
+			gender = $4,
+			birthday = $5
+		WHERE base_profile_id = $6
+	`
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	name := toNullString(info.Name)
+	surname := toNullString(info.Surname)
+	patronymic := toNullString(info.Patronymic)
+	gender := toNullString(info.Gender)
+
+	var birthday sql.NullTime
+	if info.Birthday != nil {
+		birthday = sql.NullTime{
+			Time:  *info.Birthday,
+			Valid: true,
+		}
+	}
+
+	_, err = stmt.ExecContext(ctx, name, surname, patronymic, gender, birthday, profileID)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+
+	return nil
+}
+
 func (repo *ProfileRepository) InsertProfileAvatar(ctx context.Context, profileID int64, avatarURL string) error {
 	const op = "storage.postgres.profile-repository.InsertProfileAvatar"
 
@@ -409,4 +450,12 @@ func (repo *ProfileRepository) InsertProfileAvatar(ctx context.Context, profileI
 		return e.Wrap(op, err)
 	}
 	return nil
+}
+
+func toNullString(value string) sql.NullString {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{String: value, Valid: true}
 }

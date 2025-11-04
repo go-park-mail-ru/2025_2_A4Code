@@ -6,3 +6,7 @@ type Sender struct {
 	Username string `json:"username"`
 	Avatar   string `json:"avatar"`
 }
+
+func (s *Sender) SetAvatar(path string) {
+	s.Avatar = path
+}

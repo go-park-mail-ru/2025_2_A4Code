@@ -534,6 +534,32 @@ func (repo *MessageRepository) GetMessagesStats(ctx context.Context, profileID i
 	return totalCount, unreadCount, nil
 }
 
+func (repo *MessageRepository) MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error {
+	const op = "storage.postgresql.message.MarkMessageAsRead"
+
+	const query = `
+		INSERT INTO profile_message (profile_id, message_id, read_status)
+		SELECT p.id, $2, TRUE
+		FROM profile p
+		WHERE p.base_profile_id = $1
+		ON CONFLICT (profile_id, message_id)
+		DO UPDATE SET read_status = TRUE
+	`
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.ExecContext(ctx, profileID, messageID)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+
+	return nil
+}
+
 func (repo *MessageRepository) FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error) {
 	const op = "storage.postgresql.message.FindThreadsByProfileID"
 

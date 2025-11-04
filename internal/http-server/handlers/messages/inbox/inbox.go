@@ -1,16 +1,20 @@
 package inbox
 
 import (
+	"2025_2_a4code/internal/domain"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
-	"log/slog"
-	"time"
-
+	avatar "2025_2_a4code/internal/usecase/avatar"
 	"2025_2_a4code/internal/usecase/message"
 	"2025_2_a4code/internal/usecase/profile"
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
+	"time"
 )
 
 type Sender struct {
@@ -48,14 +52,16 @@ type Response struct {
 type HandlerInbox struct {
 	profileUCase profile.ProfileUsecase // Use interface
 	messageUCase message.MessageUsecase
+	avatarUCase  *avatar.AvatarUcase
 	log          *slog.Logger
 	secret       []byte
 }
 
-func New(profileUCase profile.ProfileUsecase, messageUCase message.MessageUsecase, log *slog.Logger, SECRET []byte) *HandlerInbox {
+func New(profileUCase profile.ProfileUsecase, messageUCase message.MessageUsecase, avatarUCase *avatar.AvatarUcase, log *slog.Logger, SECRET []byte) *HandlerInbox {
 	return &HandlerInbox{
 		profileUCase: profileUCase,
 		messageUCase: messageUCase,
+		avatarUCase:  avatarUCase,
 		log:          log,
 		secret:       SECRET,
 	}
@@ -122,6 +128,10 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	for _, m := range messages {
 		messageID, _ := strconv.ParseInt(m.ID, 10, 64)
+		if err := h.enrichSenderAvatar(r.Context(), &m.Sender); err != nil {
+			log.Warn("failed to enrich sender avatar: " + err.Error())
+		}
+
 		messagesResponse = append(messagesResponse, Message{
 			ID: m.ID,
 			Sender: Sender{
@@ -165,4 +175,43 @@ func (h *HandlerInbox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
+}
+
+func (h *HandlerInbox) enrichSenderAvatar(ctx context.Context, sender *domain.Sender) error {
+	if sender == nil || sender.Avatar == "" {
+		return nil
+	}
+
+	objectName := sender.Avatar
+	if strings.HasPrefix(objectName, "http://") || strings.HasPrefix(objectName, "https://") {
+		parsed, err := url.Parse(objectName)
+		if err != nil {
+			return err
+		}
+		objectName = strings.TrimPrefix(parsed.Path, "/")
+	}
+
+	objectName = strings.TrimLeft(objectName, "/")
+	if objectName == "" {
+		return nil
+	}
+
+	if idx := strings.Index(objectName, "/"); idx != -1 {
+		prefix := objectName[:idx]
+		if strings.EqualFold(prefix, "avatars") {
+			objectName = objectName[idx+1:]
+		}
+	}
+
+	if objectName == "" {
+		return nil
+	}
+
+	url, err := h.avatarUCase.GetAvatarPresignedURL(ctx, objectName, 15*time.Minute)
+	if err != nil {
+		return err
+	}
+
+	sender.Avatar = url.String()
+	return nil
 }
