@@ -2,6 +2,7 @@ package message_repository
 
 import (
 	"2025_2_a4code/internal/domain"
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	e "2025_2_a4code/internal/lib/wrapper"
 	"context"
 	"database/sql"
@@ -22,6 +23,7 @@ func New(db *sql.DB) *MessageRepository {
 
 func (repo *MessageRepository) FindByMessageID(ctx context.Context, messageID int64) (*domain.Message, error) {
 	const op = "storage.postgresql.message.FindByMessageID"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
         SELECT
@@ -52,6 +54,7 @@ func (repo *MessageRepository) FindByMessageID(ctx context.Context, messageID in
 	var senderUsername, senderDomain, text string
 	var senderName, senderSurname, senderAvatar sql.NullString
 
+	log.Debug("Executing FindByMessageID query...")
 	err = stmt.QueryRowContext(ctx, messageID).Scan(
 		&messageIdInt, &message.Topic, &text, &message.Datetime,
 		&senderId, &senderUsername, &senderDomain,
@@ -79,6 +82,7 @@ func (repo *MessageRepository) FindByMessageID(ctx context.Context, messageID in
 
 func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error) {
 	const op = "storage.postgresql.message.FindFullByMessageID"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
         SELECT
@@ -112,6 +116,7 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 	var folderID, folderProfileID sql.NullInt64
 	var folderName, folderType sql.NullString
 
+	log.Debug("Executing FindFullByMessageID query...")
 	err := repo.db.QueryRowContext(ctx, query, messageID, profileID).Scan(
 		&messageIdInt, &msg.Topic, &msg.Text, &msg.Datetime,
 		&senderId, &senderUsername, &senderDomain,
@@ -149,6 +154,7 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 	}
 
 	// Получаем файлы
+	log.Debug("Executing FindFilesByMessageID query...")
 	rows, err := repo.db.QueryContext(ctx, `
         SELECT id, file_type, size, storage_path, message_id 
         FROM file 
@@ -175,6 +181,7 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 
 func (repo *MessageRepository) FindByProfileID(ctx context.Context, profileID int64) ([]domain.Message, error) {
 	const op = "storage.postgresql.message.FindByProfileID"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
         SELECT
@@ -219,6 +226,7 @@ func (repo *MessageRepository) FindByProfileID(ctx context.Context, profileID in
 	}
 	defer stmt.Close()
 
+	log.Debug("Executing FindByMessageID query...")
 	rows, err := stmt.QueryContext(ctx, profileID)
 	if err != nil {
 		return nil, e.Wrap(op+": failed to execute query: ", err)
@@ -272,6 +280,7 @@ func (repo *MessageRepository) FindByProfileIDWithKeysetPagination(
 ) ([]domain.Message, error) {
 
 	const op = "storage.postgresql.message.FindByProfileID"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
         SELECT
@@ -323,6 +332,7 @@ func (repo *MessageRepository) FindByProfileIDWithKeysetPagination(
 		lastDatetimeUnix = lastDatetime.Unix()
 	}
 
+	log.Debug("Executing FindByProfileIDWithKeysetPagination query...")
 	rows, err := stmt.QueryContext(ctx, profileID, lastMessageID, lastDatetimeUnix, limit)
 	if err != nil {
 		return nil, e.Wrap(op+": failed to execute query: ", err)
@@ -370,6 +380,7 @@ func (repo *MessageRepository) FindByProfileIDWithKeysetPagination(
 
 func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (messageID int64, err error) {
 	const op = "storage.postgresql.message.SaveMessage"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	tx, err := repo.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -383,6 +394,7 @@ func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileE
 		VALUES ($1, $2, $3, $4)
 		RETURNING id`
 
+	log.Debug("Executing InsertMessage query...")
 	err = tx.QueryRowContext(ctx, insertMessage, topic, text, time.Now(), senderBaseProfileID).Scan(&messageID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to insert message: ", err)
@@ -393,6 +405,7 @@ func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileE
 	domain := strings.Split(receiverProfileEmail, "@")[1]
 
 	var receiverProfileID int64
+	log.Debug("Executing GettingReceiverID query...")
 	err = tx.QueryRowContext(ctx, `
 		SELECT p.id 
 		FROM profile p
@@ -410,6 +423,7 @@ func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileE
 		FROM folder f
 		WHERE f.profile_id = $2 AND f.folder_type = 'inbox'`
 
+	log.Debug("Executing AddToInbox query...")
 	_, err = tx.ExecContext(ctx, insertFolder, messageID, receiverProfileID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to insert to inbox: ", err)
@@ -420,6 +434,7 @@ func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileE
 		INSERT INTO profile_message (profile_id, message_id, read_status)
 		VALUES ($1, $2, false)`
 
+	log.Debug("Executing CreateProfileMessageBond query...")
 	_, err = tx.ExecContext(ctx, insertProfileMessage, receiverProfileID, messageID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to insert profile message: ", err)
@@ -435,6 +450,7 @@ func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileE
 
 func (repo *MessageRepository) SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error) {
 	const op = "storage.postgresql.message.SaveFile"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
 		INSERT INTO file (file_type, size, storage_path, message_id, created_at, updated_at)
@@ -447,6 +463,7 @@ func (repo *MessageRepository) SaveFile(ctx context.Context, messageID int64, fi
 	defer stmt.Close()
 
 	timeNow := time.Now()
+	log.Debug("Execute SaveFile query...")
 	err = stmt.QueryRowContext(ctx, fileType, size, storagePath, messageID, timeNow, timeNow).Scan(&fileID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to execute query: ", err)
@@ -457,6 +474,7 @@ func (repo *MessageRepository) SaveFile(ctx context.Context, messageID int64, fi
 
 func (repo *MessageRepository) SaveThread(ctx context.Context, messageID int64) (threadID int64, err error) {
 	const op = "storage.postgresql.message.SaveThread"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
 		INSERT INTO thread (root_message_id, created_at, updated_at)
@@ -470,6 +488,7 @@ func (repo *MessageRepository) SaveThread(ctx context.Context, messageID int64) 
 	defer stmt.Close()
 
 	timeNow := time.Now()
+	log.Debug("Execute SaveThread query...")
 	err = stmt.QueryRowContext(ctx, messageID, timeNow, timeNow).Scan(&threadID)
 	if err != nil {
 		return 0, e.Wrap(op, err)
@@ -480,6 +499,7 @@ func (repo *MessageRepository) SaveThread(ctx context.Context, messageID int64) 
 
 func (repo *MessageRepository) SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error {
 	const op = "storage.postgresql.message.SaveThreadIdToMessage"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
         UPDATE message
@@ -491,6 +511,7 @@ func (repo *MessageRepository) SaveThreadIdToMessage(ctx context.Context, messag
 	}
 	defer stmt.Close()
 	timeNow := time.Now()
+	log.Debug("Execute SaveThreadIdToMessage query...")
 	res, err := stmt.ExecContext(ctx, threadID, timeNow, messageID)
 	if err != nil {
 		return e.Wrap(op+": failed to execute query: ", err)
@@ -508,6 +529,7 @@ func (repo *MessageRepository) SaveThreadIdToMessage(ctx context.Context, messag
 
 func (repo *MessageRepository) GetMessagesStats(ctx context.Context, profileID int64) (int, int, error) {
 	const op = "storage.postgresql.message.GetMessagesStats"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
         SELECT 
@@ -517,8 +539,6 @@ func (repo *MessageRepository) GetMessagesStats(ctx context.Context, profileID i
         JOIN profile p ON pm.profile_id = p.id
         WHERE p.base_profile_id = $1`
 
-	slog.Warn(fmt.Sprintf("searching by id = %d", profileID))
-
 	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
 		return 0, 0, e.Wrap(op, err)
@@ -526,6 +546,7 @@ func (repo *MessageRepository) GetMessagesStats(ctx context.Context, profileID i
 	defer stmt.Close()
 
 	var totalCount, unreadCount int
+	log.Debug("Executing GetMessagesStats query...")
 	err = stmt.QueryRowContext(ctx, profileID).Scan(&totalCount, &unreadCount)
 	if err != nil {
 		return 0, 0, e.Wrap(op, err)
@@ -536,6 +557,7 @@ func (repo *MessageRepository) GetMessagesStats(ctx context.Context, profileID i
 
 func (repo *MessageRepository) MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error {
 	const op = "storage.postgresql.message.MarkMessageAsRead"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
 		INSERT INTO profile_message (profile_id, message_id, read_status)
@@ -552,6 +574,7 @@ func (repo *MessageRepository) MarkMessageAsRead(ctx context.Context, messageID 
 	}
 	defer stmt.Close()
 
+	log.Debug("Executing MarkMessageAsRead query...")
 	_, err = stmt.ExecContext(ctx, profileID, messageID)
 	if err != nil {
 		return e.Wrap(op, err)
@@ -562,6 +585,7 @@ func (repo *MessageRepository) MarkMessageAsRead(ctx context.Context, messageID 
 
 func (repo *MessageRepository) FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error) {
 	const op = "storage.postgresql.message.FindThreadsByProfileID"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
         SELECT 
@@ -593,6 +617,7 @@ func (repo *MessageRepository) FindThreadsByProfileID(ctx context.Context, profi
 	}
 	defer stmt.Close()
 
+	log.Debug("Executing FindThreadsByProfileID query...")
 	rows, err := stmt.QueryContext(ctx, profileID)
 	if err != nil {
 		return nil, e.Wrap(op+": failed to execute query: ", err)

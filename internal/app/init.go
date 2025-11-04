@@ -225,22 +225,31 @@ func runMigrations(db *sql.DB, migrationsDir string) error {
 func setupLogger(env string) *slog.Logger {
 	var log *slog.Logger
 
+	replaceAttrFunc := func(groups []string, a slog.Attr) slog.Attr {
+		if a.Key == slog.TimeKey && len(groups) == 0 {
+			if t, ok := a.Value.Any().(time.Time); ok {
+				a.Value = slog.StringValue(t.Format("2006/01/02 15:04:05"))
+			}
+		}
+		return a
+	}
+
 	switch env {
 	case envLocal:
 		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
+			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: replaceAttrFunc}),
 		)
 	case envDev:
 		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
+			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug, ReplaceAttr: replaceAttrFunc}),
 		)
 	case envProd:
 		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
+			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo, ReplaceAttr: replaceAttrFunc}),
 		)
-	default: // If env config is invalid, set prod settings by default due to security
+	default:
 		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
+			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo, ReplaceAttr: replaceAttrFunc}),
 		)
 	}
 
