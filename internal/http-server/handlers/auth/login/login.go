@@ -125,8 +125,8 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   15 * 60, // 15 минут
 		HttpOnly: true,
 		Path:     "/",
-		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
 	}
 	http.SetCookie(w, accessCookie)
 
@@ -136,8 +136,8 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   7 * 24 * 3600, // 7  дней
 		HttpOnly: true,
 		Path:     "/",
-		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
 	}
 	http.SetCookie(w, refreshCookie)
 
