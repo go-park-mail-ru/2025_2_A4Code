@@ -31,3 +31,6 @@ go.work.sum
 
 # files
 cookies.txt
+
+# dirs
+config/

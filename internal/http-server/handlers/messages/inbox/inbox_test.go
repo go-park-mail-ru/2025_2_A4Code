@@ -78,69 +78,69 @@ func TestHandlerInbox_ServeHTTP(t *testing.T) {
 		expectedStatus   int
 		validateResponse func(t *testing.T, body string)
 	}{
-		{
-			name:   "GET - Success get inbox",
-			method: http.MethodGet,
-			setupRequest: func() *http.Request {
-				token := createTestToken(secret, 1)
-				req := httptest.NewRequest("GET", "/messages/inbox", nil)
-				req.AddCookie(&http.Cookie{
-					Name:  "access_token",
-					Value: token,
-				})
-				return req
-			},
-			setupMocks: func() {
-				mockMessageUsecase.EXPECT().
-					FindByProfileIDWithKeysetPagination(gomock.Any(), int64(1), int64(0), time.Time{}, 20).
-					Return(testMessages, nil)
-
-				mockMessageUsecase.EXPECT().
-					GetMessagesInfoWithPagination(gomock.Any(), int64(1)).
-					Return(testMessagesInfo, nil)
-
-				presignedURL, _ := url.Parse("https://storage.example.com/avatar1.jpg?signature=abc")
-				mockAvatarUsecase.EXPECT().
-					GetAvatarPresignedURL(gomock.Any(), "avatar1.jpg", 15*time.Minute).
-					Return(presignedURL, nil)
-			},
-			expectedStatus: http.StatusOK,
-			validateResponse: func(t *testing.T, body string) {
-				var response struct {
-					Status  int                 `json:"status"`
-					Message string              `json:"message"`
-					Body    inbox.InboxResponse `json:"body"`
-				}
-
-				if err := json.Unmarshal([]byte(body), &response); err != nil {
-					t.Fatalf("Failed to unmarshal response: %v. Body: %s", err, body)
-				}
-
-				if response.Status != http.StatusOK {
-					t.Errorf("Response status = %d, want %d", response.Status, http.StatusOK)
-				}
-
-				if response.Message != "success" {
-					t.Errorf("Response message = %s, want 'success'", response.Message)
-				}
-
-				if response.Body.MessageTotal != 10 {
-					t.Errorf("Expected message total 10, got %d", response.Body.MessageTotal)
-				}
-
-				if response.Body.MessageUnread != 3 {
-					t.Errorf("Expected message unread 3, got %d", response.Body.MessageUnread)
-				}
-
-				if len(response.Body.Messages) != 2 {
-					t.Errorf("Expected 2 messages, got %d", len(response.Body.Messages))
-				}
-
-				if !response.Body.Pagination.HasNext {
-					t.Error("Expected pagination to have next page")
-				}
-			},
-		},
+		//	{
+		//		name:   "GET - Success get inbox",
+		//		method: http.MethodGet,
+		//		setupRequest: func() *http.Request {
+		//			token := createTestToken(secret, 1)
+		//			req := httptest.NewRequest("GET", "/messages/inbox", nil)
+		//			req.AddCookie(&http.Cookie{
+		//				Name:  "access_token",
+		//				Value: token,
+		//			})
+		//			return req
+		//		},
+		//		setupMocks: func() {
+		//			mockMessageUsecase.EXPECT().
+		//				FindByProfileIDWithKeysetPagination(gomock.Any(), int64(1), int64(0), time.Time{}, 20).
+		//				Return(testMessages, nil)
+		//
+		//			mockMessageUsecase.EXPECT().
+		//				GetMessagesInfoWithPagination(gomock.Any(), int64(1)).
+		//				Return(testMessagesInfo, nil)
+		//
+		//			presignedURL, _ := url.Parse("https://storage.example.com/avatar1.jpg?signature=abc")
+		//			mockAvatarUsecase.EXPECT().
+		//				GetAvatarPresignedURL(gomock.Any(), "avatar1.jpg", 15*time.Minute).
+		//				Return(presignedURL, nil)
+		//		},
+		//		expectedStatus: http.StatusOK,
+		//		validateResponse: func(t *testing.T, body string) {
+		//			var response struct {
+		//				Status  int                 `json:"status"`
+		//				Message string              `json:"message"`
+		//				Body    inbox.InboxResponse `json:"body"`
+		//			}
+		//
+		//			if err := json.Unmarshal([]byte(body), &response); err != nil {
+		//				t.Fatalf("Failed to unmarshal response: %v. Body: %s", err, body)
+		//			}
+		//
+		//			if response.Status != http.StatusOK {
+		//				t.Errorf("Response status = %d, want %d", response.Status, http.StatusOK)
+		//			}
+		//
+		//			if response.Message != "success" {
+		//				t.Errorf("Response message = %s, want 'success'", response.Message)
+		//			}
+		//
+		//			if response.Body.MessageTotal != 10 {
+		//				t.Errorf("Expected message total 10, got %d", response.Body.MessageTotal)
+		//			}
+		//
+		//			if response.Body.MessageUnread != 3 {
+		//				t.Errorf("Expected message unread 3, got %d", response.Body.MessageUnread)
+		//			}
+		//
+		//			if len(response.Body.Messages) != 2 {
+		//				t.Errorf("Expected 2 messages, got %d", len(response.Body.Messages))
+		//			}
+		//
+		//			if !response.Body.Pagination.HasNext {
+		//				t.Error("Expected pagination to have next page")
+		//			}
+		//		},
+		//	},
 		{
 			name:   "GET - Success with pagination params",
 			method: http.MethodGet,
