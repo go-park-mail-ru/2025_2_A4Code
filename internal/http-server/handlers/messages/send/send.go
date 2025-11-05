@@ -1,5 +1,7 @@
 package send
 
+//go:generate mockgen -source=$GOFILE -destination=./mocks/mock_send_usecase.go -package=mocks
+
 import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
@@ -7,7 +9,6 @@ import (
 	"2025_2_a4code/internal/lib/validation"
 	"context"
 	"encoding/json"
-	"html"
 	"net/http"
 	"net/mail"
 	"path/filepath"
@@ -103,11 +104,8 @@ func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	escapedTopic := html.EscapeString(req.Topic)
-	escapedText := html.EscapeString(req.Text)
-
 	for _, receiver := range req.Receivers {
-		messageID, err := h.messageUCase.SaveMessage(r.Context(), receiver.Email, id, escapedTopic, escapedText)
+		messageID, err := h.messageUCase.SaveMessage(r.Context(), receiver.Email, id, req.Topic, req.Text)
 		if err != nil {
 			log.Error(err.Error())
 			resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
@@ -144,16 +142,13 @@ func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func validateRequest(req *Request) string {
-	// topic length
 	if len(req.Topic) > maxTopicLen {
 		return "topic too long"
 	}
-	// text length
 	if len(req.Text) > maxTextLen {
 		return "text too long"
 	}
 
-	// запрещаем опасные последовательности в topic/text
 	if validation.HasDangerousCharacters(req.Topic) {
 		return "topic contains forbidden characters"
 	}
@@ -161,14 +156,12 @@ func validateRequest(req *Request) string {
 		return "text contains forbidden characters"
 	}
 
-	// receivers: проверяем корректность email и дубликаты
 	seen := make(map[string]struct{})
 	for _, r := range req.Receivers {
 		email := strings.TrimSpace(r.Email)
 		if email == "" {
 			return "empty receiver email"
 		}
-		// корректность email по net/mail
 		if _, err := mail.ParseAddress(email); err != nil {
 			return "invalid receiver email: " + email
 		}
@@ -178,35 +171,28 @@ func validateRequest(req *Request) string {
 		}
 		seen[lower] = struct{}{}
 
-		// дополнительно блокируем опасные последовательности в email (избыточно, но безопасно)
 		if validation.HasDangerousCharacters(email) {
 			return "receiver email contains forbidden characters: " + email
 		}
 	}
 
-	// files: ограничение количества, размера и типов; проверка имени
 	if len(req.Files) > defaultLimitFiles {
 		return "too many files"
 	}
 	for _, f := range req.Files {
-		// размер
 		if f.Size < 0 || f.Size > maxFileSize {
 			return "file size invalid or too large: " + f.Name
 		}
-		// тип
 		if _, ok := allowedFileTypes[f.FileType]; !ok {
 			return "unsupported file type: " + f.FileType
 		}
-		// имя не должно содержать путь traversal
 		base := filepath.Base(f.Name)
 		if base != f.Name || strings.Contains(f.Name, "..") {
 			return "invalid file name: " + f.Name
 		}
-		// storage path тоже проверяем на опасные последовательности
 		if validation.HasDangerousCharacters(f.StoragePath) {
 			return "invalid storage path for file: " + f.Name
 		}
-		// запрещаем опасные последовательности в имени
 		if validation.HasDangerousCharacters(f.Name) {
 			return "invalid file name: " + f.Name
 		}

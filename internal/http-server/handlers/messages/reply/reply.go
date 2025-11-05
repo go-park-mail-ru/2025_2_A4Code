@@ -6,9 +6,13 @@ import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
+	"2025_2_a4code/internal/lib/validation"
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/mail"
+	"path/filepath"
+	"strings"
 )
 
 type MessageUsecase interface {
@@ -49,6 +53,20 @@ type HandlerReply struct {
 	secret       []byte
 }
 
+const (
+	maxTopicLen       = 255
+	maxTextLen        = 10000
+	maxFileSize       = 10 * 1024 * 1024 // 10 MB
+	defaultLimitFiles = 20
+)
+
+var allowedFileTypes = map[string]struct{}{
+	"image/jpeg":      {},
+	"image/png":       {},
+	"application/pdf": {},
+	"text/plain":      {},
+}
+
 func New(messageUCase MessageUsecase, SECRET []byte) *HandlerReply {
 	return &HandlerReply{
 		messageUCase: messageUCase,
@@ -75,6 +93,11 @@ func (h *HandlerReply) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if req.Text == "" || req.Receivers == nil || len(req.Receivers) == 0 {
 		log.Error("empty request body")
 		resp.SendErrorResponse(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	if errMsg := validateRequest(&req); errMsg != "" {
+		resp.SendErrorResponse(w, errMsg, http.StatusBadRequest)
 		return
 	}
 
@@ -117,4 +140,64 @@ func (h *HandlerReply) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func validateRequest(req *Request) string {
+	if len(req.Topic) > maxTopicLen {
+		return "topic too long"
+	}
+	if len(req.Text) > maxTextLen {
+		return "text too long"
+	}
+
+	if validation.HasDangerousCharacters(req.Topic) {
+		return "topic contains forbidden characters"
+	}
+	if validation.HasDangerousCharacters(req.Text) {
+		return "text contains forbidden characters"
+	}
+
+	seen := make(map[string]struct{})
+	for _, r := range req.Receivers {
+		email := strings.TrimSpace(r.Email)
+		if email == "" {
+			return "empty receiver email"
+		}
+		if _, err := mail.ParseAddress(email); err != nil {
+			return "invalid receiver email: " + email
+		}
+		lower := strings.ToLower(email)
+		if _, ok := seen[lower]; ok {
+			return "duplicate receiver: " + email
+		}
+		seen[lower] = struct{}{}
+
+		if validation.HasDangerousCharacters(email) {
+			return "receiver email contains forbidden characters: " + email
+		}
+	}
+
+	if len(req.Files) > defaultLimitFiles {
+		return "too many files"
+	}
+	for _, f := range req.Files {
+		if f.Size < 0 || f.Size > maxFileSize {
+			return "file size invalid or too large: " + f.Name
+		}
+		if _, ok := allowedFileTypes[f.FileType]; !ok {
+			return "unsupported file type: " + f.FileType
+		}
+		base := filepath.Base(f.Name)
+		if base != f.Name || strings.Contains(f.Name, "..") {
+			return "invalid file name: " + f.Name
+		}
+		if validation.HasDangerousCharacters(f.StoragePath) {
+			return "invalid storage path for file: " + f.Name
+		}
+		if validation.HasDangerousCharacters(f.Name) {
+			return "invalid file name: " + f.Name
+		}
+	}
+
+	return ""
 }
