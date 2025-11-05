@@ -140,10 +140,10 @@ func Init() {
 	http.Handle("/user/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHandler.ServeHTTP))))
 	http.Handle("/messages/sent", loggerMiddleware(corsMiddleware(http.HandlerFunc(sentHandler.ServeHTTP))))
 
-	//err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
+	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
-	err = http.ListenAndServe(":5000", nil)
+	//err = http.ListenAndServe(":5000", nil)
 
 	slog.Info("Server has started working...")
 
