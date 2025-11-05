@@ -15,6 +15,7 @@ import (
 	"2025_2_a4code/internal/http-server/handlers/user/settings"
 	uploadavatar "2025_2_a4code/internal/http-server/handlers/user/upload/upload-avatar"
 	"2025_2_a4code/internal/http-server/middleware/cors"
+	csrfcheck "2025_2_a4code/internal/http-server/middleware/csrf-check"
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	e "2025_2_a4code/internal/lib/wrapper"
 	avatarrepository "2025_2_a4code/internal/storage/minio/avatar-repository"
@@ -117,26 +118,29 @@ func Init() {
 	// настройка corsMiddleware
 	corsMiddleware := cors.New()
 
+	// настройка csrfMiddleware
+	csrfMiddleware := csrfcheck.New()
+
 	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.Port))
 
 	// роутинг + настройка middleware
-	http.Handle("/auth/login", loggerMiddleware(corsMiddleware(http.HandlerFunc(loginHandler.ServeHTTP))))
-	http.Handle("/auth/signup", loggerMiddleware(corsMiddleware(http.HandlerFunc(signupHandler.ServeHTTP))))
-	http.Handle("/auth/refresh", loggerMiddleware(corsMiddleware(http.HandlerFunc(refreshHandler.ServeHTTP))))
-	http.Handle("/auth/logout", loggerMiddleware(corsMiddleware(http.HandlerFunc(logoutHandler.ServeHTTP))))
-	http.Handle("/messages/inbox", loggerMiddleware(corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP))))
-	http.Handle("/user/profile", loggerMiddleware(corsMiddleware(http.HandlerFunc(profileHandler.ServeHTTP))))
-	http.Handle("/messages/{message_id}", loggerMiddleware(corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP))))
-	http.Handle("/messages/send", loggerMiddleware(corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP))))
-	http.Handle("/user/settings", loggerMiddleware(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
-	http.Handle("/messages/reply", loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
-	http.Handle("/user/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHandler.ServeHTTP))))
-	http.Handle("/messages/sent", loggerMiddleware(corsMiddleware(http.HandlerFunc(sentHandler.ServeHTTP))))
+	http.Handle("/auth/login", (loggerMiddleware(corsMiddleware(http.HandlerFunc(loginHandler.ServeHTTP)))))
+	http.Handle("/auth/signup", (loggerMiddleware(corsMiddleware(http.HandlerFunc(signupHandler.ServeHTTP)))))
+	http.Handle("/auth/refresh", csrfMiddleware(loggerMiddleware(corsMiddleware(http.HandlerFunc(refreshHandler.ServeHTTP)))))
+	http.Handle("/auth/logout", csrfMiddleware(loggerMiddleware(corsMiddleware(http.HandlerFunc(logoutHandler.ServeHTTP)))))
+	http.Handle("/messages/inbox", csrfMiddleware(loggerMiddleware(corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP)))))
+	http.Handle("/user/profile", csrfMiddleware(loggerMiddleware(corsMiddleware(http.HandlerFunc(profileHandler.ServeHTTP)))))
+	http.Handle("/messages/{message_id}", csrfMiddleware(loggerMiddleware(corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP)))))
+	http.Handle("/messages/send", csrfMiddleware(loggerMiddleware(corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP)))))
+	http.Handle("/user/settings", csrfMiddleware(loggerMiddleware(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP)))))
+	http.Handle("/messages/reply", csrfMiddleware(loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP)))))
+	http.Handle("/user/upload/avatar", csrfMiddleware(loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHandler.ServeHTTP)))))
+	http.Handle("/messages/sent", csrfMiddleware(loggerMiddleware(corsMiddleware(http.HandlerFunc(sentHandler.ServeHTTP)))))
 
 	//err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
-	err = http.ListenAndServe(":5000", nil)
+	err = http.ListenAndServe(":8080", nil)
 
 	slog.Info("Server has started working...")
 
