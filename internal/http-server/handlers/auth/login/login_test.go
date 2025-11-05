@@ -142,17 +142,6 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 			expectedMessage: "invalid login or password",
 			checkCookies:    false,
 		},
-		//{
-		//	name: "Invalid username format",
-		//	requestBody: login.Request{
-		//		Login:    "test@user!",
-		//		Password: "password123",
-		//	},
-		//	setupMocks:      func() {},
-		//	expectedStatus:  http.StatusBadRequest,
-		//	expectedMessage: "username can only contain letters, numbers and underscores",
-		//	checkCookies:    false,
-		//},
 		{
 			name: "Username too short",
 			requestBody: login.Request{

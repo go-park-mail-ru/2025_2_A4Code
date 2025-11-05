@@ -9,6 +9,7 @@ import (
 	"2025_2_a4code/internal/lib/validation"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/mail"
 	"path/filepath"
@@ -88,13 +89,8 @@ func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Text == "" || req.Receivers == nil || len(req.Receivers) == 0 {
-		resp.SendErrorResponse(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-
-	if errMsg := validateRequest(&req); errMsg != "" {
-		resp.SendErrorResponse(w, errMsg, http.StatusBadRequest)
+	if err := validateRequest(&req); err != nil {
+		resp.SendErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -141,62 +137,66 @@ func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func validateRequest(req *Request) string {
+func validateRequest(req *Request) error {
+	if req.Text == "" || req.Receivers == nil || len(req.Receivers) == 0 {
+		return fmt.Errorf("empty request body")
+	}
+
 	if len(req.Topic) > maxTopicLen {
-		return "topic too long"
+		return fmt.Errorf("topic too long")
 	}
 	if len(req.Text) > maxTextLen {
-		return "text too long"
+		return fmt.Errorf("text too long")
 	}
 
 	if validation.HasDangerousCharacters(req.Topic) {
-		return "topic contains forbidden characters"
+		return fmt.Errorf("topic contains forbidden characters")
 	}
 	if validation.HasDangerousCharacters(req.Text) {
-		return "text contains forbidden characters"
+		return fmt.Errorf("text contains forbidden characters")
 	}
 
 	seen := make(map[string]struct{})
 	for _, r := range req.Receivers {
 		email := strings.TrimSpace(r.Email)
 		if email == "" {
-			return "empty receiver email"
+			return fmt.Errorf("empty receiver email")
 		}
 		if _, err := mail.ParseAddress(email); err != nil {
-			return "invalid receiver email: " + email
+			return fmt.Errorf("invalid receiver email: %s", email)
 		}
 		lower := strings.ToLower(email)
 		if _, ok := seen[lower]; ok {
-			return "duplicate receiver: " + email
+			return fmt.Errorf("duplicate receiver: %s", email)
 		}
 		seen[lower] = struct{}{}
 
 		if validation.HasDangerousCharacters(email) {
-			return "receiver email contains forbidden characters: " + email
+			return fmt.Errorf("receiver email contains forbidden characters: %s", email)
 		}
 	}
 
 	if len(req.Files) > defaultLimitFiles {
-		return "too many files"
+		return fmt.Errorf("too many files")
 	}
 	for _, f := range req.Files {
 		if f.Size < 0 || f.Size > maxFileSize {
-			return "file size invalid or too large: " + f.Name
+			return fmt.Errorf("file size invalid or too large: %s", f.Name)
 		}
 		if _, ok := allowedFileTypes[f.FileType]; !ok {
-			return "unsupported file type: " + f.FileType
+			return fmt.Errorf("unsupported file type: %s", f.FileType)
 		}
 		base := filepath.Base(f.Name)
 		if base != f.Name || strings.Contains(f.Name, "..") {
-			return "invalid file name: " + f.Name
+			return fmt.Errorf("invalid file name: %s", f.Name)
 		}
 		if validation.HasDangerousCharacters(f.StoragePath) {
-			return "invalid storage path for file: " + f.Name
+			return fmt.Errorf("invalid storage path for file: %s", f.Name)
 		}
 		if validation.HasDangerousCharacters(f.Name) {
-			return "invalid file name: " + f.Name
+			return fmt.Errorf("invalid file name: %s", f.Name)
 		}
 	}
 
-	return ""
+	return nil
 }
