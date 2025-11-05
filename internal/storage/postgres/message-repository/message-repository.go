@@ -21,6 +21,19 @@ func New(db *sql.DB) *MessageRepository {
 	return &MessageRepository{db: db}
 }
 
+func buildSnippet(text string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+
+	return string(runes[:limit]) + "..."
+}
+
 func (repo *MessageRepository) FindByMessageID(ctx context.Context, messageID int64) (*domain.Message, error) {
 	const op = "storage.postgresql.message.FindByMessageID"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
@@ -63,11 +76,7 @@ func (repo *MessageRepository) FindByMessageID(ctx context.Context, messageID in
 	)
 
 	// Создаем snippet из текста сообщения
-	if len(text) > 40 {
-		message.Snippet = text[:40] + "..."
-	} else {
-		message.Snippet = text
-	}
+	message.Snippet = buildSnippet(text, 40)
 
 	message.Sender = domain.Sender{
 		Id:    senderId,
@@ -259,11 +268,7 @@ func (repo *MessageRepository) FindByProfileID(ctx context.Context, profileID in
 			return nil, e.Wrap(op, err)
 		}
 		message.ID = strconv.FormatInt(messageIdInt, 10)
-		if len(text) > 40 {
-			message.Snippet = text[:40] + "..."
-		} else {
-			message.Snippet = text
-		}
+		message.Snippet = buildSnippet(text, 40)
 		message.Sender = domain.Sender{
 			Id:    senderId,
 			Email: fmt.Sprintf("%s@%s", senderUsername, senderDomain),
@@ -366,11 +371,7 @@ func (repo *MessageRepository) FindByProfileIDWithKeysetPagination(
 			return nil, e.Wrap(op, err)
 		}
 		message.ID = strconv.FormatInt(messageIdInt, 10)
-		if len(text) > 40 {
-			message.Snippet = text[:40] + "..."
-		} else {
-			message.Snippet = text
-		}
+		message.Snippet = buildSnippet(text, 40)
 		message.Sender = domain.Sender{
 			Id:    senderId,
 			Email: fmt.Sprintf("%s@%s", senderUsername, senderDomain),

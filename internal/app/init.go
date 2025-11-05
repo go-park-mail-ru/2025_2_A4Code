@@ -140,7 +140,7 @@ func Init() {
 	//err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
-	err = http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":5000", nil)
 
 	slog.Info("Server has started working...")
 
