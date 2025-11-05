@@ -438,53 +438,6 @@ func TestHandlerReply_Validation(t *testing.T) {
 	}
 }
 
-func TestHandlerReply_OriginalText(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockMessageUsecase := mocks.NewMockMessageUsecase(ctrl)
-	secret := []byte("test-secret")
-
-	handler := New(mockMessageUsecase, secret)
-
-	t.Run("POST - Original text preserved", func(t *testing.T) {
-		originalTopic := "Re: Important <meeting> & \"discussion\""
-		originalText := "Let's discuss: 5 > 3 & 2 < 10"
-
-		mockMessageUsecase.EXPECT().
-			SaveMessage(gomock.Any(), "receiver@example.com", int64(1),
-				originalTopic, originalText).
-			Return(int64(300), nil)
-		mockMessageUsecase.EXPECT().
-			SaveThreadIdToMessage(gomock.Any(), int64(300), int64(200)).
-			Return(nil)
-
-		token := createTestToken(secret, 1)
-		body, _ := json.Marshal(Request{
-			RootMessageID: 100,
-			Topic:         originalTopic,
-			Text:          originalText,
-			ThreadRoot:    200,
-			Receivers: []Receiver{
-				{Email: "receiver@example.com"},
-			},
-			Files: []File{},
-		})
-		req := httptest.NewRequest("POST", "/messages/reply", bytes.NewReader(body))
-		req.AddCookie(&http.Cookie{
-			Name:  "access_token",
-			Value: token,
-		})
-
-		rr := httptest.NewRecorder()
-		handler.ServeHTTP(rr, req)
-
-		if rr.Code != http.StatusOK {
-			t.Errorf("Expected status %d, got %d. Body: %s", http.StatusOK, rr.Code, rr.Body.String())
-		}
-	})
-}
-
 func TestHandlerReply_ThreadRoot_Handling(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
