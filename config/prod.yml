@@ -1,0 +1,19 @@
+app:
+  host: localhost
+  port: 5000
+  secret: secret
+db:
+  host: 217.16.16.26
+  port: 8050
+  user: postgres
+  password: postgresql
+  name: a4code_db
+  sslmode: "disable"
+minio:
+  host: 217.16.16.26
+  port: 8060
+  user: minio
+  password: miniominio
+  bucket_name: "avatars"
+  endpoint: 217.16.16.26:8060
+  use_ssl: false
