@@ -1,4 +1,4 @@
-package reply
+package send
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"2025_2_a4code/internal/http-server/handlers/messages/reply/mocks"
+	"2025_2_a4code/internal/http-server/handlers/messages/send/mocks"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/golang/mock/gomock"
@@ -25,7 +25,7 @@ func createTestToken(secret []byte, userID int64) string {
 	return tokenString
 }
 
-func TestHandlerReply_ServeHTTP(t *testing.T) {
+func TestHandlerSend_ServeHTTP(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -43,13 +43,11 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 		expectedStatus int
 	}{
 		{
-			name:   "POST - Success reply to message",
+			name:   "POST - Success send message",
 			method: http.MethodPost,
 			requestBody: Request{
-				RootMessageID: 100,
-				Topic:         "Re: Test Topic",
-				Text:          "Test reply text",
-				ThreadRoot:    200,
+				Topic: "Test Topic",
+				Text:  "Test message text",
 				Receivers: []Receiver{
 					{Email: "receiver1@example.com"},
 				},
@@ -57,25 +55,26 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 			},
 			setupMocks: func() {
 				mockMessageUsecase.EXPECT().
-					SaveMessage(gomock.Any(), "receiver1@example.com", int64(1), "Re: Test Topic", "Test reply text").
-					Return(int64(300), nil)
+					SaveMessage(gomock.Any(), "receiver1@example.com", int64(1), "Test Topic", "Test message text").
+					Return(int64(100), nil)
 				mockMessageUsecase.EXPECT().
-					SaveThreadIdToMessage(gomock.Any(), int64(300), int64(200)).
+					SaveThread(gomock.Any(), int64(100)).
+					Return(int64(200), nil)
+				mockMessageUsecase.EXPECT().
+					SaveThreadIdToMessage(gomock.Any(), int64(100), int64(200)).
 					Return(nil)
 			},
 			setupRequest: func() *http.Request {
 				token := createTestToken(secret, 1)
 				body, _ := json.Marshal(Request{
-					RootMessageID: 100,
-					Topic:         "Re: Test Topic",
-					Text:          "Test reply text",
-					ThreadRoot:    200,
+					Topic: "Test Topic",
+					Text:  "Test message text",
 					Receivers: []Receiver{
 						{Email: "receiver1@example.com"},
 					},
 					Files: []File{},
 				})
-				req := httptest.NewRequest("POST", "/messages/reply", bytes.NewReader(body))
+				req := httptest.NewRequest("POST", "/messages/send", bytes.NewReader(body))
 				req.AddCookie(&http.Cookie{
 					Name:  "access_token",
 					Value: token,
@@ -85,13 +84,11 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 			expectedStatus: http.StatusOK,
 		},
 		{
-			name:   "POST - Success reply with multiple receivers and files",
+			name:   "POST - Success with multiple receivers and files",
 			method: http.MethodPost,
 			requestBody: Request{
-				RootMessageID: 100,
-				Topic:         "Re: Test Topic with Files",
-				Text:          "Test reply with files",
-				ThreadRoot:    200,
+				Topic: "Test Topic with Files",
+				Text:  "Test message with files",
 				Receivers: []Receiver{
 					{Email: "receiver1@example.com"},
 					{Email: "receiver2@example.com"},
@@ -108,33 +105,37 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 			setupMocks: func() {
 				// First receiver
 				mockMessageUsecase.EXPECT().
-					SaveMessage(gomock.Any(), "receiver1@example.com", int64(1), "Re: Test Topic with Files", "Test reply with files").
-					Return(int64(301), nil)
+					SaveMessage(gomock.Any(), "receiver1@example.com", int64(1), "Test Topic with Files", "Test message with files").
+					Return(int64(101), nil)
 				mockMessageUsecase.EXPECT().
-					SaveThreadIdToMessage(gomock.Any(), int64(301), int64(200)).
+					SaveThread(gomock.Any(), int64(101)).
+					Return(int64(201), nil)
+				mockMessageUsecase.EXPECT().
+					SaveThreadIdToMessage(gomock.Any(), int64(101), int64(201)).
 					Return(nil)
 				mockMessageUsecase.EXPECT().
-					SaveFile(gomock.Any(), int64(301), "test.pdf", "application/pdf", "/uploads/test.pdf", int64(1024)).
-					Return(int64(401), nil)
+					SaveFile(gomock.Any(), int64(101), "test.pdf", "application/pdf", "/uploads/test.pdf", int64(1024)).
+					Return(int64(301), nil)
 
 				// Second receiver
 				mockMessageUsecase.EXPECT().
-					SaveMessage(gomock.Any(), "receiver2@example.com", int64(1), "Re: Test Topic with Files", "Test reply with files").
-					Return(int64(302), nil)
+					SaveMessage(gomock.Any(), "receiver2@example.com", int64(1), "Test Topic with Files", "Test message with files").
+					Return(int64(102), nil)
 				mockMessageUsecase.EXPECT().
-					SaveThreadIdToMessage(gomock.Any(), int64(302), int64(200)).
+					SaveThread(gomock.Any(), int64(102)).
+					Return(int64(202), nil)
+				mockMessageUsecase.EXPECT().
+					SaveThreadIdToMessage(gomock.Any(), int64(102), int64(202)).
 					Return(nil)
 				mockMessageUsecase.EXPECT().
-					SaveFile(gomock.Any(), int64(302), "test.pdf", "application/pdf", "/uploads/test.pdf", int64(1024)).
-					Return(int64(402), nil)
+					SaveFile(gomock.Any(), int64(102), "test.pdf", "application/pdf", "/uploads/test.pdf", int64(1024)).
+					Return(int64(302), nil)
 			},
 			setupRequest: func() *http.Request {
 				token := createTestToken(secret, 1)
 				body, _ := json.Marshal(Request{
-					RootMessageID: 100,
-					Topic:         "Re: Test Topic with Files",
-					Text:          "Test reply with files",
-					ThreadRoot:    200,
+					Topic: "Test Topic with Files",
+					Text:  "Test message with files",
 					Receivers: []Receiver{
 						{Email: "receiver1@example.com"},
 						{Email: "receiver2@example.com"},
@@ -148,7 +149,7 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 						},
 					},
 				})
-				req := httptest.NewRequest("POST", "/messages/reply", bytes.NewReader(body))
+				req := httptest.NewRequest("POST", "/messages/send", bytes.NewReader(body))
 				req.AddCookie(&http.Cookie{
 					Name:  "access_token",
 					Value: token,
@@ -161,10 +162,8 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 			name:   "POST - Unauthorized",
 			method: http.MethodPost,
 			requestBody: Request{
-				RootMessageID: 100,
-				Topic:         "Re: Test Topic",
-				Text:          "Test reply text",
-				ThreadRoot:    200,
+				Topic: "Test Topic",
+				Text:  "Test message text",
 				Receivers: []Receiver{
 					{Email: "receiver@example.com"},
 				},
@@ -172,15 +171,13 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 			setupMocks: func() {},
 			setupRequest: func() *http.Request {
 				body, _ := json.Marshal(Request{
-					RootMessageID: 100,
-					Topic:         "Re: Test Topic",
-					Text:          "Test reply text",
-					ThreadRoot:    200,
+					Topic: "Test Topic",
+					Text:  "Test message text",
 					Receivers: []Receiver{
 						{Email: "receiver@example.com"},
 					},
 				})
-				return httptest.NewRequest("POST", "/messages/reply", bytes.NewReader(body))
+				return httptest.NewRequest("POST", "/messages/send", bytes.NewReader(body))
 			},
 			expectedStatus: http.StatusUnauthorized,
 		},
@@ -188,10 +185,8 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 			name:   "POST - Empty text",
 			method: http.MethodPost,
 			requestBody: Request{
-				RootMessageID: 100,
-				Topic:         "Re: Test Topic",
-				Text:          "",
-				ThreadRoot:    200,
+				Topic: "Test Topic",
+				Text:  "",
 				Receivers: []Receiver{
 					{Email: "receiver@example.com"},
 				},
@@ -200,15 +195,13 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 			setupRequest: func() *http.Request {
 				token := createTestToken(secret, 1)
 				body, _ := json.Marshal(Request{
-					RootMessageID: 100,
-					Topic:         "Re: Test Topic",
-					Text:          "",
-					ThreadRoot:    200,
+					Topic: "Test Topic",
+					Text:  "",
 					Receivers: []Receiver{
 						{Email: "receiver@example.com"},
 					},
 				})
-				req := httptest.NewRequest("POST", "/messages/reply", bytes.NewReader(body))
+				req := httptest.NewRequest("POST", "/messages/send", bytes.NewReader(body))
 				req.AddCookie(&http.Cookie{
 					Name:  "access_token",
 					Value: token,
@@ -221,23 +214,19 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 			name:   "POST - Empty receivers",
 			method: http.MethodPost,
 			requestBody: Request{
-				RootMessageID: 100,
-				Topic:         "Re: Test Topic",
-				Text:          "Test reply text",
-				ThreadRoot:    200,
-				Receivers:     []Receiver{},
+				Topic:     "Test Topic",
+				Text:      "Test message text",
+				Receivers: []Receiver{},
 			},
 			setupMocks: func() {},
 			setupRequest: func() *http.Request {
 				token := createTestToken(secret, 1)
 				body, _ := json.Marshal(Request{
-					RootMessageID: 100,
-					Topic:         "Re: Test Topic",
-					Text:          "Test reply text",
-					ThreadRoot:    200,
-					Receivers:     []Receiver{},
+					Topic:     "Test Topic",
+					Text:      "Test message text",
+					Receivers: []Receiver{},
 				})
-				req := httptest.NewRequest("POST", "/messages/reply", bytes.NewReader(body))
+				req := httptest.NewRequest("POST", "/messages/send", bytes.NewReader(body))
 				req.AddCookie(&http.Cookie{
 					Name:  "access_token",
 					Value: token,
@@ -250,31 +239,27 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 			name:   "POST - SaveMessage error",
 			method: http.MethodPost,
 			requestBody: Request{
-				RootMessageID: 100,
-				Topic:         "Re: Test Topic",
-				Text:          "Test reply text",
-				ThreadRoot:    200,
+				Topic: "Test Topic",
+				Text:  "Test message text",
 				Receivers: []Receiver{
 					{Email: "receiver@example.com"},
 				},
 			},
 			setupMocks: func() {
 				mockMessageUsecase.EXPECT().
-					SaveMessage(gomock.Any(), "receiver@example.com", int64(1), "Re: Test Topic", "Test reply text").
+					SaveMessage(gomock.Any(), "receiver@example.com", int64(1), "Test Topic", "Test message text").
 					Return(int64(0), errors.New("database error"))
 			},
 			setupRequest: func() *http.Request {
 				token := createTestToken(secret, 1)
 				body, _ := json.Marshal(Request{
-					RootMessageID: 100,
-					Topic:         "Re: Test Topic",
-					Text:          "Test reply text",
-					ThreadRoot:    200,
+					Topic: "Test Topic",
+					Text:  "Test message text",
 					Receivers: []Receiver{
 						{Email: "receiver@example.com"},
 					},
 				})
-				req := httptest.NewRequest("POST", "/messages/reply", bytes.NewReader(body))
+				req := httptest.NewRequest("POST", "/messages/send", bytes.NewReader(body))
 				req.AddCookie(&http.Cookie{
 					Name:  "access_token",
 					Value: token,
@@ -284,37 +269,33 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 			expectedStatus: http.StatusInternalServerError,
 		},
 		{
-			name:   "POST - SaveThreadIdToMessage error",
+			name:   "POST - SaveThread error",
 			method: http.MethodPost,
 			requestBody: Request{
-				RootMessageID: 100,
-				Topic:         "Re: Test Topic",
-				Text:          "Test reply text",
-				ThreadRoot:    200,
+				Topic: "Test Topic",
+				Text:  "Test message text",
 				Receivers: []Receiver{
 					{Email: "receiver@example.com"},
 				},
 			},
 			setupMocks: func() {
 				mockMessageUsecase.EXPECT().
-					SaveMessage(gomock.Any(), "receiver@example.com", int64(1), "Re: Test Topic", "Test reply text").
-					Return(int64(300), nil)
+					SaveMessage(gomock.Any(), "receiver@example.com", int64(1), "Test Topic", "Test message text").
+					Return(int64(100), nil)
 				mockMessageUsecase.EXPECT().
-					SaveThreadIdToMessage(gomock.Any(), int64(300), int64(200)).
-					Return(errors.New("thread save error"))
+					SaveThread(gomock.Any(), int64(100)).
+					Return(int64(0), errors.New("thread creation error"))
 			},
 			setupRequest: func() *http.Request {
 				token := createTestToken(secret, 1)
 				body, _ := json.Marshal(Request{
-					RootMessageID: 100,
-					Topic:         "Re: Test Topic",
-					Text:          "Test reply text",
-					ThreadRoot:    200,
+					Topic: "Test Topic",
+					Text:  "Test message text",
 					Receivers: []Receiver{
 						{Email: "receiver@example.com"},
 					},
 				})
-				req := httptest.NewRequest("POST", "/messages/reply", bytes.NewReader(body))
+				req := httptest.NewRequest("POST", "/messages/send", bytes.NewReader(body))
 				req.AddCookie(&http.Cookie{
 					Name:  "access_token",
 					Value: token,
@@ -328,7 +309,7 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 			method:         http.MethodGet,
 			requestBody:    nil,
 			setupMocks:     func() {},
-			setupRequest:   func() *http.Request { return httptest.NewRequest("GET", "/messages/reply", nil) },
+			setupRequest:   func() *http.Request { return httptest.NewRequest("GET", "/messages/send", nil) },
 			expectedStatus: http.StatusMethodNotAllowed,
 		},
 	}
@@ -348,7 +329,7 @@ func TestHandlerReply_ServeHTTP(t *testing.T) {
 	}
 }
 
-func TestHandlerReply_Validation(t *testing.T) {
+func TestHandlerSend_Validation(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -365,10 +346,8 @@ func TestHandlerReply_Validation(t *testing.T) {
 		{
 			name: "Invalid email format",
 			requestBody: Request{
-				RootMessageID: 100,
-				Topic:         "Re: Test Topic",
-				Text:          "Test reply text",
-				ThreadRoot:    200,
+				Topic: "Test Topic",
+				Text:  "Test message text",
 				Receivers: []Receiver{
 					{Email: "invalid-email"},
 				},
@@ -378,10 +357,8 @@ func TestHandlerReply_Validation(t *testing.T) {
 		{
 			name: "Duplicate receivers",
 			requestBody: Request{
-				RootMessageID: 100,
-				Topic:         "Re: Test Topic",
-				Text:          "Test reply text",
-				ThreadRoot:    200,
+				Topic: "Test Topic",
+				Text:  "Test message text",
 				Receivers: []Receiver{
 					{Email: "receiver@example.com"},
 					{Email: "receiver@example.com"},
@@ -392,10 +369,8 @@ func TestHandlerReply_Validation(t *testing.T) {
 		{
 			name: "Topic too long",
 			requestBody: Request{
-				RootMessageID: 100,
-				Topic:         string(make([]byte, 256)),
-				Text:          "Test reply text",
-				ThreadRoot:    200,
+				Topic: string(make([]byte, 256)),
+				Text:  "Test message text",
 				Receivers: []Receiver{
 					{Email: "receiver@example.com"},
 				},
@@ -405,13 +380,23 @@ func TestHandlerReply_Validation(t *testing.T) {
 		{
 			name: "Text too long",
 			requestBody: Request{
-				RootMessageID: 100,
-				Topic:         "Re: Test Topic",
-				Text:          string(make([]byte, 10001)),
-				ThreadRoot:    200,
+				Topic: "Test Topic",
+				Text:  string(make([]byte, 10001)),
 				Receivers: []Receiver{
 					{Email: "receiver@example.com"},
 				},
+			},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "Too many files",
+			requestBody: Request{
+				Topic: "Test Topic",
+				Text:  "Test message text",
+				Receivers: []Receiver{
+					{Email: "receiver@example.com"},
+				},
+				Files: make([]File, 21),
 			},
 			expectedStatus: http.StatusBadRequest,
 		},
@@ -421,7 +406,7 @@ func TestHandlerReply_Validation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			token := createTestToken(secret, 1)
 			body, _ := json.Marshal(tt.requestBody)
-			req := httptest.NewRequest("POST", "/messages/reply", bytes.NewReader(body))
+			req := httptest.NewRequest("POST", "/messages/send", bytes.NewReader(body))
 			req.AddCookie(&http.Cookie{
 				Name:  "access_token",
 				Value: token,
@@ -438,7 +423,7 @@ func TestHandlerReply_Validation(t *testing.T) {
 	}
 }
 
-func TestHandlerReply_OriginalText(t *testing.T) {
+func TestHandlerSend_OriginalText(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -448,29 +433,30 @@ func TestHandlerReply_OriginalText(t *testing.T) {
 	handler := New(mockMessageUsecase, secret)
 
 	t.Run("POST - Original text preserved", func(t *testing.T) {
-		originalTopic := "Re: Important <meeting> & \"discussion\""
-		originalText := "Let's discuss: 5 > 3 & 2 < 10"
+		originalTopic := "Meeting about <important> & \"urgent\" matters"
+		originalText := "Don't forget: 1 < 2 & 3 > 1"
 
 		mockMessageUsecase.EXPECT().
 			SaveMessage(gomock.Any(), "receiver@example.com", int64(1),
 				originalTopic, originalText).
-			Return(int64(300), nil)
+			Return(int64(100), nil)
 		mockMessageUsecase.EXPECT().
-			SaveThreadIdToMessage(gomock.Any(), int64(300), int64(200)).
+			SaveThread(gomock.Any(), int64(100)).
+			Return(int64(200), nil)
+		mockMessageUsecase.EXPECT().
+			SaveThreadIdToMessage(gomock.Any(), int64(100), int64(200)).
 			Return(nil)
 
 		token := createTestToken(secret, 1)
 		body, _ := json.Marshal(Request{
-			RootMessageID: 100,
-			Topic:         originalTopic,
-			Text:          originalText,
-			ThreadRoot:    200,
+			Topic: originalTopic,
+			Text:  originalText,
 			Receivers: []Receiver{
 				{Email: "receiver@example.com"},
 			},
 			Files: []File{},
 		})
-		req := httptest.NewRequest("POST", "/messages/reply", bytes.NewReader(body))
+		req := httptest.NewRequest("POST", "/messages/send", bytes.NewReader(body))
 		req.AddCookie(&http.Cookie{
 			Name:  "access_token",
 			Value: token,
@@ -481,51 +467,6 @@ func TestHandlerReply_OriginalText(t *testing.T) {
 
 		if rr.Code != http.StatusOK {
 			t.Errorf("Expected status %d, got %d. Body: %s", http.StatusOK, rr.Code, rr.Body.String())
-		}
-	})
-}
-
-func TestHandlerReply_ThreadRoot_Handling(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockMessageUsecase := mocks.NewMockMessageUsecase(ctrl)
-	secret := []byte("test-secret")
-
-	handler := New(mockMessageUsecase, secret)
-
-	t.Run("POST - Correct ThreadRoot passed to SaveThreadIdToMessage", func(t *testing.T) {
-		threadRoot := int64(999)
-
-		mockMessageUsecase.EXPECT().
-			SaveMessage(gomock.Any(), "receiver@example.com", int64(1), "Re: Test", "Test reply").
-			Return(int64(300), nil)
-		mockMessageUsecase.EXPECT().
-			SaveThreadIdToMessage(gomock.Any(), int64(300), threadRoot).
-			Return(nil)
-
-		token := createTestToken(secret, 1)
-		body, _ := json.Marshal(Request{
-			RootMessageID: 100,
-			Topic:         "Re: Test",
-			Text:          "Test reply",
-			ThreadRoot:    threadRoot,
-			Receivers: []Receiver{
-				{Email: "receiver@example.com"},
-			},
-			Files: []File{},
-		})
-		req := httptest.NewRequest("POST", "/messages/reply", bytes.NewReader(body))
-		req.AddCookie(&http.Cookie{
-			Name:  "access_token",
-			Value: token,
-		})
-
-		rr := httptest.NewRecorder()
-		handler.ServeHTTP(rr, req)
-
-		if rr.Code != http.StatusOK {
-			t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
 		}
 	})
 }
