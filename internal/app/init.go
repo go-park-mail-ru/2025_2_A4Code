@@ -14,7 +14,6 @@ import (
 	profilepage "2025_2_a4code/internal/http-server/handlers/user/profile-page"
 	"2025_2_a4code/internal/http-server/handlers/user/settings"
 	uploadavatar "2025_2_a4code/internal/http-server/handlers/user/upload/upload-avatar"
-	uploadfile "2025_2_a4code/internal/http-server/handlers/user/upload/upload-file"
 	"2025_2_a4code/internal/http-server/middleware/cors"
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	e "2025_2_a4code/internal/lib/wrapper"
@@ -42,10 +41,9 @@ import (
 )
 
 const (
-	FileUploadPath = "./files" // TODO: в дальнейшем будет минио
-	envLocal       = "local"
-	envDev         = "dev"
-	envProd        = "prod"
+	envLocal = "local"
+	envDev   = "dev"
+	envProd  = "prod"
 )
 
 type Storage struct {
@@ -111,7 +109,6 @@ func Init() {
 	profileHandler := profilepage.New(profileUCase, avatarUCase, SECRET)
 	messagePageHandler := messagepage.New(messageUCase, avatarUCase, SECRET)
 	sendMessageHandler := send.New(messageUCase, SECRET)
-	uploadFileHandler, err := uploadfile.New(FileUploadPath)
 	settingsHandler := settings.New(profileUCase, SECRET)
 	replyHandler := reply.New(messageUCase, SECRET)
 	uploadAvatarHandler := uploadavatar.New(avatarUCase, profileUCase, SECRET)
@@ -131,7 +128,6 @@ func Init() {
 	http.Handle("/user/profile", loggerMiddleware(corsMiddleware(http.HandlerFunc(profileHandler.ServeHTTP))))
 	http.Handle("/messages/{message_id}", loggerMiddleware(corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP))))
 	http.Handle("/messages/send", loggerMiddleware(corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP))))
-	http.Handle("/user/upload/file", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
 	http.Handle("/user/settings", loggerMiddleware(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
 	http.Handle("/messages/reply", loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
 	http.Handle("/user/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHandler.ServeHTTP))))

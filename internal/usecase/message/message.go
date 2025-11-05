@@ -86,6 +86,21 @@ func (uc *MessageUcase) GetMessagesInfoWithPagination(ctx context.Context, profi
 	}, nil
 }
 
+func (uc *MessageUcase) GetSentMessagesInfoWithPagination(ctx context.Context, profileID int64) (domain.Messages, error) {
+	const op = "usecase.message.GetSentMessagesInfoWithPagination"
+
+	messageTotal, messageUnread, err := uc.repo.GetSentMessagesStats(ctx, profileID)
+	if err != nil {
+		return domain.Messages{}, e.Wrap(op, err)
+	}
+
+	return domain.Messages{
+		MessageTotal:  messageTotal,
+		MessageUnread: messageUnread,
+		Messages:      nil,
+	}, nil
+}
+
 func (uc *MessageUcase) FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error) {
 	return uc.repo.FindFullByMessageID(ctx, messageID, profileID)
 }
@@ -124,19 +139,4 @@ func (uc *MessageUcase) FindSentMessagesByProfileIDWithKeysetPagination(ctx cont
 
 func (uc *MessageUcase) GetSentMessagesStats(ctx context.Context, profileID int64) (int, int, error) {
 	return uc.repo.GetSentMessagesStats(ctx, profileID)
-}
-
-func (uc *MessageUcase) GetSentMessagesInfoWithPagination(ctx context.Context, profileID int64) (domain.Messages, error) {
-	const op = "usecase.message.GetSentMessagesInfoWithPagination"
-
-	messageTotal, messageUnread, err := uc.repo.GetSentMessagesStats(ctx, profileID)
-	if err != nil {
-		return domain.Messages{}, e.Wrap(op, err)
-	}
-
-	return domain.Messages{
-		MessageTotal:  messageTotal,
-		MessageUnread: messageUnread,
-		Messages:      nil,
-	}, nil
 }

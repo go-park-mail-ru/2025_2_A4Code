@@ -12,7 +12,7 @@ type Response struct {
 }
 
 func SendErrorResponse(w http.ResponseWriter, errorMsg string, statusCode int) {
-
+	w.Header().Set("Content-Type", "application/json")
 	response := Response{
 		Status:  statusCode,
 		Message: errorMsg,
