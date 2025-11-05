@@ -1,5 +1,7 @@
 package inbox
 
+//go:generate mockgen -source=$GOFILE -destination=./mocks/mock_inbox_usecase.go -package=mocks
+
 import (
 	"2025_2_a4code/internal/domain"
 	"2025_2_a4code/internal/http-server/middleware/logger"

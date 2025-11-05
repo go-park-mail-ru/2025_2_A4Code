@@ -11,7 +11,6 @@ import (
 	"2025_2_a4code/internal/http-server/handlers/messages/reply"
 	"2025_2_a4code/internal/http-server/handlers/messages/send"
 	"2025_2_a4code/internal/http-server/handlers/messages/sent"
-	"2025_2_a4code/internal/http-server/handlers/messages/threads"
 	profilepage "2025_2_a4code/internal/http-server/handlers/user/profile-page"
 	"2025_2_a4code/internal/http-server/handlers/user/settings"
 	uploadavatar "2025_2_a4code/internal/http-server/handlers/user/upload/upload-avatar"
@@ -112,7 +111,6 @@ func Init() {
 	profileHandler := profilepage.New(profileUCase, avatarUCase, SECRET)
 	messagePageHandler := messagepage.New(messageUCase, avatarUCase, SECRET)
 	sendMessageHandler := send.New(messageUCase, SECRET)
-	threadsHandler := threads.New(messageUCase, SECRET)
 	uploadFileHandler, err := uploadfile.New(FileUploadPath)
 	settingsHandler := settings.New(profileUCase, SECRET)
 	replyHandler := reply.New(messageUCase, SECRET)
@@ -133,7 +131,6 @@ func Init() {
 	http.Handle("/user/profile", loggerMiddleware(corsMiddleware(http.HandlerFunc(profileHandler.ServeHTTP))))
 	http.Handle("/messages/{message_id}", loggerMiddleware(corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP))))
 	http.Handle("/messages/send", loggerMiddleware(corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP))))
-	http.Handle("/messages/threads", loggerMiddleware(corsMiddleware(http.HandlerFunc(threadsHandler.ServeHTTP))))
 	http.Handle("/user/upload/file", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
 	http.Handle("/user/settings", loggerMiddleware(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
 	http.Handle("/messages/reply", loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
