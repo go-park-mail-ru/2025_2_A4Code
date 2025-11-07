@@ -96,7 +96,16 @@ func Init() {
 	// Создание репозиториев
 	messageRepository := messagerepository.New(connection)
 	profileRepository := profilerepository.New(connection)
-	avatarRepository := avatarrepository.New(client, cfg.MinioConfig.BucketName)
+	avatarRepository, err := avatarrepository.New(
+		client,
+		cfg.MinioConfig.BucketName,
+		cfg.MinioConfig.PublicEndpoint,
+		cfg.MinioConfig.PublicUseSSL,
+	)
+	if err != nil {
+		log.Error("error configuring avatar repository: " + err.Error())
+		os.Exit(1)
+	}
 
 	// Создание юзкейсов
 	messageUCase := messageUcase.New(messageRepository)
