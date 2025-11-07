@@ -1,0 +1,35 @@
+package domain
+
+import "time"
+
+type Message struct {
+	ID       string    `json:"id"`
+	Topic    string    `json:"topic"`
+	Snippet  string    `json:"snippet"`
+	Datetime time.Time `json:"datetime"`
+	IsRead   bool      `json:"is_read"`
+	Sender
+}
+
+type FullMessage struct {
+	ID         string    `json:"id"`
+	Topic      string    `json:"topic"`
+	Text       string    `json:"text"`
+	Datetime   time.Time `json:"datetime"`
+	ThreadRoot string    `json:"thread_root"`
+	Folder
+	Sender
+	Files
+}
+
+type Messages struct {
+	MessageTotal  int         `json:"message_total"`
+	MessageUnread int         `json:"message_unread"`
+	Messages      interface{} `json:"messages"`
+}
+
+type PaginatedMessages struct {
+	NextCursor string `json:"next_cursor"`
+	HasNext    bool   `json:"has_next"`
+	Messages
+}
