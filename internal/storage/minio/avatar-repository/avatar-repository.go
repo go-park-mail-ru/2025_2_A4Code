@@ -10,14 +10,16 @@ import (
 )
 
 type AvatarRepository struct {
-	Client     *minio.Client
-	BucketName string
+	Client              *minio.Client
+	publicPresignClient *minio.Client
+	BucketName          string
 }
 
-func New(client *minio.Client, bucketName string) *AvatarRepository {
+func New(client *minio.Client, publicClient *minio.Client, bucketName string) *AvatarRepository {
 	return &AvatarRepository{
-		Client:     client,
-		BucketName: bucketName,
+		Client:              client,
+		publicPresignClient: publicClient,
+		BucketName:          bucketName,
 	}
 }
 
@@ -31,8 +33,12 @@ func (repo *AvatarRepository) UploadFile(ctx context.Context, objectName string,
 }
 
 func (repo *AvatarRepository) GetAvatarPresignedURL(ctx context.Context, objectName string, duration time.Duration) (*url.URL, error) {
+	client := repo.Client
+	if repo.publicPresignClient != nil {
+		client = repo.publicPresignClient
+	}
 
-	presignedURL, err := repo.Client.PresignedGetObject(ctx, repo.BucketName, objectName, duration, nil)
+	presignedURL, err := client.PresignedGetObject(ctx, repo.BucketName, objectName, duration, nil)
 	if err != nil {
 		return nil, err
 	}

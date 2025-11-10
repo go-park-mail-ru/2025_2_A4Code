@@ -67,8 +67,8 @@ func (h *HandlerRefresh) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   15 * 60,
 		HttpOnly: true,
 		Path:     "/",
-		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
 	}
 	http.SetCookie(w, accessCookie)
 
