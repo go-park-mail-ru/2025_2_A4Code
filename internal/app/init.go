@@ -11,11 +11,9 @@ import (
 	"2025_2_a4code/internal/http-server/handlers/messages/reply"
 	"2025_2_a4code/internal/http-server/handlers/messages/send"
 	"2025_2_a4code/internal/http-server/handlers/messages/sent"
-	"2025_2_a4code/internal/http-server/handlers/messages/threads"
 	profilepage "2025_2_a4code/internal/http-server/handlers/user/profile-page"
 	"2025_2_a4code/internal/http-server/handlers/user/settings"
 	uploadavatar "2025_2_a4code/internal/http-server/handlers/user/upload/upload-avatar"
-	uploadfile "2025_2_a4code/internal/http-server/handlers/user/upload/upload-file"
 	"2025_2_a4code/internal/http-server/middleware/cors"
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	e "2025_2_a4code/internal/lib/wrapper"
@@ -43,10 +41,9 @@ import (
 )
 
 const (
-	FileUploadPath = "./files" // TODO: в дальнейшем будет минио
-	envLocal       = "local"
-	envDev         = "dev"
-	envProd        = "prod"
+	envLocal = "local"
+	envDev   = "dev"
+	envProd  = "prod"
 )
 
 type Storage struct {
@@ -92,11 +89,22 @@ func Init() {
 	if err != nil {
 		log.Error("error checking bucket: " + err.Error())
 	}
+	var publicMinioClient *minio.Client
+	if cfg.MinioConfig.PublicEndpoint != "" {
+		publicMinioClient, err = minio.New(cfg.MinioConfig.PublicEndpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(cfg.MinioConfig.User, cfg.MinioConfig.Password, ""),
+			Secure: cfg.MinioConfig.PublicUseSSL,
+		})
+		if err != nil {
+			log.Error("error configuring public minio endpoint: " + err.Error())
+			os.Exit(1)
+		}
+	}
 
 	// Создание репозиториев
 	messageRepository := messagerepository.New(connection)
 	profileRepository := profilerepository.New(connection)
-	avatarRepository := avatarrepository.New(client, cfg.MinioConfig.BucketName)
+	avatarRepository := avatarrepository.New(client, publicMinioClient, cfg.MinioConfig.BucketName)
 
 	// Создание юзкейсов
 	messageUCase := messageUcase.New(messageRepository)
@@ -112,8 +120,6 @@ func Init() {
 	profileHandler := profilepage.New(profileUCase, avatarUCase, SECRET)
 	messagePageHandler := messagepage.New(messageUCase, avatarUCase, SECRET)
 	sendMessageHandler := send.New(messageUCase, SECRET)
-	threadsHandler := threads.New(messageUCase, SECRET)
-	uploadFileHandler, err := uploadfile.New(FileUploadPath)
 	settingsHandler := settings.New(profileUCase, SECRET)
 	replyHandler := reply.New(messageUCase, SECRET)
 	uploadAvatarHandler := uploadavatar.New(avatarUCase, profileUCase, SECRET)
@@ -133,17 +139,15 @@ func Init() {
 	http.Handle("/user/profile", loggerMiddleware(corsMiddleware(http.HandlerFunc(profileHandler.ServeHTTP))))
 	http.Handle("/messages/{message_id}", loggerMiddleware(corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP))))
 	http.Handle("/messages/send", loggerMiddleware(corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP))))
-	http.Handle("/messages/threads", loggerMiddleware(corsMiddleware(http.HandlerFunc(threadsHandler.ServeHTTP))))
-	http.Handle("/user/upload/file", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
 	http.Handle("/user/settings", loggerMiddleware(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
 	http.Handle("/messages/reply", loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
 	http.Handle("/user/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHandler.ServeHTTP))))
 	http.Handle("/messages/sent", loggerMiddleware(corsMiddleware(http.HandlerFunc(sentHandler.ServeHTTP))))
 
-	//err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
+	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
 	// Для локального тестирования
-	err = http.ListenAndServe(":5000", nil)
+	//err = http.ListenAndServe(":8000", nil)
 
 	slog.Info("Server has started working...")
 
