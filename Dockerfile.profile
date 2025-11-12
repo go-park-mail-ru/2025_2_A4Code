@@ -4,15 +4,19 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/a4mail
+
+# Собираем только user сервис
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o user-service ./cmd/user
 
 FROM alpine:latest
 RUN apk add --no-cache ca-certificates tzdata && \
     addgroup -S app && adduser -S app -G app
 WORKDIR /app
-COPY --from=builder --chown=app:app /app/main .
+
+# Копируем только нужные файлы
+COPY --from=builder --chown=app:app /app/user-service .
 COPY --from=builder --chown=app:app /app/config ./config
 COPY --from=builder --chown=app:app /app/.env ./
-COPY --from=builder --chown=app:app /app/db ./db
+
 USER app
-CMD ["./main"]
+CMD ["./user-service"]
