@@ -15,9 +15,11 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Host   string `yaml:"host"`
-	Port   string `yaml:"port"`
-	Secret string `yaml:"secret"`
+	Host         string `yaml:"host"`
+	AuthPort     string `yaml:"auth_port"`
+	MessagesPort string `yaml:"messages_port"`
+	ProdilePort  string `yaml:"profile_port"`
+	Secret       string `yaml:"secret"`
 }
 
 type DBConfig struct {

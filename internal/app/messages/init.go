@@ -104,7 +104,7 @@ func Init() {
 	// настройка corsMiddlewares
 	corsMiddleware := cors.New()
 
-	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.Port))
+	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.MessagesPort))
 
 	// роутинг + настройка middleware
 	http.Handle("/messages/inbox", loggerMiddleware(corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP))))
@@ -114,7 +114,7 @@ func Init() {
 	// http.Handle("/upload/file", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
 	http.Handle("/messages/reply", loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
 
-	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
+	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.MessagesPort, nil)
 
 	// Для локального тестирования
 	//err = http.ListenAndServe(":8082", nil)

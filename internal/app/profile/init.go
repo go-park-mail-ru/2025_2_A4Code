@@ -94,14 +94,14 @@ func Init() {
 	// настройка corsMiddlewares
 	corsMiddleware := cors.New()
 
-	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.Port))
+	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.ProdilePort))
 
 	// роутинг + настройка middleware
 	http.Handle("/user/profile", loggerMiddleware(corsMiddleware(http.HandlerFunc(profileHandler.ServeHTTP))))
 	http.Handle("/user/settings", loggerMiddleware(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
 	http.Handle("/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHanler.ServeHTTP))))
 
-	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
+	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.ProdilePort, nil)
 
 	// Для локального тестирования
 	//err = http.ListenAndServe(":8083", nil)

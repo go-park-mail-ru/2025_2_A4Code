@@ -67,7 +67,7 @@ func Init() {
 	// настройка corsMiddlewares
 	corsMiddleware := cors.New()
 
-	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.Port))
+	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.AuthPort))
 
 	// роутинг + настройка middleware
 	http.Handle("/auth/login", loggerMiddleware(corsMiddleware(http.HandlerFunc(loginHandler.ServeHTTP))))
@@ -75,7 +75,7 @@ func Init() {
 	http.Handle("/auth/refresh", loggerMiddleware(corsMiddleware(http.HandlerFunc(refreshHandler.ServeHTTP))))
 	http.Handle("/auth/logout", loggerMiddleware(corsMiddleware(http.HandlerFunc(logoutHandler.ServeHTTP))))
 
-	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
+	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.AuthPort, nil)
 
 	// Для локального тестирования
 	//err = http.ListenAndServe(":8081", nil)
