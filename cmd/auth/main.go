@@ -1,9 +1,9 @@
 package main
 
 import (
-	auth "2025_2_a4code/internal/app/auth"
+	"2025_2_a4code/auth-service/app"
 )
 
 func main() {
-	auth.Init()
+	app.AuthInit()
 }

@@ -17,6 +17,54 @@ var (
 	ErrorWrongTokenType  = errors.New("wrong token type")
 )
 
+func CheckSessionString(tokenString string, SECRET []byte, expectedType string) (jwt.MapClaims, error) {
+	const op = "session.CheckSessionString"
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected sign method: %v", token.Header["alg"])
+		}
+		return SECRET, nil
+	})
+
+	if err != nil || !token.Valid {
+		return jwt.MapClaims{}, ErrorInvalidToken
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return jwt.MapClaims{}, ErrorSessionNotFound
+	}
+
+	if exp, ok := claims["exp"].(float64); ok {
+		if time.Now().Unix() > int64(exp) {
+			return jwt.MapClaims{}, ErrorTokenExpired
+		}
+	}
+
+	if expectedType != "" {
+		if tokenType, ok := claims["type"].(string); !ok || tokenType != expectedType {
+			return jwt.MapClaims{}, ErrorWrongTokenType
+		}
+	}
+
+	return claims, nil
+}
+
+func GetProfileIDFromTokenString(tokenString string, SECRET []byte, expectedType string) (int64, error) {
+	claims, err := CheckSessionString(tokenString, SECRET, expectedType)
+	if err != nil {
+		return -1, err
+	}
+
+	id, ok := claims["user_id"].(float64)
+	if !ok {
+		return -1, ErrorIdNotFound
+	}
+
+	return int64(id), nil
+}
+
 func CheckSessionWithToken(r *http.Request, SECRET []byte, cookieName, expectedType string) (jwt.MapClaims, error) {
 	const op = "session.CheckSessionWithToken"
 

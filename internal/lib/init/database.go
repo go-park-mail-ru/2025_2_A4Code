@@ -1,4 +1,4 @@
-package init_database
+package init
 
 import (
 	"2025_2_a4code/internal/config"

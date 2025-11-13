@@ -7,8 +7,7 @@ import (
 	uploadavatar "2025_2_a4code/internal/http-server/handlers/user/upload/upload-avatar"
 	"2025_2_a4code/internal/http-server/middleware/cors"
 	"2025_2_a4code/internal/http-server/middleware/logger"
-	init_database "2025_2_a4code/internal/pkg/init-database"
-	init_logger "2025_2_a4code/internal/pkg/init-logger"
+	init2 "2025_2_a4code/internal/lib/init"
 	avatarrepository "2025_2_a4code/internal/storage/minio/avatar-repository"
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	avatarUcase "2025_2_a4code/internal/usecase/avatar"
@@ -43,13 +42,13 @@ func Init() {
 	var SECRET = []byte(cfg.AppConfig.Secret)
 
 	// Создание логгера
-	log := init_logger.SetupLogger(envLocal)
+	log := init2.SetupLogger(envLocal)
 	slog.SetDefault(log)
 	log.Debug("profile: debug messages are enabled")
 	loggerMiddleware := logger.New(log)
 
 	// Установка соединения с бд
-	connection, err := init_database.NewDbConnection(cfg.DBConfig)
+	connection, err := init2.NewDbConnection(cfg.DBConfig)
 	if err != nil {
 		log.Error("error connecting to database")
 		os.Exit(1)
@@ -94,14 +93,14 @@ func Init() {
 	// настройка corsMiddlewares
 	corsMiddleware := cors.New()
 
-	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.ProdilePort))
+	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.ProfilePort))
 
 	// роутинг + настройка middleware
 	http.Handle("/user/profile", loggerMiddleware(corsMiddleware(http.HandlerFunc(profileHandler.ServeHTTP))))
 	http.Handle("/user/settings", loggerMiddleware(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
 	http.Handle("/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHanler.ServeHTTP))))
 
-	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.ProdilePort, nil)
+	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.ProfilePort, nil)
 
 	// Для локального тестирования
 	//err = http.ListenAndServe(":8083", nil)

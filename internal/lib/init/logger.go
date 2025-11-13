@@ -1,4 +1,4 @@
-package init_logger
+package init
 
 import (
 	"log/slog"

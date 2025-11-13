@@ -6,13 +6,11 @@ import (
 	messagepage "2025_2_a4code/internal/http-server/handlers/messages/message-page"
 	"2025_2_a4code/internal/http-server/handlers/messages/reply"
 	"2025_2_a4code/internal/http-server/handlers/messages/send"
-
+	init2 "2025_2_a4code/internal/lib/init"
 	// "2025_2_a4code/internal/http-server/handlers/messages/threads"
 	// uploadfile "2025_2_a4code/internal/http-server/handlers/user/upload/upload-file"
 	"2025_2_a4code/internal/http-server/middleware/cors"
 	"2025_2_a4code/internal/http-server/middleware/logger"
-	init_database "2025_2_a4code/internal/pkg/init-database"
-	init_logger "2025_2_a4code/internal/pkg/init-logger"
 	avatarrepository "2025_2_a4code/internal/storage/minio/avatar-repository"
 	messagerepository "2025_2_a4code/internal/storage/postgres/message-repository"
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
@@ -49,13 +47,13 @@ func Init() {
 	var SECRET = []byte(cfg.AppConfig.Secret)
 
 	// Создание логгера
-	log := init_logger.SetupLogger(envLocal)
+	log := init2.SetupLogger(envLocal)
 	slog.SetDefault(log)
 	log.Debug("messages: debug messages are enabled")
 	loggerMiddleware := logger.New(log)
 
 	// Установка соединения с бд
-	connection, err := init_database.NewDbConnection(cfg.DBConfig)
+	connection, err := init2.NewDbConnection(cfg.DBConfig)
 	if err != nil {
 		log.Error("error connecting to database")
 		os.Exit(1)

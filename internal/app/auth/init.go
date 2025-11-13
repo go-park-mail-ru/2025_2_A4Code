@@ -8,8 +8,7 @@ import (
 	"2025_2_a4code/internal/http-server/handlers/auth/signup"
 	"2025_2_a4code/internal/http-server/middleware/cors"
 	"2025_2_a4code/internal/http-server/middleware/logger"
-	init_database "2025_2_a4code/internal/pkg/init-database"
-	init_logger "2025_2_a4code/internal/pkg/init-logger"
+	init2 "2025_2_a4code/internal/lib/init"
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	profileUcase "2025_2_a4code/internal/usecase/profile"
 	"log/slog"
@@ -37,20 +36,20 @@ func Init() {
 	var SECRET = []byte(cfg.AppConfig.Secret)
 
 	// Создание логгера
-	log := init_logger.SetupLogger(envLocal)
+	log := init2.SetupLogger(envLocal)
 	slog.SetDefault(log)
 	log.Debug("auth: debug messages are enabled")
 	loggerMiddleware := logger.New(log)
 
 	// Установка соединения с бд
-	connection, err := init_database.NewDbConnection(cfg.DBConfig)
+	connection, err := init2.NewDbConnection(cfg.DBConfig)
 	if err != nil {
 		log.Error("error connecting to database")
 		os.Exit(1)
 	}
 
 	// Миграции
-	err = init_database.RunMigrations(connection, "file://./db/migrations")
+	err = init2.RunMigrations(connection, "file://./db/migrations")
 	if err != nil {
 		log.Error(err.Error())
 	}
