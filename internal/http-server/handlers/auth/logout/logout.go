@@ -34,7 +34,7 @@ func (h *HandlerLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteNoneMode,
 	})
 
 	http.SetCookie(w, &http.Cookie{
@@ -44,7 +44,7 @@ func (h *HandlerLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteNoneMode,
 	})
 
 	response := Response{
