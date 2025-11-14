@@ -7,6 +7,7 @@ import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -37,21 +38,18 @@ func NewServer(cfg *config.AppConfig) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	authClient := authproto.NewAuthServiceClient(conn1)
 
 	conn2, err := grpc.NewClient(cfg.ProfilePort, opts...)
 	if err != nil {
 		return nil, err
 	}
-
 	profileClient := profileproto.NewProfileServiceClient(conn2)
 
 	conn3, err := grpc.NewClient(cfg.MessagesPort, opts...)
 	if err != nil {
 		return nil, err
 	}
-
 	messagesClient := messagesproto.NewMessagesServiceClient(conn3)
 
 	return &Server{
@@ -64,32 +62,52 @@ func NewServer(cfg *config.AppConfig) (*Server, error) {
 
 func (s *Server) Start(ctx context.Context) error {
 	log := logger.GetLogger(ctx)
+	slog.SetDefault(log)
 
 	// Создаем роутер
-	mainMux := http.NewServeMux()
+	mux := http.NewServeMux()
 
-	// Роутинг
-	mainMux.Handle("POST /auth/login", http.HandlerFunc(s.loginHandler))
-	mainMux.Handle("POST /auth/signup", http.HandlerFunc(s.signupHandler))
-	mainMux.Handle("POST /auth/refresh", http.HandlerFunc(s.refreshHandler))
-	mainMux.Handle("POST /auth/logout", http.HandlerFunc(s.logoutHandler))
+	mux.Handle("POST /auth/login", http.HandlerFunc(s.loginHandler))
+	mux.Handle("POST /auth/signup", http.HandlerFunc(s.signupHandler))
 
-	mainMux.Handle("GET /user/profile", http.HandlerFunc(s.getProfileHandler))
-	mainMux.Handle("PUT /user/profile", http.HandlerFunc(s.updateProfileHandler))
-	mainMux.Handle("GET /user/settings", http.HandlerFunc(s.settingsHandler))
-	mainMux.Handle("POST /user/upload/avatar", http.HandlerFunc(s.uploadAvatarHandler))
+	// Роутер с csrf middleware
+	csrfMux := http.NewServeMux()
 
-	mainMux.Handle("GET /messages/inbox", http.HandlerFunc(s.inboxHandler))
-	mainMux.Handle("GET /messages/{message_id}", http.HandlerFunc(s.messagePageHandler))
-	mainMux.Handle("POST /messages/reply", http.HandlerFunc(s.replyHandler))
-	mainMux.Handle("POST /messages/send", http.HandlerFunc(s.sendHandler))
-	mainMux.Handle("GET /messages/sent", http.HandlerFunc(s.sentHandler))
+	csrfMux.Handle("POST /auth/refresh", http.HandlerFunc(s.refreshHandler))
+	csrfMux.Handle("POST /auth/logout", http.HandlerFunc(s.logoutHandler))
 
-	// подключение middleware
-	var handler http.Handler = mainMux
+	csrfMux.Handle("GET /user/profile", http.HandlerFunc(s.getProfileHandler))
+	csrfMux.Handle("PUT /user/profile", http.HandlerFunc(s.updateProfileHandler))
+	csrfMux.Handle("GET /user/settings", http.HandlerFunc(s.settingsHandler))
+	csrfMux.Handle("POST /user/upload/avatar", http.HandlerFunc(s.uploadAvatarHandler))
+
+	csrfMux.Handle("GET /messages/inbox", http.HandlerFunc(s.inboxHandler))
+	csrfMux.Handle("GET /messages/{message_id}", http.HandlerFunc(s.messagePageHandler))
+	csrfMux.Handle("POST /messages/reply", http.HandlerFunc(s.replyHandler))
+	csrfMux.Handle("POST /messages/send", http.HandlerFunc(s.sendHandler))
+	csrfMux.Handle("GET /messages/sent", http.HandlerFunc(s.sentHandler))
+
+	// csrf middleware
+	csrfProtectedHandler := csrfcheck.New()(csrfMux)
+
+	mux.Handle("POST /auth/refresh", csrfProtectedHandler)
+	mux.Handle("POST /auth/logout", csrfProtectedHandler)
+
+	mux.Handle("GET /user/profile", csrfProtectedHandler)
+	mux.Handle("PUT /user/profile", csrfProtectedHandler)
+	mux.Handle("GET /user/settings", csrfProtectedHandler)
+	mux.Handle("POST /user/upload/avatar", csrfProtectedHandler)
+
+	mux.Handle("GET /messages/inbox", csrfProtectedHandler)
+	mux.Handle("GET /messages/{message_id}", csrfProtectedHandler)
+	mux.Handle("POST /messages/reply", csrfProtectedHandler)
+	mux.Handle("POST /messages/send", csrfProtectedHandler)
+	mux.Handle("GET /messages/sent", csrfProtectedHandler)
+
+	// logger и cors middleware
+	var handler http.Handler = mux
 	handler = logger.New(log)(handler)
 	handler = cors.New()(handler)
-	handler = csrfcheck.New()(handler)
 
 	// Настройка сервера
 	s.httpServer = &http.Server{
