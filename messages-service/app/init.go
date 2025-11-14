@@ -2,30 +2,28 @@ package app
 
 import (
 	"2025_2_a4code/internal/config"
-	"2025_2_a4code/internal/http-server/handlers/messages/inbox"
-	messagepage "2025_2_a4code/internal/http-server/handlers/messages/message-page"
-	"2025_2_a4code/internal/http-server/handlers/messages/reply"
-	"2025_2_a4code/internal/http-server/handlers/messages/send"
 	init2 "2025_2_a4code/internal/lib/init"
+	messagesservice "2025_2_a4code/messages-service"
+	"net"
 
 	// "2025_2_a4code/internal/http-server/handlers/messages/threads"
 	// uploadfile "2025_2_a4code/internal/http-server/handlers/user/upload/upload-file"
-	"2025_2_a4code/internal/http-server/middleware/cors"
-	"2025_2_a4code/internal/http-server/middleware/logger"
+
 	avatarrepository "2025_2_a4code/internal/storage/minio/avatar-repository"
 	messagerepository "2025_2_a4code/internal/storage/postgres/message-repository"
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	avatarUcase "2025_2_a4code/internal/usecase/avatar"
 	messageUcase "2025_2_a4code/internal/usecase/message"
+	pb "2025_2_a4code/pkg/messagesproto"
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"time"
 
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v4/stdlib"
+	"google.golang.org/grpc"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -37,7 +35,7 @@ const (
 	envProd  = "prod"
 )
 
-func Init() {
+func MessagesInit() {
 	// Читаем конфиг
 	cfg, err := config.GetConfig()
 	if err != nil {
@@ -51,7 +49,6 @@ func Init() {
 	log := init2.SetupLogger(envLocal)
 	slog.SetDefault(log)
 	log.Debug("messages: debug messages are enabled")
-	loggerMiddleware := logger.New(log)
 
 	// Установка соединения с бд
 	connection, err := init2.NewDbConnection(cfg.DBConfig)
@@ -92,34 +89,23 @@ func Init() {
 	messageUCase := messageUcase.New(messageRepository)
 	avatarUCase := avatarUcase.New(avatarRepository, profileRepository)
 
-	// Создание хэндлеров
-	inboxHandler := inbox.New(messageUCase, avatarUCase, SECRET)
-	messagePageHandler := messagepage.New(messageUCase, avatarUCase, SECRET)
-	sendMessageHandler := send.New(messageUCase, SECRET)
-	// threadsHandler := threads.New(profileUCase, messageUCase, SECRET)
-	// uploadFileHandler, err := uploadfile.New(FileUploadPath)
-	replyHandler := reply.New(messageUCase, SECRET)
-
-	// настройка corsMiddlewares
-	corsMiddleware := cors.New()
-
-	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.MessagesPort))
-
-	// роутинг + настройка middleware
-	http.Handle("/messages/inbox", loggerMiddleware(corsMiddleware(http.HandlerFunc(inboxHandler.ServeHTTP))))
-	http.Handle("/messages/{message_id}", loggerMiddleware(corsMiddleware(http.HandlerFunc(messagePageHandler.ServeHTTP))))
-	http.Handle("/messages/send", loggerMiddleware(corsMiddleware(http.HandlerFunc(sendMessageHandler.ServeHTTP))))
-	// http.Handle("/messages/threads", loggerMiddleware(corsMiddleware(http.HandlerFunc(threadsHandler.ServeHTTP))))
-	// http.Handle("/upload/file", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadFileHandler.ServeHTTP))))
-	http.Handle("/messages/reply", loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
-
-	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.MessagesPort, nil)
-
-	// Для локального тестирования
-	//err = http.ListenAndServe(":8082", nil)
 	slog.Info("Messages microservice: server has started working...")
+
+	grpcServer := grpc.NewServer()
+	messagesService := messagesservice.New(messageUCase, avatarUCase, SECRET)
+	pb.RegisterMessagesServiceServer(grpcServer, messagesService)
+
+	lis, err := net.Listen("tcp", cfg.AppConfig.Host+":"+cfg.AppConfig.MessagesPort)
 	if err != nil {
-		panic(err)
+		log.Error("Failed to start server: " + err.Error())
+		os.Exit(1)
+	}
+
+	slog.Info("Messages microservice: server has started working...")
+
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Error("gRPC server failed: " + err.Error())
+		os.Exit(1)
 	}
 
 }

@@ -2,25 +2,24 @@ package app
 
 import (
 	"2025_2_a4code/internal/config"
-	profilepage "2025_2_a4code/internal/http-server/handlers/user/profile-page"
-	"2025_2_a4code/internal/http-server/handlers/user/settings"
-	uploadavatar "2025_2_a4code/internal/http-server/handlers/user/upload/upload-avatar"
-	"2025_2_a4code/internal/http-server/middleware/cors"
-	"2025_2_a4code/internal/http-server/middleware/logger"
 	init2 "2025_2_a4code/internal/lib/init"
 	avatarrepository "2025_2_a4code/internal/storage/minio/avatar-repository"
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	avatarUcase "2025_2_a4code/internal/usecase/avatar"
 	profileUcase "2025_2_a4code/internal/usecase/profile"
+	pb "2025_2_a4code/pkg/profileproto"
+	profileservice "2025_2_a4code/profile-service"
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
+	"net"
 	"os"
 	"time"
 
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v4/stdlib"
+	"google.golang.org/grpc"
+
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -31,7 +30,7 @@ const (
 	envProd  = "prod"
 )
 
-func Init() {
+func ProfileInit() {
 	// Читаем конфиг
 	cfg, err := config.GetConfig()
 	if err != nil {
@@ -45,7 +44,6 @@ func Init() {
 	log := init2.SetupLogger(envLocal)
 	slog.SetDefault(log)
 	log.Debug("profile: debug messages are enabled")
-	loggerMiddleware := logger.New(log)
 
 	// Установка соединения с бд
 	connection, err := init2.NewDbConnection(cfg.DBConfig)
@@ -85,28 +83,23 @@ func Init() {
 	profileUCase := profileUcase.New(profileRepository)
 	avatarUCase := avatarUcase.New(avatarRepository, profileRepository)
 
-	// Создание хэндлеров
-	profileHandler := profilepage.New(profileUCase, avatarUCase, SECRET)
-	settingsHandler := settings.New(profileUCase, SECRET)
-	uploadAvatarHanler := uploadavatar.New(avatarUCase, profileUCase, SECRET)
-
-	// настройка corsMiddlewares
-	corsMiddleware := cors.New()
-
 	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.ProfilePort))
 
-	// роутинг + настройка middleware
-	http.Handle("/user/profile", loggerMiddleware(corsMiddleware(http.HandlerFunc(profileHandler.ServeHTTP))))
-	http.Handle("/user/settings", loggerMiddleware(corsMiddleware(http.HandlerFunc(settingsHandler.ServeHTTP))))
-	http.Handle("/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHanler.ServeHTTP))))
+	grpcServer := grpc.NewServer()
+	profileService := profileservice.New(profileUCase, avatarUCase, SECRET)
+	pb.RegisterProfileServiceServer(grpcServer, profileService)
 
-	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.ProfilePort, nil)
-
-	// Для локального тестирования
-	//err = http.ListenAndServe(":8083", nil)
-	slog.Info("Profile microservice: server has started working...")
+	lis, err := net.Listen("tcp", cfg.AppConfig.Host+":"+cfg.AppConfig.ProfilePort)
 	if err != nil {
-		panic(err)
+		log.Error("Failed to start server: " + err.Error())
+		os.Exit(1)
+	}
+
+	log.Info("Profile microservice: server has started working...")
+
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Error("gRPC server failed: " + err.Error())
+		os.Exit(1)
 	}
 
 }

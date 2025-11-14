@@ -2,7 +2,7 @@ package app
 
 import (
 	"2025_2_a4code/internal/config"
-	"2025_2_a4code/internal/lib/init"
+	in "2025_2_a4code/internal/lib/init"
 	"context"
 	"log/slog"
 	"os"
@@ -21,7 +21,7 @@ const ( // TODO: или убрать в init_logger "2025_2_a4code/internal/pkg/
 func GatewayInit() {
 
 	// Создание логгера
-	log := init.SetupLogger(envLocal)
+	log := in.SetupLogger(envLocal)
 	slog.SetDefault(log)
 	log.Debug("auth: debug messages are enabled")
 	//loggerMiddleware := logger.New(log)
