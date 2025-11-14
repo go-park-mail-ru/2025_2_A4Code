@@ -111,7 +111,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Настройка сервера
 	s.httpServer = &http.Server{
-		Addr:         s.cfg.GatewayPort,
+		Addr:         ":" + s.cfg.GatewayPort,
 		Handler:      handler,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
@@ -126,8 +126,6 @@ func (s *Server) Start(ctx context.Context) error {
 
 	return nil
 }
-
-// Auth handlers
 
 func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 	var req authproto.LoginRequest

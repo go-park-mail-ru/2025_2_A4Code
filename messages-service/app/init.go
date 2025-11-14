@@ -2,7 +2,7 @@ package app
 
 import (
 	"2025_2_a4code/internal/config"
-	init2 "2025_2_a4code/internal/lib/init"
+	in "2025_2_a4code/internal/lib/init"
 	messagesservice "2025_2_a4code/messages-service"
 	"net"
 
@@ -46,12 +46,12 @@ func MessagesInit() {
 	var SECRET = []byte(cfg.AppConfig.Secret)
 
 	// Создание логгера
-	log := init2.SetupLogger(envLocal)
+	log := in.SetupLogger(envLocal)
 	slog.SetDefault(log)
 	log.Debug("messages: debug messages are enabled")
 
 	// Установка соединения с бд
-	connection, err := init2.NewDbConnection(cfg.DBConfig)
+	connection, err := in.NewDbConnection(cfg.DBConfig)
 	if err != nil {
 		log.Error("error connecting to database")
 		os.Exit(1)

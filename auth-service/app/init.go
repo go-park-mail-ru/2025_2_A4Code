@@ -39,9 +39,10 @@ func AuthInit() {
 	//loggerMiddleware := logger.New(log)
 
 	// Установка соединения с бд
+	log.Info(cfg.DBConfig.Host + ":" + cfg.DBConfig.Port)
 	connection, err := in.NewDbConnection(cfg.DBConfig)
 	if err != nil {
-		log.Error("error connecting to database")
+		log.Error("error connecting to database" + err.Error())
 		os.Exit(1)
 	}
 	connection.SetMaxOpenConns(20)
