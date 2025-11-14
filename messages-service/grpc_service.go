@@ -389,7 +389,6 @@ func (s *Server) Sent(ctx context.Context, req *pb.SentRequest) (*pb.SentRespons
 		},
 	}, nil
 }
-
 func (s *Server) domainSenderToProto(sender *domain.Sender) *pb.Sender {
 	if sender == nil {
 		return nil

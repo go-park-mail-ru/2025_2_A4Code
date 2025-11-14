@@ -14,7 +14,6 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -114,17 +113,10 @@ func (s *Server) Refresh(ctx context.Context, req *pb.RefreshRequest) (*pb.Refre
 	log := logger.GetLogger(ctx)
 	log.Debug("handle /auth/refresh")
 
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		log.Error(op + ": could not get metadata")
-		return nil, status.Error(codes.Unauthenticated, "could not process refresh")
+	refreshToken := req.RefreshToken
+	if refreshToken == "" {
+		return nil, status.Error(codes.Unauthenticated, "refresh token is required")
 	}
-
-	tokens := md.Get("refresh_token")
-	if len(tokens) == 0 {
-		return nil, status.Error(codes.Unauthenticated, "could not process refresh")
-	}
-	refreshToken := tokens[0]
 
 	userID, err := session.GetProfileIDFromTokenString(refreshToken, s.JWTSecret, "refresh")
 	if err != nil {

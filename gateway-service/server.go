@@ -3,7 +3,6 @@ package gateway_service
 import (
 	"2025_2_a4code/internal/config"
 	"2025_2_a4code/internal/http-server/middleware/cors"
-	csrfcheck "2025_2_a4code/internal/http-server/middleware/csrf-check"
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	"context"
 	"encoding/json"
@@ -12,8 +11,10 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"2025_2_a4code/pkg/authproto"
 	"2025_2_a4code/pkg/messagesproto"
@@ -34,19 +35,19 @@ func NewServer(cfg *config.AppConfig) (*Server, error) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
-	conn1, err := grpc.NewClient(cfg.AuthPort, opts...)
+	conn1, err := grpc.NewClient(cfg.Host+":"+cfg.AuthPort, opts...)
 	if err != nil {
 		return nil, err
 	}
 	authClient := authproto.NewAuthServiceClient(conn1)
 
-	conn2, err := grpc.NewClient(cfg.ProfilePort, opts...)
+	conn2, err := grpc.NewClient(cfg.Host+":"+cfg.ProfilePort, opts...)
 	if err != nil {
 		return nil, err
 	}
 	profileClient := profileproto.NewProfileServiceClient(conn2)
 
-	conn3, err := grpc.NewClient(cfg.MessagesPort, opts...)
+	conn3, err := grpc.NewClient(cfg.Host+":"+cfg.MessagesPort, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -71,38 +72,38 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.Handle("POST /auth/signup", http.HandlerFunc(s.signupHandler))
 
 	// Роутер с csrf middleware
-	csrfMux := http.NewServeMux()
+	//csrfMux := http.NewServeMux()
 
-	csrfMux.Handle("POST /auth/refresh", http.HandlerFunc(s.refreshHandler))
-	csrfMux.Handle("POST /auth/logout", http.HandlerFunc(s.logoutHandler))
+	mux.Handle("POST /auth/refresh", http.HandlerFunc(s.refreshHandler))
+	mux.Handle("POST /auth/logout", http.HandlerFunc(s.logoutHandler))
 
-	csrfMux.Handle("GET /user/profile", http.HandlerFunc(s.getProfileHandler))
-	csrfMux.Handle("PUT /user/profile", http.HandlerFunc(s.updateProfileHandler))
-	csrfMux.Handle("GET /user/settings", http.HandlerFunc(s.settingsHandler))
-	csrfMux.Handle("POST /user/upload/avatar", http.HandlerFunc(s.uploadAvatarHandler))
+	mux.Handle("GET /user/profile", http.HandlerFunc(s.getProfileHandler))
+	mux.Handle("PUT /user/profile", http.HandlerFunc(s.updateProfileHandler))
+	mux.Handle("GET /user/settings", http.HandlerFunc(s.settingsHandler))
+	mux.Handle("POST /user/upload/avatar", http.HandlerFunc(s.uploadAvatarHandler))
 
-	csrfMux.Handle("GET /messages/inbox", http.HandlerFunc(s.inboxHandler))
-	csrfMux.Handle("GET /messages/{message_id}", http.HandlerFunc(s.messagePageHandler))
-	csrfMux.Handle("POST /messages/reply", http.HandlerFunc(s.replyHandler))
-	csrfMux.Handle("POST /messages/send", http.HandlerFunc(s.sendHandler))
-	csrfMux.Handle("GET /messages/sent", http.HandlerFunc(s.sentHandler))
+	mux.Handle("GET /messages/inbox", http.HandlerFunc(s.inboxHandler))
+	mux.Handle("GET /messages/{message_id}", http.HandlerFunc(s.messagePageHandler))
+	mux.Handle("POST /messages/reply", http.HandlerFunc(s.replyHandler))
+	mux.Handle("POST /messages/send", http.HandlerFunc(s.sendHandler))
+	mux.Handle("GET /messages/sent", http.HandlerFunc(s.sentHandler))
 
 	// csrf middleware
-	csrfProtectedHandler := csrfcheck.New()(csrfMux)
-
-	mux.Handle("POST /auth/refresh", csrfProtectedHandler)
-	mux.Handle("POST /auth/logout", csrfProtectedHandler)
-
-	mux.Handle("GET /user/profile", csrfProtectedHandler)
-	mux.Handle("PUT /user/profile", csrfProtectedHandler)
-	mux.Handle("GET /user/settings", csrfProtectedHandler)
-	mux.Handle("POST /user/upload/avatar", csrfProtectedHandler)
-
-	mux.Handle("GET /messages/inbox", csrfProtectedHandler)
-	mux.Handle("GET /messages/{message_id}", csrfProtectedHandler)
-	mux.Handle("POST /messages/reply", csrfProtectedHandler)
-	mux.Handle("POST /messages/send", csrfProtectedHandler)
-	mux.Handle("GET /messages/sent", csrfProtectedHandler)
+	//csrfProtectedHandler := csrfcheck.New()(csrfMux)
+	//
+	//mux.Handle("POST /auth/refresh", csrfProtectedHandler)
+	//mux.Handle("POST /auth/logout", csrfProtectedHandler)
+	//
+	//mux.Handle("GET /user/profile", csrfProtectedHandler)
+	//mux.Handle("PUT /user/profile", csrfProtectedHandler)
+	//mux.Handle("GET /user/settings", csrfProtectedHandler)
+	//mux.Handle("POST /user/upload/avatar", csrfProtectedHandler)
+	//
+	//mux.Handle("GET /messages/inbox", csrfProtectedHandler)
+	//mux.Handle("GET /messages/{message_id}", csrfProtectedHandler)
+	//mux.Handle("POST /messages/reply", csrfProtectedHandler)
+	//mux.Handle("POST /messages/send", csrfProtectedHandler)
+	//mux.Handle("GET /messages/sent", csrfProtectedHandler)
 
 	// logger и cors middleware
 	var handler http.Handler = mux
@@ -143,7 +144,6 @@ func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 	setAuthCookies(w, resp.AccessToken, resp.RefreshToken)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
 }
 
 func (s *Server) signupHandler(w http.ResponseWriter, r *http.Request) {
@@ -155,14 +155,24 @@ func (s *Server) signupHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.authClient.Signup(r.Context(), &req)
 	if err != nil {
-		http.Error(w, "Signup failed", http.StatusBadRequest)
+		if grpcErr, ok := status.FromError(err); ok {
+			switch grpcErr.Code() {
+			case codes.InvalidArgument:
+				http.Error(w, "Signup failed: "+grpcErr.Message(), http.StatusBadRequest)
+			case codes.AlreadyExists:
+				http.Error(w, "Signup failed: "+grpcErr.Message(), http.StatusConflict)
+			default:
+				http.Error(w, "Signup failed: "+grpcErr.Message(), http.StatusInternalServerError)
+			}
+		} else {
+			http.Error(w, "Signup failed", http.StatusBadRequest)
+		}
 		return
 	}
 
 	setAuthCookies(w, resp.AccessToken, resp.RefreshToken)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
 }
 
 func (s *Server) refreshHandler(w http.ResponseWriter, r *http.Request) {
@@ -192,7 +202,6 @@ func (s *Server) refreshHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
 }
 
 func (s *Server) logoutHandler(w http.ResponseWriter, r *http.Request) {

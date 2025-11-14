@@ -3,6 +3,7 @@ package app
 import (
 	authservice "2025_2_a4code/auth-service"
 	"2025_2_a4code/internal/config"
+	"2025_2_a4code/internal/http-server/middleware/logger"
 	in "2025_2_a4code/internal/lib/init"
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	profileUcase "2025_2_a4code/internal/usecase/profile"
@@ -58,7 +59,7 @@ func AuthInit() {
 	profileUCase := profileUcase.New(profileRepository)
 
 	// создаем gRPC сервер и регистрируем наш сервис
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(logger.GrpcLoggerInterceptor(log)))
 	authService := authservice.New(profileUCase, SECRET)
 	pb.RegisterAuthServiceServer(grpcServer, authService)
 
