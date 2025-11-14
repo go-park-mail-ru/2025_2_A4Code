@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package profileproto;
+
+// protoc --go_out=. --go-grpc_out=. --go-grpc_opt=paths=source_relative --go_opt=paths=source_relative *.proto
+option go_package = "/;profileproto";
+
+message Profile {
+  string id = 1;
+  string username = 2;
+  string created_at = 3;
+  string name = 4;
+  string surname = 5;
+  string patronymic = 6;
+  string gender = 7;
+  string birthday = 8;
+  string avatar_path = 9;
+}
+
+message Settings {
+  string notification_tolerance = 1;
+  string language = 2;
+  string theme = 3;
+  repeated string signatures = 4;
+}
+
+service ProfileService {
+
+  rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
+
+  rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse);
+
+  rpc Settings(SettingsRequest) returns (SettingsResponse);
+
+  rpc UploadAvatar(UploadAvatarRequest) returns (UploadAvatarResponse);
+}
+
+message GetProfileRequest {}
+
+message GetProfileResponse {
+  Profile profile = 1;
+}
+
+message UpdateProfileRequest {
+  string name = 1;
+  string surname = 2;
+  string patronymic = 3;
+  string gender = 4;
+  string birthday = 5;
+}
+
+message UpdateProfileResponse {
+  Profile profile = 1;
+}
+
+message SettingsRequest {}
+
+message SettingsResponse {
+  Settings settings = 1;
+}
+
+message UploadAvatarRequest {
+  bytes avatar_data = 1;
+  string file_name = 2;
+  string content_type = 3;
+}
+
+message UploadAvatarResponse {
+  string avatar_path = 1;
+}

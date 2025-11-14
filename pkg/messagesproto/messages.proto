@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package messagesproto;
+
+// protoc --go_out=. --go-grpc_out=. --go-grpc_opt=paths=source_relative --go_opt=paths=source_relative *.proto
+option go_package = "/;messagesproto";
+
+message Message {
+  string id = 1;
+  Sender sender = 2;
+  string topic = 3;
+  string snippet = 4;
+  string datetime = 5;
+  string is_read = 6;
+}
+
+message FullMessage {
+  string topic = 1;
+  string text = 2;
+  string datetime = 3;
+  string thread_id = 4;
+  Sender sender = 5;
+  repeated File files = 6;
+}
+
+message Sender {
+  string email = 1;
+  string username = 2;
+  string avatar = 3;
+}
+
+message Receiver {
+  string email = 1; 
+}
+
+message File {
+  string name = 1;
+  string file_type = 2;
+  string size = 3;          
+  string storage_path = 4;
+}
+
+message PaginationInfo {
+  string has_next = 1;          
+  string next_last_message_id = 2;
+  string next_last_datetime = 3;
+}
+
+service MessagesService {
+
+  rpc Inbox(InboxRequest) returns (InboxResponse);
+
+  rpc MessagePage(MessagePageRequest) returns (MessagePageResponse);
+
+  rpc Reply(ReplyRequest) returns (ReplyResponse);
+
+  rpc Send(SendRequest) returns (SendResponse);
+
+  rpc Sent(SentRequest) returns (SentResponse);
+}
+
+message InboxRequest {
+  string last_message_id = 1;
+  string last_datetime = 2;
+  string limit = 3;
+}
+
+message InboxResponse {
+  string message_total = 1;
+  string message_unread = 2;
+  repeated Message messages = 3;
+  PaginationInfo pagination = 4;
+}
+
+message MessagePageRequest {
+  string message_id = 1;
+}
+
+message MessagePageResponse {
+  FullMessage message = 1;
+}
+
+message ReplyRequest {
+  string root_message_id = 1;
+  string topic = 2;
+  string text = 3;
+  string thread_root = 4;     
+  repeated Receiver receivers = 5;
+  repeated File files = 6;
+}
+
+message ReplyResponse {
+  string message_id = 1;
+}
+
+message SendRequest {
+  string topic = 1;
+  string text = 2;
+  repeated Receiver receivers = 3; 
+  repeated File files = 4;         
+}
+
+message SendResponse {
+  string message_id = 1;
+}
+
+message SentRequest {
+  string last_message_id = 1;
+  string last_datetime = 2;
+  string limit = 3;
+}
+
+message SentResponse {
+  string message_total = 1;
+  string message_unread = 2;
+  repeated Message messages = 3; 
+  PaginationInfo pagination = 4;
+}

@@ -3,7 +3,7 @@ package app
 import (
 	authservice "2025_2_a4code/auth-service"
 	"2025_2_a4code/internal/config"
-	"2025_2_a4code/internal/lib/init"
+	in "2025_2_a4code/internal/lib/init"
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	profileUcase "2025_2_a4code/internal/usecase/profile"
 	pb "2025_2_a4code/pkg/authproto"
@@ -33,13 +33,13 @@ func AuthInit() {
 	var SECRET = []byte(cfg.AppConfig.Secret)
 
 	// Создание логгера
-	log := init.SetupLogger(envLocal)
+	log := in.SetupLogger(envLocal)
 	slog.SetDefault(log)
 	log.Debug("auth: debug messages are enabled")
 	//loggerMiddleware := logger.New(log)
 
 	// Установка соединения с бд
-	connection, err := init.NewDbConnection(cfg.DBConfig)
+	connection, err := in.NewDbConnection(cfg.DBConfig)
 	if err != nil {
 		log.Error("error connecting to database")
 		os.Exit(1)
@@ -48,7 +48,7 @@ func AuthInit() {
 	connection.SetMaxIdleConns(8)
 
 	// Миграции
-	err = init.RunMigrations(connection, "file://./db/migrations")
+	err = in.RunMigrations(connection, "file://./db/migrations")
 	if err != nil {
 		log.Error(err.Error())
 	}
