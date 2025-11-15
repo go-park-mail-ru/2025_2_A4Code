@@ -7,6 +7,7 @@ import (
 )
 
 type AppealRepository interface {
+	SaveAppeal(ctx context.Context, profileID int64, topic, text string) error
 	FindByProfileIDWithKeysetPagination(ctx context.Context, profileID, lastAppealID int64, lastDatetime time.Time, limit int) ([]domain.Appeal, error)
 }
 
@@ -25,4 +26,8 @@ func (uc *AppealUsecase) FindByProfileIDWithKeysetPagination(
 	limit int,
 ) ([]domain.Appeal, error) {
 	return uc.repo.FindByProfileIDWithKeysetPagination(ctx, profileID, lastAppealID, lastDatetime, limit)
+}
+
+func (uc *AppealUsecase) SaveAppeal(ctx context.Context, profileID int64, topic, text string) error {
+	return uc.repo.SaveAppeal(ctx, profileID, topic, text)
 }
