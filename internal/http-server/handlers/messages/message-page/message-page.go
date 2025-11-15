@@ -91,6 +91,16 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ok, err := h.messageUCase.IsUsersMessage(r.Context(), int64(messageID), id)
+	if err != nil {
+		resp.SendErrorResponse(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		resp.SendErrorResponse(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return
+	}
+
 	fullMessage, err := h.messageUCase.FindFullByMessageID(r.Context(), int64(messageID), id)
 	if err != nil {
 		log.Error(err.Error())
