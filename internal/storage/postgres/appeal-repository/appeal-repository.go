@@ -131,10 +131,7 @@ func (repo *AppealRepository) FindLastAppealByProfileID(ctx context.Context, pro
 	return appeal, nil
 }
 
-func (repo *AppealRepository) FindAppealsStatsByProfileID(
-	ctx context.Context,
-	profileID int64,
-) (domain.AppealsInfo, error) {
+func (repo *AppealRepository) FindAppealsStatsByProfileID(ctx context.Context, profileID int64) (domain.AppealsInfo, error) {
 	const op = "storage.appealRepository.FindAppealsStatsByProfileID"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
