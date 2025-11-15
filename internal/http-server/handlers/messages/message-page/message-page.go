@@ -17,6 +17,7 @@ import (
 type MessageUsecase interface {
 	MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error
 	FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
+	IsUsersMessage(ctx context.Context, messageID int64, profileID int64) (bool, error)
 }
 
 type AvatarUsecase interface {

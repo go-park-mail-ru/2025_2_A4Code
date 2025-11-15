@@ -21,6 +21,7 @@ type MessageRepository interface {
 	MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error
 	FindSentMessagesByProfileIDWithKeysetPagination(ctx context.Context, profileID int64, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
 	GetSentMessagesStats(ctx context.Context, profileID int64) (int, int, error)
+	IsUsersMessage(ctx context.Context, messageID int64, profileID int64) (bool, error)
 }
 
 type MessageUcase struct {

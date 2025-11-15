@@ -784,3 +784,30 @@ func (repo *MessageRepository) GetSentMessagesStats(ctx context.Context, profile
 
 	return totalCount, unreadCount, nil
 }
+
+func (repo *MessageRepository) IsUsersMessage(ctx context.Context, messageID int64, profileID int64) (bool, error) {
+	const op = "storage.postgres.message.IsUsersMessage"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+		SELECT bp.id FROM public.profile_message AS pm
+		JOIN profile AS p ON p.id = pm.profile_id
+		JOIN base_profile AS bp ON bp.id = p.base_profile_id
+		WHERE pm.message_id = $2 LIMIT 1`
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return false, e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	log.Debug("Executing IsUsersMessage query...")
+	rows, err := stmt.QueryContext(ctx, messageID, profileID)
+	if err != nil {
+		return false, e.Wrap(op, err)
+	}
+	if rows.Next() {
+		return true, nil
+	}
+	return false, nil
+}
