@@ -34,6 +34,7 @@ type Profile struct {
 	Gender     string    `json:"gender"`
 	Birthday   string    `json:"date_of_birth"`
 	AvatarPath string    `json:"avatar_path"`
+	Status     string    `json:"status"`
 }
 
 type Response struct {

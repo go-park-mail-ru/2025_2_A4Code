@@ -16,6 +16,7 @@ type Profile struct {
 	Gender          string    `json:"gender"`
 	Birthday        time.Time `json:"birthday"`
 	AvatarPath      string    `json:"avatar_path"`
+	Role            string    `json:"role"`
 }
 
 type ProfileInfo struct {
@@ -28,6 +29,7 @@ type ProfileInfo struct {
 	Gender     string    `json:"gender"`
 	Birthday   string    `json:"birthday"`
 	AvatarPath string    `json:"avatar_path"`
+	Role       string    `json:"role"`
 }
 
 type ProfileUpdate struct {

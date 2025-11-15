@@ -297,7 +297,7 @@ func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64
 		SELECT 
 			bp.id, bp.username, bp.created_at,
 			p.name, p.surname, 
-			p.patronymic, p.gender, p.birthday, p.image_path
+			p.patronymic, p.gender, p.birthday, p.image_path, p.role
 		FROM 
 			base_profile bp
 		JOIN 
@@ -312,13 +312,13 @@ func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64
 	defer stmt.Close()
 
 	var profileInfo domain.ProfileInfo
-	var profileInfoSurname, profileInfoPatronymic, profileInfoAvatar sql.NullString
+	var profileInfoSurname, profileInfoPatronymic, profileInfoAvatar, profileInfoRole sql.NullString
 
 	log.Debug("Executing FindInfoByID query...")
 	err = stmt.QueryRowContext(ctx, profileID).Scan(
 		&profileInfo.ID, &profileInfo.Username, &profileInfo.CreatedAt,
 		&profileInfo.Name, &profileInfoSurname,
-		&profileInfoPatronymic, &profileInfo.Gender, &profileInfo.Birthday, &profileInfoAvatar,
+		&profileInfoPatronymic, &profileInfo.Gender, &profileInfo.Birthday, &profileInfoAvatar, &profileInfoRole,
 	)
 
 	if err != nil {
@@ -336,6 +336,11 @@ func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64
 	}
 	if profileInfoAvatar.Valid {
 		profileInfo.AvatarPath = profileInfoAvatar.String
+	}
+	if profileInfoRole.Valid {
+		profileInfo.Role = profileInfoRole.String
+	} else {
+		profileInfo.Role = "user"
 	}
 
 	return profileInfo, nil

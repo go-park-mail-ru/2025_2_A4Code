@@ -19,6 +19,7 @@ type AppealUsecase interface {
 type Appeal struct {
 	Topic     string    `json:"topic"`
 	Text      string    `json:"text"`
+	Email     string    `json:"email,omitempty"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
