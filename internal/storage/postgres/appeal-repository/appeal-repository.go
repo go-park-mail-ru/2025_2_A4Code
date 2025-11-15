@@ -105,7 +105,7 @@ func (repo *AppealRepository) FindLastAppealByProfileID(ctx context.Context, pro
         WHERE
             a.base_profile_id = $1
         ORDER BY
-            a.created_at DESC, a.id DESC
+            a.updated_at DESC, a.id DESC
 		LIMIT 1`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)
@@ -150,7 +150,7 @@ func (repo *AppealRepository) FindAppealsStatsByProfileID(ctx context.Context, p
                 id, topic, text, status, created_at, updated_at
             FROM appeal
             WHERE base_profile_id = $1
-            ORDER BY created_at DESC, id DESC
+            ORDER BY updated_at DESC, id DESC
             LIMIT 1
         )
         SELECT 
@@ -212,7 +212,7 @@ func (repo *AppealRepository) FindAllAppealsStats(
             SELECT
                 id, topic, text, status, created_at, updated_at
             FROM appeal
-            ORDER BY created_at DESC, id DESC
+            ORDER BY updated_at DESC, id DESC
             LIMIT 1
         )
         SELECT 
@@ -253,4 +253,33 @@ func (repo *AppealRepository) FindAllAppealsStats(
 	}
 
 	return stats, nil
+}
+
+func (repo *AppealRepository) UpdateAppeal(ctx context.Context, appeal_id int64, text, status string) error {
+	const op = "storage.appealRepository.UpdateAppeal"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+		UPDATE appeal
+		SET text = $2,
+			status = $3
+		WHERE id = $1
+	`
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	textNull := sql.NullString{String: text, Valid: text != ""}
+	statusNull := sql.NullString{String: status, Valid: status != ""}
+
+	log.Debug("Executing UpdateAppeal query...")
+	_, err = stmt.ExecContext(ctx, appeal_id, textNull, statusNull)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+
+	return nil
 }

@@ -10,8 +10,12 @@ type AppealRepository interface {
 	SaveAppeal(ctx context.Context, profileID int64, topic, text string) error
 	FindByProfileIDWithKeysetPagination(ctx context.Context, profileID, lastAppealID int64, lastDatetime time.Time, limit int) ([]domain.Appeal, error)
 	FindLastAppealByProfileID(ctx context.Context, profileID int64) (domain.Appeal, error)
-	FindAppealsStatsByProfileID(ctx context.Context, profileID int64) (domain.AppealsInfo, error)
+	FindAppealsStatsByProfileID(
+		ctx context.Context,
+		profileID int64,
+	) (domain.AppealsInfo, error)
 	FindAllAppealsStats(ctx context.Context) (domain.AppealsInfo, error)
+	UpdateAppeal(ctx context.Context, appeal_id int64, text, status string) error
 }
 
 type AppealUsecase struct {
@@ -42,7 +46,7 @@ func (uc *AppealUsecase) FindLastAppealByProfileID(ctx context.Context, profileI
 	return uc.repo.FindLastAppealByProfileID(ctx, profileID)
 }
 
-func (uc *AppealUsecase) FindAppealsStatsByProfileID(ctx context.Context, profileID int64) (domain.AppealsInfo, error) {
+func (uc *AppealUsecase) FindLastAppealsInfoByProfileID(ctx context.Context, profileID int64) (domain.AppealsInfo, error) {
 	return uc.repo.FindAppealsStatsByProfileID(ctx, profileID)
 }
 
@@ -50,6 +54,6 @@ func (uc *AppealUsecase) FindLastAppealsInfo(ctx context.Context) (domain.Appeal
 	return uc.repo.FindAllAppealsStats(ctx)
 }
 
-func (uc *AppealUsecase) FindAllAppealsStats(ctx context.Context) (domain.AppealsInfo, error) {
-	return uc.repo.FindAllAppealsStats(ctx)
+func (uc *AppealUsecase) UpdateAppeal(ctx context.Context, appeal_id int64, text, status string) error {
+	return uc.repo.UpdateAppeal(ctx, appeal_id, text, status)
 }
