@@ -15,6 +15,7 @@ type AppealRepository interface {
 		profileID int64,
 	) (domain.AppealsInfo, error)
 	FindAllAppealsStats(ctx context.Context) (domain.AppealsInfo, error)
+	UpdateAppeal(ctx context.Context, appeal_id int64, text, status string) error
 }
 
 type AppealUsecase struct {
@@ -51,4 +52,8 @@ func (uc *AppealUsecase) FindLastAppealsInfoByProfileID(ctx context.Context, pro
 
 func (uc *AppealUsecase) FindLastAppealsInfo(ctx context.Context) (domain.AppealsInfo, error) {
 	return uc.repo.FindAllAppealsStats(ctx)
+}
+
+func (uc *AppealUsecase) UpdateAppeal(ctx context.Context, appeal_id int64, text, status string) error {
+	return uc.repo.UpdateAppeal(ctx, appeal_id, text, status)
 }
