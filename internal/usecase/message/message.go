@@ -141,3 +141,7 @@ func (uc *MessageUcase) GetSentMessagesInfoWithPagination(ctx context.Context, p
 		Messages:      nil,
 	}, nil
 }
+
+func (uc *MessageUcase) IsUsersMessage(ctx context.Context, messageID int64, profileID int64) (bool, error) {
+	return uc.repo.IsUsersMessage(ctx, messageID, profileID)
+}
