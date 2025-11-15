@@ -9,7 +9,7 @@ import (
 type AppealRepository interface {
 	SaveAppeal(ctx context.Context, profileID int64, topic, text string) error
 	FindByProfileIDWithKeysetPagination(ctx context.Context, profileID, lastAppealID int64, lastDatetime time.Time, limit int) ([]domain.Appeal, error)
-	FindAppealByProfileID(ctx context.Context, profileID int64) (domain.Appeal, error)
+	FindLastAppealByProfileID(ctx context.Context, profileID int64) (domain.Appeal, error)
 }
 
 type AppealUsecase struct {
@@ -36,6 +36,6 @@ func (uc *AppealUsecase) SaveAppeal(
 	return uc.repo.SaveAppeal(ctx, profileID, topic, text)
 }
 
-func FindAppealByProfileID(ctx context.Context, profileID int64) (domain.Appeal, error) {
-	return domain.Appeal{}, nil
+func FindlastAppealByProfileID(ctx context.Context, profileID int64) (domain.Appeal, error) {
+	return uc.repo.FindLastAppealByProfileID(ctx, profileID)(domain.Appeal, error)
 }
