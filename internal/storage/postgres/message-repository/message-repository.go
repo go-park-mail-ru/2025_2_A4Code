@@ -785,15 +785,23 @@ func (repo *MessageRepository) GetSentMessagesStats(ctx context.Context, profile
 	return totalCount, unreadCount, nil
 }
 
+// profile-repository.go (Add this method to the ProfileRepository struct)
+
 func (repo *MessageRepository) IsUsersMessage(ctx context.Context, messageID int64, profileID int64) (bool, error) {
-	const op = "storage.postgres.message.IsUsersMessage"
+	const op = "storage.postgres.profile-repository.IsUsersMessage"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
+	// This query:
+	// 1. Uses the provided profileID (which is base_profile.id).
+	// 2. Finds the corresponding profile.id via the 'profile' table.
+	// 3. Checks if an entry exists in 'profile_message' linking that profile.id to the messageID.
 	const query = `
-		SELECT bp.id FROM public.profile_message AS pm
-		JOIN profile AS p ON p.id = pm.profile_id
-		JOIN base_profile AS bp ON bp.id = p.base_profile_id
-		WHERE pm.message_id = $2 LIMIT 1`
+		SELECT EXISTS (
+			SELECT 1
+			FROM profile_message pm
+			JOIN profile p ON pm.profile_id = p.id
+			WHERE pm.message_id = $1 AND p.base_profile_id = $2
+		)`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
@@ -801,13 +809,17 @@ func (repo *MessageRepository) IsUsersMessage(ctx context.Context, messageID int
 	}
 	defer stmt.Close()
 
-	log.Debug("Executing IsUsersMessage query...")
-	rows, err := stmt.QueryContext(ctx, messageID, profileID)
+	var isUserMessage bool
+
+	log.Debug("Executing IsUsersMessage query...", slog.Int64("message_id", messageID), slog.Int64("base_profile_id", profileID))
+	err = stmt.QueryRowContext(ctx, messageID, profileID).Scan(
+		&isUserMessage,
+	)
+
 	if err != nil {
+		// Return false and wrap the error if it's a genuine database issue
 		return false, e.Wrap(op, err)
 	}
-	if rows.Next() {
-		return true, nil
-	}
-	return false, nil
+
+	return isUserMessage, nil
 }
