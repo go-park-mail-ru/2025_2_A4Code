@@ -4,7 +4,6 @@ import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
-	"2025_2_a4code/internal/usecase/appeal"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -55,11 +54,6 @@ func (h *HandlerSendAppealResponse) ServeHTTP(w http.ResponseWriter, r *http.Req
 	if err := decoder.Decode(&req); err != nil {
 		resp.SendErrorResponse(w, "invalid request body", http.StatusBadRequest)
 		return
-	}
-
-	updateReq := appeal.UpdateAppealRequest{
-		Text:   req.Text,
-		Status: req.Status,
 	}
 
 	if err := h.appealUCase.UpdateAppeal(r.Context(), id, req.Text, req.Status); err != nil {
