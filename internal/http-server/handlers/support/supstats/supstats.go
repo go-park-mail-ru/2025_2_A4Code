@@ -1,4 +1,4 @@
-package userstats
+package supstats
 
 import (
 	"2025_2_a4code/internal/domain"
@@ -8,31 +8,21 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"time"
 )
 
 type StatsUsecase interface {
-	FindAppealByProfileID(ctx context.Context, profileID int64) (domain.Appeal, error)
-	FindAppealsInfoByProfileID(ctx context.Context, profileID int64) (domain.AppealsInfo, error)
+	FindAllAppeals(ctx context.Context, profileID int64) (domain.AppealsInfo, error)
 }
 
 type Response struct {
 	resp.Response
 }
-type Appeal struct {
-	Topic     string    `json:"topic"`
-	Text      string    `json:"text"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
 
 type AppealsResponse struct {
-	TotalAppeals      int    `json:"total_appeals"`
-	OpenAppeals       int    `json:"open_appeals"`
-	InProgressAppeals int    `json:"in_progress_appeals"`
-	ClosedAppeals     int    `json:"closed_appeals"`
-	LastAppeal        Appeal `json:"last_appeal"`
+	TotalAppeals      int `json:"total_appeals"`
+	OpenAppeals       int `json:"open_appeals"`
+	InProgressAppeals int `json:"in_progress_appeals"`
+	ClosedAppeals     int `json:"closed_appeals"`
 }
 
 type HandlerAppeal struct {
@@ -62,14 +52,7 @@ func (h *HandlerAppeal) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lastAppeal, err := h.appealsUsecase.FindAppealByProfileID(r.Context(), id)
-	if err != nil {
-		log.Error(err.Error())
-		resp.SendErrorResponse(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-
-	appealsInfo, err := h.appealsUsecase.FindAppealsInfoByProfileID(r.Context(), id)
+	appealsInfo, err := h.appealsUsecase.FindAllAppeals(r.Context(), id)
 	if err != nil {
 		log.Error(err.Error())
 		resp.SendErrorResponse(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -81,13 +64,6 @@ func (h *HandlerAppeal) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		OpenAppeals:       appealsInfo.OpenAppeals,
 		InProgressAppeals: appealsInfo.InProgressAppeals,
 		ClosedAppeals:     appealsInfo.ClosedAppeals,
-		LastAppeal: Appeal{
-			Topic:     lastAppeal.Topic,
-			Text:      lastAppeal.Text,
-			Status:    lastAppeal.Status,
-			CreatedAt: lastAppeal.CreatedAt,
-			UpdatedAt: lastAppeal.UpdatedAt,
-		},
 	}
 
 	w.Header().Set("Content-Type", "application/json")

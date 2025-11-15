@@ -12,6 +12,7 @@ import (
 	"2025_2_a4code/internal/http-server/handlers/messages/send"
 	"2025_2_a4code/internal/http-server/handlers/messages/sent"
 	"2025_2_a4code/internal/http-server/handlers/messages/threads"
+	"2025_2_a4code/internal/http-server/handlers/support/appeals"
 	profilepage "2025_2_a4code/internal/http-server/handlers/user/profile-page"
 	"2025_2_a4code/internal/http-server/handlers/user/settings"
 	uploadavatar "2025_2_a4code/internal/http-server/handlers/user/upload/upload-avatar"
@@ -20,8 +21,10 @@ import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	e "2025_2_a4code/internal/lib/wrapper"
 	avatarrepository "2025_2_a4code/internal/storage/minio/avatar-repository"
+	appealrepository "2025_2_a4code/internal/storage/postgres/appeal-repository"
 	messagerepository "2025_2_a4code/internal/storage/postgres/message-repository"
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
+	"2025_2_a4code/internal/usecase/appeal"
 	avatarUcase "2025_2_a4code/internal/usecase/avatar"
 	messageUcase "2025_2_a4code/internal/usecase/message"
 	profileUcase "2025_2_a4code/internal/usecase/profile"
@@ -109,11 +112,13 @@ func Init() {
 	}
 
 	avatarRepository := avatarrepository.New(client, publicMinioClient, cfg.MinioConfig.BucketName)
+	appealRepository := appealrepository.New(connection)
 
 	// Создание юзкейсов
 	messageUCase := messageUcase.New(messageRepository)
 	profileUCase := profileUcase.New(profileRepository)
 	avatarUCase := avatarUcase.New(avatarRepository, profileRepository)
+	appealUCase := appeal.New(appealRepository)
 
 	// Создание хэндлеров
 	loginHandler := login.New(profileUCase, SECRET)
@@ -130,6 +135,9 @@ func Init() {
 	replyHandler := reply.New(messageUCase, SECRET)
 	uploadAvatarHandler := uploadavatar.New(avatarUCase, profileUCase, SECRET)
 	sentHandler := sent.New(messageUCase, avatarUCase, SECRET)
+	appealsHandler := appeals.New(appealUCase, SECRET)
+	sendAppealHandler := appeals.New(appealUCase, SECRET)
+	//userAppealStatsHandler := userstats.New(appealUCase, SECRET)
 
 	// настройка corsMiddleware
 	corsMiddleware := cors.New()
@@ -151,6 +159,8 @@ func Init() {
 	http.Handle("/messages/reply", loggerMiddleware(corsMiddleware(http.HandlerFunc(replyHandler.ServeHTTP))))
 	http.Handle("/user/upload/avatar", loggerMiddleware(corsMiddleware(http.HandlerFunc(uploadAvatarHandler.ServeHTTP))))
 	http.Handle("/messages/sent", loggerMiddleware(corsMiddleware(http.HandlerFunc(sentHandler.ServeHTTP))))
+	http.Handle("/support/appeals", loggerMiddleware(corsMiddleware(http.HandlerFunc(appealsHandler.ServeHTTP))))
+	http.Handle("/support/send-appeal", loggerMiddleware(corsMiddleware(http.HandlerFunc(sendAppealHandler.ServeHTTP))))
 
 	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 
