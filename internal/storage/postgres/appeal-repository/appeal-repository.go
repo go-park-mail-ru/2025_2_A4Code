@@ -91,3 +91,89 @@ func (repo *AppealRepository) SaveAppeal(ctx context.Context, profileID int64, t
 
 	return nil
 }
+
+func (repo *AppealRepository) FindLastAppealByProfileID(ctx context.Context, profileID int64) (domain.Appeal, error) {
+	const op = "storage.appealRepository.FindLastAppealByProfileID"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+		SELECT
+            a.id, a.topic, a.text, a.status,
+			a.created_at, a.updated_at
+        FROM
+            appeal a
+        WHERE
+            a.base_profile_id = $1
+        ORDER BY
+            a.created_at DESC, a.id DESC
+		LIMIT 1`
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return domain.Appeal{}, e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	log.Debug("Executing FindLastAppealByProfileID query...")
+
+	row := stmt.QueryRowContext(ctx, profileID)
+
+	var appeal domain.Appeal
+
+	err = row.Scan(&appeal.Id, &appeal.Topic, &appeal.Text, &appeal.Status, &appeal.CreatedAt, &appeal.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return domain.Appeal{}, nil
+		}
+		return domain.Appeal{}, e.Wrap(op, err)
+	}
+
+	return appeal, nil
+}
+
+func (repo *AppealRepository) FindByProfileID(
+	ctx context.Context,
+	profileID int64,
+) ([]domain.Appeal, error) {
+	const op = "storage.appealRepository.FindByProfile"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+		SELECT
+            a.id, a.topic, a.text, a.status,
+			a.created_at, a.updated_at
+        FROM
+            appeal a
+        WHERE
+            a.base_profile_id = $1
+        ORDER BY
+            a.created_at DESC, a.id DESC`
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	log.Debug("Executing FindByProfileID query...")
+	rows, err := stmt.QueryContext(ctx, profileID)
+	if err != nil {
+		return nil, e.Wrap(op, err)
+	}
+
+	var appeals []domain.Appeal
+	for rows.Next() {
+		var appeal domain.Appeal
+		err := rows.Scan(&appeal.Id, &appeal.Topic, &appeal.Text, &appeal.Status, &appeal.CreatedAt, &appeal.UpdatedAt)
+		if err != nil {
+			return nil, e.Wrap(op, err)
+		}
+		appeals = append(appeals, appeal)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, e.Wrap(op, err)
+	}
+
+	return appeals, nil
+}
