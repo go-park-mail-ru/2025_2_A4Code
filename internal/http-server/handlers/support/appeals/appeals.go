@@ -6,6 +6,7 @@ import (
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -23,15 +24,15 @@ type Appeal struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-type AppealsInfo struct {
+type AppealsResponse struct {
 	Appeals    []Appeal       `json:"appeals"`
 	Pagination PaginationInfo `json:"pagination"`
 }
 
 type PaginationInfo struct {
-	HasNext           bool   `json:"has_next"`
-	NextLastMessageID int64  `json:"next_last_message_id,omitempty"`
-	NextLastDatetime  string `json:"next_last_datetime,omitempty"`
+	HasNext          bool   `json:"has_next"`
+	NextLastAppealID int64  `json:"next_last_appeal_id,omitempty"`
+	NextLastDatetime string `json:"next_last_datetime,omitempty"`
 }
 
 type Response struct {
@@ -98,15 +99,38 @@ func (h *HandlerAppeals) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appealsResponse := make([]Appeal, len(appeals))
+	appealsInfo := make([]Appeal, len(appeals))
+	var nextLastAppealID int64
+	var nextLastDatetime time.Time
 	for _, appeal := range appeals {
-		appealsResponse = append(appealsResponse, Appeal{
+		appealsInfo = append(appealsInfo, Appeal{
 			Topic:     appeal.Topic,
 			Text:      appeal.Text,
 			Status:    appeal.Status,
 			CreatedAt: appeal.CreatedAt,
 			UpdatedAt: appeal.UpdatedAt,
 		})
+
+		nextLastAppealID = appeal.Id
+		nextLastDatetime = appeal.CreatedAt
 	}
 
+	appealsResponse := AppealsResponse{
+		Appeals: appealsInfo,
+		Pagination: PaginationInfo{
+			NextLastDatetime: nextLastDatetime.Format(time.RFC3339),
+			NextLastAppealID: nextLastAppealID,
+		},
+	}
+
+	response := Response{
+		resp.Response{
+			Status:  http.StatusOK,
+			Message: "success",
+			Body:    appealsResponse,
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
