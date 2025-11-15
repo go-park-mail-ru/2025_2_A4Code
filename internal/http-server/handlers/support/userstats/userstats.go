@@ -13,7 +13,7 @@ import (
 
 type StatsUsecase interface {
 	FindAppealByProfileID(ctx context.Context, profileID int64) (domain.Appeal, error)
-	FindAppealsInfoByProfileID(ctx context.Context, profileID int64) (domain.AppealsInfo, error)
+	FindLastAppealsInfoByProfileID(ctx context.Context, profileID int64) (domain.AppealsInfo, error)
 }
 
 type Response struct {
@@ -69,7 +69,7 @@ func (h *HandlerAppeal) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appealsInfo, err := h.appealsUsecase.FindAppealsInfoByProfileID(r.Context(), id)
+	appealsInfo, err := h.appealsUsecase.FindLastAppealsInfoByProfileID(r.Context(), id)
 	if err != nil {
 		log.Error(err.Error())
 		resp.SendErrorResponse(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

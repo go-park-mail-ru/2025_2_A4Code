@@ -29,7 +29,7 @@ func (repo *AppealRepository) FindByProfileIDWithKeysetPagination(
 
 	const query = `
 		SELECT
-            a.id, a.topic, a.text, a.appeal_status,
+            a.id, a.topic, a.text, a.status,
 			a.created_at, a.updated_at
         FROM
             appeal a
@@ -79,7 +79,7 @@ func (repo *AppealRepository) SaveAppeal(ctx context.Context, profileID int64, t
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
-		INSERT INTO appeal (topic, text, profile_id)
+		INSERT INTO appeal (topic, text, base_profile_id)
 		VALUES ($1, $2, $3)`
 
 	log.Debug("Execute SaveAppeal query...")

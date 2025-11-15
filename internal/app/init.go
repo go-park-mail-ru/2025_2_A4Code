@@ -13,6 +13,7 @@ import (
 	"2025_2_a4code/internal/http-server/handlers/messages/sent"
 	"2025_2_a4code/internal/http-server/handlers/messages/threads"
 	"2025_2_a4code/internal/http-server/handlers/support/appeals"
+	sendappeal "2025_2_a4code/internal/http-server/handlers/support/send-appeal"
 	profilepage "2025_2_a4code/internal/http-server/handlers/user/profile-page"
 	"2025_2_a4code/internal/http-server/handlers/user/settings"
 	uploadavatar "2025_2_a4code/internal/http-server/handlers/user/upload/upload-avatar"
@@ -136,7 +137,7 @@ func Init() {
 	uploadAvatarHandler := uploadavatar.New(avatarUCase, profileUCase, SECRET)
 	sentHandler := sent.New(messageUCase, avatarUCase, SECRET)
 	appealsHandler := appeals.New(appealUCase, SECRET)
-	sendAppealHandler := appeals.New(appealUCase, SECRET)
+	sendAppealHandler := sendappeal.New(appealUCase, SECRET)
 	//userAppealStatsHandler := userstats.New(appealUCase, SECRET)
 
 	// настройка corsMiddleware
