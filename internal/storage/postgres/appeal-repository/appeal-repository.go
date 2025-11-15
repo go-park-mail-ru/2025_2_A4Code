@@ -131,49 +131,129 @@ func (repo *AppealRepository) FindLastAppealByProfileID(ctx context.Context, pro
 	return appeal, nil
 }
 
-func (repo *AppealRepository) FindByProfileID(
+func (repo *AppealRepository) FindAppealsStatsByProfileID(
 	ctx context.Context,
 	profileID int64,
-) ([]domain.Appeal, error) {
-	const op = "storage.appealRepository.FindByProfile"
+) (domain.AppealsInfo, error) {
+	const op = "storage.appealRepository.FindAppealsStatsByProfileID"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
-		SELECT
-            a.id, a.topic, a.text, a.status,
-			a.created_at, a.updated_at
-        FROM
-            appeal a
-        WHERE
-            a.base_profile_id = $1
-        ORDER BY
-            a.created_at DESC, a.id DESC`
+        WITH stats AS (
+            SELECT
+                COUNT(*) as total_count,
+                COUNT(CASE WHEN status = 'open' THEN 1 END) as open_count,
+                COUNT(CASE WHEN status = 'in progress' THEN 1 END) as in_progress_count,
+                COUNT(CASE WHEN status = 'closed' THEN 1 END) as closed_count
+            FROM appeal
+            WHERE base_profile_id = $1
+        ),
+        last_appeal AS (
+            SELECT
+                id, topic, text, status, created_at, updated_at
+            FROM appeal
+            WHERE base_profile_id = $1
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+        )
+        SELECT 
+            s.total_count, s.open_count, s.in_progress_count, s.closed_count,
+            la.id, la.topic, la.text, la.status, la.created_at, la.updated_at
+        FROM stats s
+        LEFT JOIN last_appeal la ON true`
 
-	stmt, err := repo.db.PrepareContext(ctx, query)
+	log.Debug("Executing appeals stats query...")
+
+	var stats domain.AppealsInfo
+	var lastAppeal domain.Appeal
+	var lastAppealID sql.NullInt64
+	var lastAppealTopic, lastAppealText, lastAppealStatus sql.NullString
+	var lastAppealCreatedAt, lastAppealUpdatedAt sql.NullTime
+
+	row := repo.db.QueryRowContext(ctx, query, profileID)
+
+	err := row.Scan(
+		&stats.TotalAppeals, &stats.OpenAppeals, &stats.InProgressAppeals, &stats.ClosedAppeals,
+		&lastAppealID, &lastAppealTopic, &lastAppealText, &lastAppealStatus,
+		&lastAppealCreatedAt, &lastAppealUpdatedAt,
+	)
 	if err != nil {
-		return nil, e.Wrap(op, err)
+		return domain.AppealsInfo{}, e.Wrap(op, err)
 	}
-	defer stmt.Close()
 
-	log.Debug("Executing FindByProfileID query...")
-	rows, err := stmt.QueryContext(ctx, profileID)
+	if lastAppealID.Valid {
+		lastAppeal.Id = lastAppealID.Int64
+		lastAppeal.Topic = lastAppealTopic.String
+		lastAppeal.Text = lastAppealText.String
+		lastAppeal.Status = lastAppealStatus.String
+		lastAppeal.CreatedAt = lastAppealCreatedAt.Time
+		lastAppeal.UpdatedAt = lastAppealUpdatedAt.Time
+		stats.LastAppeal = lastAppeal
+	} else {
+		stats.LastAppeal = domain.Appeal{}
+	}
+
+	return stats, nil
+}
+
+func (repo *AppealRepository) FindAllAppealsStats(
+	ctx context.Context,
+) (domain.AppealsInfo, error) {
+	const op = "storage.appealRepository.FindAllAppealsStats"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+        WITH stats AS (
+            SELECT
+                COUNT(*) as total_count,
+                COUNT(CASE WHEN status = 'open' THEN 1 END) as open_count,
+                COUNT(CASE WHEN status = 'in progress' THEN 1 END) as in_progress_count,
+                COUNT(CASE WHEN status = 'closed' THEN 1 END) as closed_count
+            FROM appeal
+        ),
+        last_appeal AS (
+            SELECT
+                id, topic, text, status, created_at, updated_at
+            FROM appeal
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+        )
+        SELECT 
+            s.total_count, s.open_count, s.in_progress_count, s.closed_count,
+            la.id, la.topic, la.text, la.status, la.created_at, la.updated_at
+        FROM stats s
+        LEFT JOIN last_appeal la ON true`
+
+	log.Debug("Executing all appeals stats query...")
+
+	var stats domain.AppealsInfo
+	var lastAppeal domain.Appeal
+	var lastAppealID sql.NullInt64
+	var lastAppealTopic, lastAppealText, lastAppealStatus sql.NullString
+	var lastAppealCreatedAt, lastAppealUpdatedAt sql.NullTime
+
+	row := repo.db.QueryRowContext(ctx, query)
+
+	err := row.Scan(
+		&stats.TotalAppeals, &stats.OpenAppeals, &stats.InProgressAppeals, &stats.ClosedAppeals,
+		&lastAppealID, &lastAppealTopic, &lastAppealText, &lastAppealStatus,
+		&lastAppealCreatedAt, &lastAppealUpdatedAt,
+	)
 	if err != nil {
-		return nil, e.Wrap(op, err)
+		return domain.AppealsInfo{}, e.Wrap(op, err)
 	}
 
-	var appeals []domain.Appeal
-	for rows.Next() {
-		var appeal domain.Appeal
-		err := rows.Scan(&appeal.Id, &appeal.Topic, &appeal.Text, &appeal.Status, &appeal.CreatedAt, &appeal.UpdatedAt)
-		if err != nil {
-			return nil, e.Wrap(op, err)
-		}
-		appeals = append(appeals, appeal)
+	if lastAppealID.Valid {
+		lastAppeal.Id = lastAppealID.Int64
+		lastAppeal.Topic = lastAppealTopic.String
+		lastAppeal.Text = lastAppealText.String
+		lastAppeal.Status = lastAppealStatus.String
+		lastAppeal.CreatedAt = lastAppealCreatedAt.Time
+		lastAppeal.UpdatedAt = lastAppealUpdatedAt.Time
+		stats.LastAppeal = lastAppeal
+	} else {
+		stats.LastAppeal = domain.Appeal{}
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, e.Wrap(op, err)
-	}
-
-	return appeals, nil
+	return stats, nil
 }

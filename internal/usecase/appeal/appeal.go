@@ -10,10 +10,11 @@ type AppealRepository interface {
 	SaveAppeal(ctx context.Context, profileID int64, topic, text string) error
 	FindByProfileIDWithKeysetPagination(ctx context.Context, profileID, lastAppealID int64, lastDatetime time.Time, limit int) ([]domain.Appeal, error)
 	FindLastAppealByProfileID(ctx context.Context, profileID int64) (domain.Appeal, error)
-	FindByProfileID(
+	FindAppealsStatsByProfileID(
 		ctx context.Context,
 		profileID int64,
-	) ([]domain.Appeal, error)
+	) (domain.AppealsInfo, error)
+	FindAllAppealsStats(ctx context.Context) (domain.AppealsInfo, error)
 }
 
 type AppealUsecase struct {
@@ -42,4 +43,12 @@ func (uc *AppealUsecase) SaveAppeal(
 
 func (uc *AppealUsecase) FindLastAppealByProfileID(ctx context.Context, profileID int64) (domain.Appeal, error) {
 	return uc.repo.FindLastAppealByProfileID(ctx, profileID)
+}
+
+func (uc *AppealUsecase) FindLastAppealsInfoByProfileID(ctx context.Context, profileID int64) (domain.AppealsInfo, error) {
+	return uc.repo.FindAppealsStatsByProfileID(ctx, profileID)
+}
+
+func (uc *AppealUsecase) FindLastAppealsInfo(ctx context.Context) (domain.AppealsInfo, error) {
+	return uc.repo.FindAllAppealsStats(ctx)
 }
