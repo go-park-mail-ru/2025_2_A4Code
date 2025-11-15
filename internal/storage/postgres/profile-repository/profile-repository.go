@@ -29,7 +29,7 @@ func (repo *ProfileRepository) FindByID(ctx context.Context, id int64) (*domain.
 		SELECT 
 			bp.id, bp.username, bp.domain, bp.created_at,
 			p.password_hash, p.auth_version, p.name, p.surname, 
-			p.patronymic, p.gender, p.birthday, p.image_path
+			p.patronymic, p.gender, p.birthday, p.image_path, p.role
 		FROM 
 			base_profile bp
 		JOIN 
@@ -44,13 +44,13 @@ func (repo *ProfileRepository) FindByID(ctx context.Context, id int64) (*domain.
 	defer stmt.Close()
 
 	var profile domain.Profile
-	var profileSurname, profilePatronymic, profileAvatar sql.NullString
+	var profileSurname, profilePatronymic, profileAvatar, profileRole sql.NullString
 
 	log.Debug("Executing FindByID query...")
 	err = stmt.QueryRowContext(ctx, id).Scan(
 		&profile.ID, &profile.Username, &profile.Domain, &profile.CreatedAt,
 		&profile.PasswordHash, &profile.AuthVersion, &profile.Name, &profileSurname,
-		&profilePatronymic, &profile.Gender, &profile.Birthday, &profileAvatar,
+		&profilePatronymic, &profile.Gender, &profile.Birthday, &profileAvatar, &profileRole,
 	)
 
 	if err != nil {
@@ -68,6 +68,11 @@ func (repo *ProfileRepository) FindByID(ctx context.Context, id int64) (*domain.
 	}
 	if profileAvatar.Valid {
 		profile.AvatarPath = profileAvatar.String
+	}
+	if profileRole.Valid {
+		profile.Role = profileRole.String
+	} else {
+		profile.Role = "user"
 	}
 
 	if profile.Domain == "flintmail.ru" {
@@ -237,7 +242,7 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 		SELECT 
 			bp.id, bp.created_at,
 			p.password_hash, p.auth_version, p.name, p.surname, 
-			p.patronymic, p.gender, p.birthday, p.image_path
+			p.patronymic, p.gender, p.birthday, p.image_path, p.role
 		FROM 
 			base_profile bp
 		JOIN 
@@ -254,13 +259,13 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 	var profile domain.Profile
 	profile.Username = username
 	profile.Domain = emailDomain
-	var profileSurname, profilePatronymic, profileAvatar sql.NullString
+	var profileSurname, profilePatronymic, profileAvatar, profileRole sql.NullString
 
 	log.Debug("Executing FindByUsernameAndDomain query...")
 	err = stmt.QueryRowContext(ctx, username, emailDomain).Scan(
 		&profile.ID, &profile.CreatedAt,
 		&profile.PasswordHash, &profile.AuthVersion, &profile.Name, &profileSurname,
-		&profilePatronymic, &profile.Gender, &profile.Birthday, &profileAvatar,
+		&profilePatronymic, &profile.Gender, &profile.Birthday, &profileAvatar, &profileRole,
 	)
 
 	if err != nil {
@@ -278,6 +283,11 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 	}
 	if profileAvatar.Valid {
 		profile.AvatarPath = profileAvatar.String
+	}
+	if profileRole.Valid {
+		profile.Role = profileRole.String
+	} else {
+		profile.Role = "user"
 	}
 
 	if profile.Domain == "flintmail.ru" {

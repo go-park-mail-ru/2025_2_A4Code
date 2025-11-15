@@ -13,7 +13,7 @@ func New() func(http.Handler) http.Handler {
 			}
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept")
-			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, PATCH, DELETE")
 
 			if r.Method == "OPTIONS" {
 				w.WriteHeader(http.StatusOK)

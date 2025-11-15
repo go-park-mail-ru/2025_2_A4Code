@@ -103,25 +103,28 @@ func (h *HandlerAppeals) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	appealsInfo := make([]Appeal, len(appeals))
 	var nextLastAppealID int64
 	var nextLastDatetime time.Time
-	for _, appeal := range appeals {
-		appealsInfo = append(appealsInfo, Appeal{
+	for i, appeal := range appeals {
+		appealsInfo[i] = Appeal{
 			Topic:     appeal.Topic,
 			Text:      appeal.Text,
 			Status:    appeal.Status,
 			CreatedAt: appeal.CreatedAt,
 			UpdatedAt: appeal.UpdatedAt,
-		})
+		}
 
 		nextLastAppealID = appeal.Id
 		nextLastDatetime = appeal.CreatedAt
 	}
 
+	pagination := PaginationInfo{}
+	if len(appealsInfo) > 0 {
+		pagination.NextLastAppealID = nextLastAppealID
+		pagination.NextLastDatetime = nextLastDatetime.Format(time.RFC3339)
+	}
+
 	appealsResponse := AppealsResponse{
-		Appeals: appealsInfo,
-		Pagination: PaginationInfo{
-			NextLastDatetime: nextLastDatetime.Format(time.RFC3339),
-			NextLastAppealID: nextLastAppealID,
-		},
+		Appeals:    appealsInfo,
+		Pagination: pagination,
 	}
 
 	response := Response{

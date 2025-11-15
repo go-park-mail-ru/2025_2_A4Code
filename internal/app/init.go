@@ -12,6 +12,9 @@ import (
 	"2025_2_a4code/internal/http-server/handlers/messages/send"
 	"2025_2_a4code/internal/http-server/handlers/messages/sent"
 	"2025_2_a4code/internal/http-server/handlers/messages/threads"
+	adminappeals "2025_2_a4code/internal/http-server/handlers/support/admin/appeals"
+	adminstats "2025_2_a4code/internal/http-server/handlers/support/admin/stats"
+	adminstatus "2025_2_a4code/internal/http-server/handlers/support/admin/status"
 	"2025_2_a4code/internal/http-server/handlers/support/appeals"
 	sendappeal "2025_2_a4code/internal/http-server/handlers/support/send-appeal"
 	profilepage "2025_2_a4code/internal/http-server/handlers/user/profile-page"
@@ -120,6 +123,9 @@ func Init() {
 	profileUCase := profileUcase.New(profileRepository)
 	avatarUCase := avatarUcase.New(avatarRepository, profileRepository)
 	appealUCase := appeal.New(appealRepository)
+	adminAppealsHandler := adminappeals.New(appealUCase, profileUCase, SECRET)
+	adminStatusHandler := adminstatus.New(appealUCase, profileUCase, SECRET)
+	adminStatsHandler := adminstats.New(appealUCase, profileUCase, SECRET)
 
 	// Создание хэндлеров
 	loginHandler := login.New(profileUCase, SECRET)
@@ -162,6 +168,9 @@ func Init() {
 	http.Handle("/messages/sent", loggerMiddleware(corsMiddleware(http.HandlerFunc(sentHandler.ServeHTTP))))
 	http.Handle("/support/appeals", loggerMiddleware(corsMiddleware(http.HandlerFunc(appealsHandler.ServeHTTP))))
 	http.Handle("/support/send-appeal", loggerMiddleware(corsMiddleware(http.HandlerFunc(sendAppealHandler.ServeHTTP))))
+	http.Handle("/support/admin/appeals", loggerMiddleware(corsMiddleware(http.HandlerFunc(adminAppealsHandler.ServeHTTP))))
+	http.Handle("/support/admin/appeals/", loggerMiddleware(corsMiddleware(http.HandlerFunc(adminStatusHandler.ServeHTTP))))
+	http.Handle("/support/admin/stats", loggerMiddleware(corsMiddleware(http.HandlerFunc(adminStatsHandler.ServeHTTP))))
 
 	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 

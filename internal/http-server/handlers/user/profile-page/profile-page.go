@@ -34,7 +34,7 @@ type Profile struct {
 	Gender     string    `json:"gender"`
 	Birthday   string    `json:"date_of_birth"`
 	AvatarPath string    `json:"avatar_path"`
-	Status     string    `json:"status"`
+	Role       string    `json:"role"`
 }
 
 type Response struct {
@@ -197,6 +197,7 @@ func (h *HandlerProfile) writeProfileResponse(w http.ResponseWriter, profileInfo
 		Gender:     profileInfo.Gender,
 		Birthday:   profileInfo.Birthday,
 		AvatarPath: profileInfo.AvatarPath,
+		Role:       profileInfo.Role,
 	}
 
 	response := Response{
