@@ -14,6 +14,7 @@ import (
 	"2025_2_a4code/internal/http-server/handlers/messages/threads"
 	"2025_2_a4code/internal/http-server/handlers/support/appeals"
 	sendappeal "2025_2_a4code/internal/http-server/handlers/support/send-appeal"
+	sendresponse "2025_2_a4code/internal/http-server/handlers/support/send-response"
 	"2025_2_a4code/internal/http-server/handlers/support/supstats"
 	"2025_2_a4code/internal/http-server/handlers/support/userstats"
 	profilepage "2025_2_a4code/internal/http-server/handlers/user/profile-page"
@@ -142,6 +143,7 @@ func Init() {
 	sendAppealHandler := sendappeal.New(appealUCase, SECRET)
 	userAppealStatsHandler := userstats.New(appealUCase, SECRET)
 	supAppealStatusHandler := supstats.New(appealUCase, SECRET)
+	sendAppealResponseHandler := sendresponse.New(appealUCase, SECRET)
 
 	// настройка corsMiddleware
 	corsMiddleware := cors.New()
@@ -167,6 +169,7 @@ func Init() {
 	http.Handle("/support/send-appeal", loggerMiddleware(corsMiddleware(http.HandlerFunc(sendAppealHandler.ServeHTTP))))
 	http.Handle("/support/userstats", loggerMiddleware(corsMiddleware(http.HandlerFunc(userAppealStatsHandler.ServeHTTP))))
 	http.Handle("/support/supstats", loggerMiddleware(http.HandlerFunc(supAppealStatusHandler.ServeHTTP)))
+	http.Handle("/support/send-response/{appeal_id}", loggerMiddleware(corsMiddleware(http.HandlerFunc(sendAppealResponseHandler.ServeHTTP))))
 
 	err = http.ListenAndServe(cfg.AppConfig.Host+":"+cfg.AppConfig.Port, nil)
 

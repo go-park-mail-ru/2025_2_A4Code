@@ -46,11 +46,11 @@ func (uc *AppealUsecase) FindLastAppealByProfileID(ctx context.Context, profileI
 	return uc.repo.FindLastAppealByProfileID(ctx, profileID)
 }
 
-func (uc *AppealUsecase) FindLastAppealsInfoByProfileID(ctx context.Context, profileID int64) (domain.AppealsInfo, error) {
+func (uc *AppealUsecase) FindAppealsStatsByProfileID(ctx context.Context, profileID int64) (domain.AppealsInfo, error) {
 	return uc.repo.FindAppealsStatsByProfileID(ctx, profileID)
 }
 
-func (uc *AppealUsecase) FindLastAppealsInfo(ctx context.Context) (domain.AppealsInfo, error) {
+func (uc *AppealUsecase) FindAllAppealsStats(ctx context.Context) (domain.AppealsInfo, error) {
 	return uc.repo.FindAllAppealsStats(ctx)
 }
 

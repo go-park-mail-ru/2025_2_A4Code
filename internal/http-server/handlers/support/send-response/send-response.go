@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 type AppealUsecase interface {
@@ -43,9 +45,25 @@ func (h *HandlerSendAppealResponse) ServeHTTP(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	id, err := session.GetProfileID(r, h.secret)
+	_, err := session.GetProfileID(r, h.secret)
 	if err != nil {
 		resp.SendErrorResponse(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
+	parts := strings.Split(r.URL.Path, "/")
+
+	if len(parts) < 2 {
+		resp.SendErrorResponse(w, "missing appeal ID", http.StatusBadRequest)
+		return
+	}
+
+	appealIDStr := parts[len(parts)-1]
+
+	appealID, err := strconv.Atoi(appealIDStr)
+	if err != nil {
+		log.Error("Failed to parse appeal ID: " + err.Error()) // Improved logging
+		resp.SendErrorResponse(w, "invalid appeal ID format", http.StatusBadRequest)
 		return
 	}
 
@@ -56,7 +74,7 @@ func (h *HandlerSendAppealResponse) ServeHTTP(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := h.appealUCase.UpdateAppeal(r.Context(), id, req.Text, req.Status); err != nil {
+	if err := h.appealUCase.UpdateAppeal(r.Context(), int64(appealID), req.Text, req.Status); err != nil {
 		log.Error(err.Error())
 		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
 		return
