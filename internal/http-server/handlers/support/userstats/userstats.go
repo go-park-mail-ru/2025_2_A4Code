@@ -1,4 +1,4 @@
-package stats
+package userstats
 
 import (
 	"2025_2_a4code/internal/domain"
@@ -6,6 +6,7 @@ import (
 	resp "2025_2_a4code/internal/lib/api/response"
 	"2025_2_a4code/internal/lib/session"
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 )
@@ -49,7 +50,7 @@ func New(appealsUsecase StatsUsecase, SECRET []byte) *HandlerAppeal {
 
 func (h *HandlerAppeal) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(r.Context())
-	log.Debug("Handle support/stats")
+	log.Debug("Handle support/userstats")
 
 	if r.Method != http.MethodGet {
 		resp.SendErrorResponse(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -89,4 +90,7 @@ func (h *HandlerAppeal) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			UpdatedAt: lastAppeal.UpdatedAt,
 		},
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
