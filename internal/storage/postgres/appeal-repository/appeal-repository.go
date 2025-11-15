@@ -33,29 +33,11 @@ func (repo *AppealRepository) FindByProfileIDWithKeysetPagination(
 			a.created_at, a.updated_at
         FROM
             appeal a
-        LEFT JOIN
-            folder f ON fpm.folder_id = f.id AND f.profile_id = recipient_profile.id
-        JOIN
-            base_profile bp ON m.sender_base_profile_id = bp.id
-        LEFT JOIN
-            profile sender_profile ON bp.id = sender_profile.base_profile_id
         WHERE
-            recipient_profile.base_profile_id = $1
-			AND (($2 = 0 AND $3 = 0) OR (m.date_of_dispatch, m.id) < (to_timestamp($3), $2))
-        GROUP BY 
-            m.id, 
-            m.topic, 
-            m.text, 
-            m.date_of_dispatch,
-            pm.read_status,
-            bp.id, 
-            bp.username, 
-            bp.domain,
-            sender_profile.name, 
-            sender_profile.surname, 
-            sender_profile.image_path
+            a.base_profile_id = $1
+			AND (($2 = 0 AND $3 = 0) OR (a.created_at, a.id) < (to_timestamp($3), $2))
         ORDER BY
-            m.date_of_dispatch DESC, m.id DESC
+            a.created_at DESC, a.id DESC
 		FETCH FIRST $4 ROWS ONLY`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)
