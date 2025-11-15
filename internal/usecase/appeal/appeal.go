@@ -28,6 +28,9 @@ func (uc *AppealUsecase) FindByProfileIDWithKeysetPagination(
 	return uc.repo.FindByProfileIDWithKeysetPagination(ctx, profileID, lastAppealID, lastDatetime, limit)
 }
 
-func (uc *AppealUsecase) SaveAppeal(ctx context.Context, profileID int64, topic, text string) error {
+func (uc *AppealUsecase) SaveAppeal(
+	ctx context.Context,
+	profileID int64, topic, text string,
+) error {
 	return uc.repo.SaveAppeal(ctx, profileID, topic, text)
 }
