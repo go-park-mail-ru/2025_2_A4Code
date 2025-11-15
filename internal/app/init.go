@@ -202,6 +202,7 @@ func runMigrations(db *sql.DB, migrationsDir string) error {
 
 	slog.Info("Applying migrations...")
 	err = m.Up()
+
 	switch {
 	case err == nil:
 		slog.Info("Migrations are successfully applied")

@@ -3,11 +3,11 @@ package domain
 import "time"
 
 type Appeal struct {
-	id        int64
-	email     int64
-	topic     string
-	text      string
-	status    string
-	createdAt time.Time
-	updatedAt time.Time
+	Id        int64
+	Email     int64
+	Topic     string
+	Text      string
+	Status    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }

@@ -14,5 +14,5 @@ CREATE TABLE IF NOT EXISTS appeal (
 
 -- Триггер для updated_at в appeal
 CREATE TRIGGER appeal_update_trigger
-BEFORE UPDATE ON appeal
-FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
+    BEFORE UPDATE ON appeal
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at();
