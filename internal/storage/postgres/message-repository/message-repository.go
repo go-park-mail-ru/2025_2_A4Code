@@ -785,16 +785,10 @@ func (repo *MessageRepository) GetSentMessagesStats(ctx context.Context, profile
 	return totalCount, unreadCount, nil
 }
 
-// profile-repository.go (Add this method to the ProfileRepository struct)
-
 func (repo *MessageRepository) IsUsersMessage(ctx context.Context, messageID int64, profileID int64) (bool, error) {
 	const op = "storage.postgres.profile-repository.IsUsersMessage"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
-	// This query:
-	// 1. Uses the provided profileID (which is base_profile.id).
-	// 2. Finds the corresponding profile.id via the 'profile' table.
-	// 3. Checks if an entry exists in 'profile_message' linking that profile.id to the messageID.
 	const query = `
 		SELECT EXISTS (
 			SELECT 1
@@ -817,7 +811,6 @@ func (repo *MessageRepository) IsUsersMessage(ctx context.Context, messageID int
 	)
 
 	if err != nil {
-		// Return false and wrap the error if it's a genuine database issue
 		return false, e.Wrap(op, err)
 	}
 
