@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	pb "2025_2_a4code/pkg/profileproto"
+	pb "2025_2_a4code/profile-service/pkg/profileproto"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -76,7 +76,7 @@ func (s *Server) GetProfile(ctx context.Context, req *pb.GetProfileRequest) (*pb
 
 	profileInfo, err := s.profileUCase.FindInfoByID(ctx, profileID)
 	if err != nil {
-		log.Error(op+": failed to get profile: ", err.Error())
+		log.Error(op + ": failed to get profile: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not get profile")
 	}
 
@@ -108,13 +108,13 @@ func (s *Server) UpdateProfile(ctx context.Context, req *pb.UpdateProfileRequest
 	}
 
 	if err := s.profileUCase.UpdateProfileInfo(ctx, profileID, updateReq); err != nil {
-		log.Error(op+": failed to update profile: ", err.Error())
+		log.Error(op + ": failed to update profile: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not update profile")
 	}
 
 	profileInfo, err := s.profileUCase.FindInfoByID(ctx, profileID)
 	if err != nil {
-		log.Error(op+": failed to get updated profile: ", err.Error())
+		log.Error(op + ": failed to get updated profile: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not get updated profile")
 	}
 
@@ -139,7 +139,7 @@ func (s *Server) Settings(ctx context.Context, req *pb.SettingsRequest) (*pb.Set
 
 	settings, err := s.profileUCase.FindSettingsByProfileId(ctx, profileID)
 	if err != nil {
-		log.Error(op+": failed to get settings: ", err.Error())
+		log.Error(op + ": failed to get settings: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not get settings")
 	}
 
@@ -169,13 +169,13 @@ func (s *Server) UploadAvatar(ctx context.Context, req *pb.UploadAvatarRequest) 
 	stringID := strconv.FormatInt(profileID, 10)
 	objectName, presignedURL, err := s.avatarUCase.UploadAvatar(ctx, stringID, fileReader, int64(len(req.AvatarData)), req.FileName)
 	if err != nil {
-		log.Error(op+": failed to upload avatar: ", err.Error())
+		log.Error(op + ": failed to upload avatar: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not upload avatar")
 	}
 
 	err = s.profileUCase.InsertProfileAvatar(ctx, profileID, objectName)
 	if err != nil {
-		log.Error(op+": failed to insert avatar: ", err.Error())
+		log.Error(op + ": failed to insert avatar: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not save avatar")
 	}
 

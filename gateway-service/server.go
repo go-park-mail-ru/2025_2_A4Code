@@ -16,9 +16,9 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"2025_2_a4code/pkg/authproto"
-	"2025_2_a4code/pkg/messagesproto"
-	"2025_2_a4code/pkg/profileproto"
+	"2025_2_a4code/auth-service/pkg/authproto"
+	"2025_2_a4code/messages-service/pkg/messagesproto"
+	"2025_2_a4code/profile-service/pkg/profileproto"
 )
 
 type Server struct {

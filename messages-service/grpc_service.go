@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	pb "2025_2_a4code/pkg/messagesproto"
+	pb "2025_2_a4code/messages-service/pkg/messagesproto"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -35,6 +35,7 @@ type MessageUsecase interface {
 	GetSentMessagesInfoWithPagination(ctx context.Context, profileID int64) (domain.Messages, error)
 	FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
 	MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error
+	MarkMessageAsSpam(ctx context.Context, messageID int64, profileID int64) error
 	SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
 	SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
 	SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error
@@ -82,85 +83,6 @@ func (s *Server) getProfileID(ctx context.Context) (int64, error) {
 	return session.GetProfileIDFromTokenString(tokenString, s.JWTSecret, "access")
 }
 
-func (s *Server) Inbox(ctx context.Context, req *pb.InboxRequest) (*pb.InboxResponse, error) {
-	const op = "messagesservice.Inbox"
-	log := logger.GetLogger(ctx)
-	log.Debug("handle messages/inbox")
-
-	profileID, err := s.getProfileID(ctx)
-	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
-	}
-
-	var lastMessageID int64
-	var lastDatetime time.Time
-	limit := 20
-
-	if req.LastMessageId != "" {
-		if id, err := strconv.ParseInt(req.LastMessageId, 10, 64); err == nil {
-			lastMessageID = id
-		}
-	}
-
-	if req.LastDatetime != "" {
-		if dt, err := time.Parse(time.RFC3339, req.LastDatetime); err == nil {
-			lastDatetime = dt
-		}
-	}
-
-	if req.Limit != "" {
-		if l, err := strconv.Atoi(req.Limit); err == nil && l > 0 && l <= 100 {
-			limit = l
-		}
-	}
-
-	messages, err := s.messageUCase.FindByProfileIDWithKeysetPagination(ctx, profileID, lastMessageID, lastDatetime, limit)
-	if err != nil {
-		log.Error(op+": failed to get messages: ", err.Error())
-		return nil, status.Error(codes.Internal, "could not get messages")
-	}
-
-	messagesInfo, err := s.messageUCase.GetMessagesInfoWithPagination(ctx, profileID)
-	if err != nil {
-		log.Error(op+": failed to get messages info: ", err.Error())
-		return nil, status.Error(codes.Internal, "could not get messages info")
-	}
-
-	pbMessages := make([]*pb.Message, 0, len(messages))
-	var nextLastMessageID int64
-	var nextLastDatetime time.Time
-
-	for _, m := range messages {
-		messageID, _ := strconv.ParseInt(m.ID, 10, 64)
-		if err := s.enrichSenderAvatar(ctx, &m.Sender); err != nil {
-			log.Warn("failed to enrich sender avatar: " + err.Error())
-		}
-
-		pbMessages = append(pbMessages, &pb.Message{
-			Id:       m.ID,
-			Sender:   s.domainSenderToProto(&m.Sender),
-			Topic:    m.Topic,
-			Snippet:  m.Snippet,
-			Datetime: m.Datetime.Format(time.RFC3339),
-			IsRead:   strconv.FormatBool(m.IsRead),
-		})
-
-		nextLastMessageID = messageID
-		nextLastDatetime = m.Datetime
-	}
-
-	return &pb.InboxResponse{
-		MessageTotal:  strconv.Itoa(messagesInfo.MessageTotal),
-		MessageUnread: strconv.Itoa(messagesInfo.MessageUnread),
-		Messages:      pbMessages,
-		Pagination: &pb.PaginationInfo{
-			HasNext:           strconv.FormatBool(len(messages) == limit),
-			NextLastMessageId: strconv.FormatInt(nextLastMessageID, 10),
-			NextLastDatetime:  nextLastDatetime.Format(time.RFC3339),
-		},
-	}, nil
-}
-
 func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*pb.MessagePageResponse, error) {
 	const op = "messagesservice.MessagePage"
 	log := logger.GetLogger(ctx)
@@ -178,7 +100,7 @@ func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*
 
 	fullMessage, err := s.messageUCase.FindFullByMessageID(ctx, messageID, profileID)
 	if err != nil {
-		log.Error(op+": failed to get message: ", err.Error())
+		log.Error(op + ": failed to get message: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not get message")
 	}
 
@@ -235,12 +157,12 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 	for _, receiver := range req.Receivers {
 		msgID, err := s.messageUCase.SaveMessage(ctx, receiver.Email, profileID, req.Topic, req.Text)
 		if err != nil {
-			log.Error(op+": failed to save message: ", err.Error())
+			log.Error(op + ": failed to save message: " + err.Error())
 			return nil, status.Error(codes.Internal, "could not save message")
 		}
 
 		if err := s.messageUCase.SaveThreadIdToMessage(ctx, msgID, threadRoot); err != nil {
-			log.Error(op+": failed to save thread id: ", err.Error())
+			log.Error(op + ": failed to save thread id: " + err.Error())
 			return nil, status.Error(codes.Internal, "could not save thread id")
 		}
 
@@ -248,7 +170,7 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 			size, _ := strconv.ParseInt(file.Size, 10, 64)
 			_, err = s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size)
 			if err != nil {
-				log.Error(op+": failed to save file: ", err.Error())
+				log.Error(op + ": failed to save file: " + err.Error())
 				return nil, status.Error(codes.Internal, "could not save file")
 			}
 		}
@@ -279,18 +201,18 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	for _, receiver := range req.Receivers {
 		msgID, err := s.messageUCase.SaveMessage(ctx, receiver.Email, profileID, req.Topic, req.Text)
 		if err != nil {
-			log.Error(op+": failed to save message: ", err.Error())
+			log.Error(op + ": failed to save message: " + err.Error())
 			return nil, status.Error(codes.Internal, "could not save message")
 		}
 
 		threadID, err := s.messageUCase.SaveThread(ctx, msgID)
 		if err != nil {
-			log.Error(op+": failed to save thread: ", err.Error())
+			log.Error(op + ": failed to save thread: " + err.Error())
 			return nil, status.Error(codes.Internal, "could not save thread")
 		}
 
 		if err := s.messageUCase.SaveThreadIdToMessage(ctx, msgID, threadID); err != nil {
-			log.Error(op+": failed to save thread id: ", err.Error())
+			log.Error(op + ": failed to save thread id: " + err.Error())
 			return nil, status.Error(codes.Internal, "could not save thread id")
 		}
 
@@ -298,7 +220,7 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 			size, _ := strconv.ParseInt(file.Size, 10, 64)
 			_, err = s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size)
 			if err != nil {
-				log.Error(op+": failed to save file: ", err.Error())
+				log.Error(op + ": failed to save file: " + err.Error())
 				return nil, status.Error(codes.Internal, "could not save file")
 			}
 		}
@@ -311,84 +233,6 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	}, nil
 }
 
-func (s *Server) Sent(ctx context.Context, req *pb.SentRequest) (*pb.SentResponse, error) {
-	const op = "messagesservice.Sent"
-	log := logger.GetLogger(ctx)
-	log.Debug("handle messages/sent")
-
-	profileID, err := s.getProfileID(ctx)
-	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
-	}
-
-	var lastMessageID int64
-	var lastDatetime time.Time
-	limit := 20
-
-	if req.LastMessageId != "" {
-		if id, err := strconv.ParseInt(req.LastMessageId, 10, 64); err == nil {
-			lastMessageID = id
-		}
-	}
-
-	if req.LastDatetime != "" {
-		if dt, err := time.Parse(time.RFC3339, req.LastDatetime); err == nil {
-			lastDatetime = dt
-		}
-	}
-
-	if req.Limit != "" {
-		if l, err := strconv.Atoi(req.Limit); err == nil && l > 0 && l <= 100 {
-			limit = l
-		}
-	}
-
-	messages, err := s.messageUCase.FindSentMessagesByProfileIDWithKeysetPagination(ctx, profileID, lastMessageID, lastDatetime, limit)
-	if err != nil {
-		log.Error(op+": failed to get sent messages: ", err.Error())
-		return nil, status.Error(codes.Internal, "could not get sent messages")
-	}
-
-	messagesInfo, err := s.messageUCase.GetSentMessagesInfoWithPagination(ctx, profileID)
-	if err != nil {
-		log.Error(op+": failed to get sent messages info: ", err.Error())
-		return nil, status.Error(codes.Internal, "could not get sent messages info")
-	}
-
-	pbMessages := make([]*pb.Message, 0, len(messages))
-	var nextLastMessageID int64
-	var nextLastDatetime time.Time
-
-	for _, m := range messages {
-		messageID, _ := strconv.ParseInt(m.ID, 10, 64)
-		if err := s.enrichSenderAvatar(ctx, &m.Sender); err != nil {
-			log.Warn("failed to enrich sender avatar: " + err.Error())
-		}
-
-		pbMessages = append(pbMessages, &pb.Message{
-			Id:       m.ID,
-			Sender:   s.domainSenderToProto(&m.Sender),
-			Topic:    m.Topic,
-			Snippet:  m.Snippet,
-			Datetime: m.Datetime.Format(time.RFC3339),
-			IsRead:   strconv.FormatBool(m.IsRead),
-		})
-
-		nextLastMessageID = messageID
-		nextLastDatetime = m.Datetime
-	}
-
-	return &pb.SentResponse{
-		MessageTotal:  strconv.Itoa(messagesInfo.MessageTotal),
-		MessageUnread: strconv.Itoa(messagesInfo.MessageUnread),
-		Messages:      pbMessages,
-		Pagination: &pb.PaginationInfo{
-			HasNext:           strconv.FormatBool(len(messages) == limit),
-			NextLastMessageId: strconv.FormatInt(nextLastMessageID, 10),
-			NextLastDatetime:  nextLastDatetime.Format(time.RFC3339),
-		},
-	}, nil
-}
 func (s *Server) domainSenderToProto(sender *domain.Sender) *pb.Sender {
 	if sender == nil {
 		return nil
@@ -567,4 +411,316 @@ func (s *Server) validateSendRequest(req *pb.SendRequest) error {
 	}
 
 	return nil
+}
+
+func (s *Server) MarkAsSpam(ctx context.Context, req *pb.MarkAsSpamRequest) (*pb.SendResponse, error) {
+	const op = "messagesservice.MarkAsSpam"
+	log := logger.GetLogger(ctx)
+	log.Debug("handle messages/mark-as-spam")
+
+	profileID, err := s.getProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	messageID, err := strconv.ParseInt(req.MessageId, 10, 64)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid message id")
+	}
+
+	if err := s.messageUCase.MarkMessageAsSpam(ctx, messageID, profileID); err != nil {
+		log.Warn("failed to mark message as spam: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not mark message as spam")
+	}
+
+	return &pb.MarkAsSpamResponse{}, nil
+}
+
+func (s *Server) MoveToFolder(ctx context.Context, req *pb.MoveToFolderRequest) (*pb.SendResponse, error) {
+	const op = "messagesservice.MoveToFolder"
+	log := logger.GetLogger(ctx)
+	log.Debug("handle messages/move-to-folder")
+
+	profileID, err := s.getProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	messageID, err := strconv.ParseInt(req.MessageId, 10, 64)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid message id")
+	}
+
+	folderID, err := strconv.ParseInt(req.FolderId, 10, 64)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid folder id")
+	}
+
+	if err := s.messageUCase.MoveToFolder(ctx, profileID, messageID, folderID); err != nil {
+		log.Error(op + ": failed to move message to folder: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not move message to folder")
+	}
+
+	return &pb.MoveToFolderResponse{}, nil
+}
+
+func (s *Server) CreateFolder(ctx context.Context, req *pb.CreateFolderRequest) (*pb.CreateFolderResponse, error) {
+	const op = "messagesservice.CreateFolder"
+	log := logger.GetLogger(ctx)
+	log.Debug("handle messages/create-folder")
+
+	profileID, err := s.getProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	if err := s.validateFolderName(req.FolderName); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	folder, err := s.messageUCase.CreateFolder(ctx, profileID, req.FolderName)
+	if err != nil {
+		log.Error(op + ": failed to create folder: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not create folder")
+	}
+
+	return &pb.CreateFolderResponse{
+		FolderId:   strconv.FormatInt(folder.ID, 10),
+		FolderName: folder.Name,
+		FolderType: folder.Type,
+	}, nil
+}
+
+func (s *Server) validateFolderName(folderName string) error {
+	if folderName == "" {
+		return fmt.Errorf("folder name cannot be empty")
+	}
+
+	if len(folderName) > 50 {
+		return fmt.Errorf("folder name too long (max 50 characters)")
+	}
+
+	if len(folderName) < 1 {
+		return fmt.Errorf("folder name too short (min 1 character)")
+	}
+
+	if validation.HasDangerousCharacters(folderName) {
+		return fmt.Errorf("folder name contains forbidden characters")
+	}
+
+	systemFolders := map[string]struct{}{
+		"inbox":  {},
+		"sent":   {},
+		"draft":  {},
+		"spam":   {},
+		"trash":  {},
+		"custom": {},
+	}
+
+	lowerName := strings.ToLower(folderName)
+	if _, exists := systemFolders[lowerName]; exists {
+		return fmt.Errorf("folder name '%s' is reserved for system folders", folderName)
+	}
+
+	return nil
+}
+
+func (s *Server) GetFolder(ctx context.Context, req *pb.GetFolderRequest) (*pb.GetFolderResponse, error) {
+	const op = "messagesservice.GetFolder"
+	log := logger.GetLogger(ctx)
+	log.Debug("handle messages/get-folder")
+
+	profileID, err := s.getProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	folderID, err := strconv.ParseInt(req.FolderId, 10, 64)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid folder id")
+	}
+
+	var lastMessageID int64
+	var lastDatetime time.Time
+	limit := 20
+
+	if req.LastMessageId != "" {
+		if id, err := strconv.ParseInt(req.LastMessageId, 10, 64); err == nil {
+			lastMessageID = id
+		}
+	}
+
+	if req.LastDatetime != "" {
+		if dt, err := time.Parse(time.RFC3339, req.LastDatetime); err == nil {
+			lastDatetime = dt
+		}
+	}
+
+	if req.Limit != "" {
+		if l, err := strconv.Atoi(req.Limit); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	messages, err := s.messageUCase.GetFolderMessagesWithKeysetPagination(ctx, profileID, folderID, lastMessageID, lastDatetime, limit)
+	if err != nil {
+		log.Error(op + ": failed to get folder messages: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not get folder messages")
+	}
+
+	messagesInfo, err := s.messageUCase.GetFolderMessagesInfo(ctx, profileID, folderID)
+	if err != nil {
+		log.Error(op + ": failed to get folder messages info: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not get folder messages info")
+	}
+
+	pbMessages := make([]*pb.Message, 0, len(messages))
+	var nextLastMessageID int64
+	var nextLastDatetime time.Time
+
+	for _, m := range messages {
+		messageID, _ := strconv.ParseInt(m.ID, 10, 64)
+		if err := s.enrichSenderAvatar(ctx, &m.Sender); err != nil {
+			log.Warn("failed to enrich sender avatar: " + err.Error())
+		}
+
+		pbMessages = append(pbMessages, &pb.Message{
+			Id:       m.ID,
+			Sender:   s.domainSenderToProto(&m.Sender),
+			Topic:    m.Topic,
+			Snippet:  m.Snippet,
+			Datetime: m.Datetime.Format(time.RFC3339),
+			IsRead:   strconv.FormatBool(m.IsRead),
+		})
+
+		nextLastMessageID = messageID
+		nextLastDatetime = m.Datetime
+	}
+
+	return &pb.GetFolderResponse{
+		MessageTotal:  strconv.Itoa(messagesInfo.MessageTotal),
+		MessageUnread: strconv.Itoa(messagesInfo.MessageUnread),
+		Messages:      pbMessages,
+		Pagination: &pb.PaginationInfo{
+			HasNext:           strconv.FormatBool(len(messages) == limit),
+			NextLastMessageId: strconv.FormatInt(nextLastMessageID, 10),
+			NextLastDatetime:  nextLastDatetime.Format(time.RFC3339),
+		},
+	}, nil
+}
+
+func (s *Server) GetFolders(ctx context.Context, req *pb.GetFoldersRequest) (*pb.GetFoldersResponse, error) {
+	const op = "messagesservice.GetFolders"
+	log := logger.GetLogger(ctx)
+	log.Debug("handle messages/get-folders")
+
+	profileID, err := s.getProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	folders, err := s.messageUCase.GetUserFolders(ctx, profileID)
+	if err != nil {
+		log.Error(op + ": failed to get user folders: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not get folders")
+	}
+
+	// конвертируем domain папки в proto папки
+	pbFolders := make([]*pb.Folder, 0, len(folders))
+	for _, folder := range folders {
+		pbFolders = append(pbFolders, &pb.Folder{
+			FolderId:   strconv.FormatInt(folder.ID, 10),
+			FolderName: folder.Name,
+			FolderType: folder.Type,
+		})
+	}
+
+	return &pb.GetFoldersResponse{
+		Folders: pbFolders,
+	}, nil
+}
+
+func (s *Server) RenameFolder(ctx context.Context, req *pb.RenameFolderRequest) (*pb.RenameFolderResponse, error) {
+	const op = "messagesservice.RenameFolder"
+	log := logger.GetLogger(ctx)
+	log.Debug("handle messages/rename-folder")
+
+	profileID, err := s.getProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	folderID, err := strconv.ParseInt(req.FolderId, 10, 64)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid folder id")
+	}
+
+	if err := s.validateFolderName(req.NewFolderName); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	folder, err := s.messageUCase.RenameFolder(ctx, profileID, folderID, req.NewFolderName)
+	if err != nil {
+		log.Error(op + ": failed to rename folder: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not rename folder")
+	}
+
+	return &pb.RenameFolderResponse{
+		FolderId:   strconv.FormatInt(folder.ID, 10),
+		FolderName: folder.Name,
+		FolderType: folder.Type,
+	}, nil
+}
+
+func (s *Server) DeleteFolder(ctx context.Context, req *pb.DeleteFolderRequest) (*pb.DeleteFolderResponse, error) {
+	const op = "messagesservice.DeleteFolder"
+
+	log := logger.GetLogger(ctx)
+	log.Debug("handle messages/delete-folder")
+
+	profileID, err := s.getProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	folderID, err := strconv.ParseInt(req.FolderId, 10, 64)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid folder id")
+	}
+
+	if err := s.messageUCase.DeleteFolder(ctx, profileID, folderID); err != nil {
+		log.Error(op + ": failed to delete folder: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not delete folder")
+	}
+
+	return &pb.DeleteFolderResponse{}, nil
+}
+
+func (s *Server) DeleteMessageFromFolder(ctx context.Context, req *pb.DeleteMessageFromFolderRequest) (*pb.DeleteMessageFromFolderResponse, error) {
+	const op = "messagesservice.DeleteMessageFromFolder"
+
+	log := logger.GetLogger(ctx)
+	log.Debug("handle messages/delete-message-from-folder")
+
+	profileID, err := s.getProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	messageID, err := strconv.ParseInt(req.MessageId, 10, 64)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid message id")
+	}
+
+	folderID, err := strconv.ParseInt(req.FolderId, 10, 64)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid folder id")
+	}
+
+	if err := s.messageUCase.DeleteMessageFromFolder(ctx, profileID, messageID, folderID); err != nil {
+		log.Error(op + ": failed to delete message from folder: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not delete message from folder")
+	}
+
+	return &pb.DeleteMessageFromFolderResponse{}, nil
 }

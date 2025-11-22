@@ -14,7 +14,7 @@ import (
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	avatarUcase "2025_2_a4code/internal/usecase/avatar"
 	messageUcase "2025_2_a4code/internal/usecase/message"
-	pb "2025_2_a4code/pkg/messagesproto"
+	pb "2025_2_a4code/messages-service/pkg/messagesproto"
 	"context"
 	"fmt"
 	"log/slog"
