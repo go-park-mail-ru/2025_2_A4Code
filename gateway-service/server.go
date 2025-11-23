@@ -82,11 +82,20 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.Handle("GET /user/settings", http.HandlerFunc(s.settingsHandler))
 	mux.Handle("POST /user/upload/avatar", http.HandlerFunc(s.uploadAvatarHandler))
 
-	mux.Handle("GET /messages/inbox", http.HandlerFunc(s.inboxHandler))
 	mux.Handle("GET /messages/{message_id}", http.HandlerFunc(s.messagePageHandler))
 	mux.Handle("POST /messages/reply", http.HandlerFunc(s.replyHandler))
 	mux.Handle("POST /messages/send", http.HandlerFunc(s.sendHandler))
-	mux.Handle("GET /messages/sent", http.HandlerFunc(s.sentHandler))
+	mux.Handle("POST /messages/mark-as-spam", http.HandlerFunc(s.markAsSpamHandler))
+	mux.Handle("POST /messages/move-to-folder", http.HandlerFunc(s.moveToFolderHandler))
+	mux.Handle("POST /messages/create-folder", http.HandlerFunc(s.createFolderHandler))
+	mux.Handle("GET /folders/{folder_name}", http.HandlerFunc(s.getFolderHandler))
+	mux.Handle("GET /messages/get-folders", http.HandlerFunc(s.getFoldersHandler))
+	mux.Handle("PUT /messages/rename-folder", http.HandlerFunc(s.renameFolderHandler))
+	mux.Handle("DELETE /messages/delete-folder", http.HandlerFunc(s.deleteFolderHandler))
+	mux.Handle("DELETE /messages/delete-message-from-folder", http.HandlerFunc(s.deleteMessageFromFolderHandler))
+	mux.Handle("POST /messages/save-draft", http.HandlerFunc(s.saveDraftHandler))
+	mux.Handle("DELETE /messages/delete-draft", http.HandlerFunc(s.deleteDraftHandler))
+	mux.Handle("POST /messages/send-draft", http.HandlerFunc(s.sendDraftHandler))
 
 	// csrf middleware
 	//csrfProtectedHandler := csrfcheck.New()(csrfMux)
@@ -343,30 +352,6 @@ func (s *Server) uploadAvatarHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // Messages handlers
-func (s *Server) inboxHandler(w http.ResponseWriter, r *http.Request) {
-	accessToken, err := getAccessToken(r)
-	if err != nil {
-		http.Error(w, "Access token required", http.StatusUnauthorized)
-		return
-	}
-
-	ctx := s.addTokenToContext(r.Context(), accessToken)
-
-	req := &messagesproto.InboxRequest{
-		LastMessageId: r.URL.Query().Get("last_message_id"),
-		LastDatetime:  r.URL.Query().Get("last_datetime"),
-		Limit:         r.URL.Query().Get("limit"),
-	}
-
-	resp, err := s.messageClient.Inbox(ctx, req)
-	if err != nil {
-		http.Error(w, "Failed to get inbox", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
-}
 
 func (s *Server) messagePageHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
@@ -442,31 +427,6 @@ func (s *Server) sendHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func (s *Server) sentHandler(w http.ResponseWriter, r *http.Request) {
-	accessToken, err := getAccessToken(r)
-	if err != nil {
-		http.Error(w, "Access token required", http.StatusUnauthorized)
-		return
-	}
-
-	ctx := s.addTokenToContext(r.Context(), accessToken)
-
-	req := &messagesproto.SentRequest{
-		LastMessageId: r.URL.Query().Get("last_message_id"),
-		LastDatetime:  r.URL.Query().Get("last_datetime"),
-		Limit:         r.URL.Query().Get("limit"),
-	}
-
-	resp, err := s.messageClient.Sent(ctx, req)
-	if err != nil {
-		http.Error(w, "Failed to get sent messages", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
-}
-
 func getAccessToken(r *http.Request) (string, error) {
 	accessCookie, err := r.Cookie("access_token")
 	if err != nil {
@@ -500,6 +460,302 @@ func setAuthCookies(w http.ResponseWriter, access, refresh string) {
 		SameSite: http.SameSiteLaxMode,
 	}
 	http.SetCookie(w, refreshCookie)
+}
+
+func (s *Server) markAsSpamHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		http.Error(w, "Access token required", http.StatusUnauthorized)
+		return
+	}
+
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	var req messagesproto.MarkAsSpamRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	resp, err := s.messageClient.MarkAsSpam(ctx, &req)
+	if err != nil {
+		http.Error(w, "Failed to mark as spam", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) moveToFolderHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		http.Error(w, "Access token required", http.StatusUnauthorized)
+		return
+	}
+
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	var req messagesproto.MoveToFolderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	resp, err := s.messageClient.MoveToFolder(ctx, &req)
+	if err != nil {
+		http.Error(w, "Failed to move to folder", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) createFolderHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		http.Error(w, "Access token required", http.StatusUnauthorized)
+		return
+	}
+
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	var req messagesproto.CreateFolderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	resp, err := s.messageClient.CreateFolder(ctx, &req)
+	if err != nil {
+		http.Error(w, "Failed to create folder", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) getFolderHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		http.Error(w, "Access token required", http.StatusUnauthorized)
+		return
+	}
+
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	folderName := r.PathValue("folder_name")
+	lastMessageID := r.URL.Query().Get("last_message_id")
+	lastDatetime := r.URL.Query().Get("last_datetime")
+	limit := r.URL.Query().Get("limit")
+
+	foldersReq := &messagesproto.GetFoldersRequest{}
+	foldersResp, err := s.messageClient.GetFolders(ctx, foldersReq)
+	if err != nil {
+		http.Error(w, "Failed to get folders", http.StatusInternalServerError)
+		return
+	}
+
+	var folderID string
+	for _, folder := range foldersResp.Folders {
+		if folder.FolderName == folderName {
+			folderID = folder.FolderId
+			break
+		}
+	}
+
+	if folderID == "" {
+		http.Error(w, "Folder not found", http.StatusNotFound)
+		return
+	}
+
+	req := &messagesproto.GetFolderRequest{
+		FolderId:      folderID,
+		LastMessageId: lastMessageID,
+		LastDatetime:  lastDatetime,
+		Limit:         limit,
+	}
+
+	resp, err := s.messageClient.GetFolder(ctx, req)
+	if err != nil {
+		http.Error(w, "Failed to get folder", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) getFoldersHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		http.Error(w, "Access token required", http.StatusUnauthorized)
+		return
+	}
+
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	req := &messagesproto.GetFoldersRequest{}
+
+	resp, err := s.messageClient.GetFolders(ctx, req)
+	if err != nil {
+		http.Error(w, "Failed to get folders", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) renameFolderHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		http.Error(w, "Access token required", http.StatusUnauthorized)
+		return
+	}
+
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	var req messagesproto.RenameFolderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	resp, err := s.messageClient.RenameFolder(ctx, &req)
+	if err != nil {
+		http.Error(w, "Failed to rename folder", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) deleteFolderHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		http.Error(w, "Access token required", http.StatusUnauthorized)
+		return
+	}
+
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	folderID := r.URL.Query().Get("folder_id")
+	req := &messagesproto.DeleteFolderRequest{
+		FolderId: folderID,
+	}
+
+	resp, err := s.messageClient.DeleteFolder(ctx, req)
+	if err != nil {
+		http.Error(w, "Failed to delete folder", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) deleteMessageFromFolderHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		http.Error(w, "Access token required", http.StatusUnauthorized)
+		return
+	}
+
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	var req messagesproto.DeleteMessageFromFolderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	resp, err := s.messageClient.DeleteMessageFromFolder(ctx, &req)
+	if err != nil {
+		http.Error(w, "Failed to delete message from folder", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) saveDraftHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		http.Error(w, "Access token required", http.StatusUnauthorized)
+		return
+	}
+
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	var req messagesproto.SaveDraftRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	resp, err := s.messageClient.SaveDraft(ctx, &req)
+	if err != nil {
+		http.Error(w, "Failed to save draft", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) deleteDraftHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		http.Error(w, "Access token required", http.StatusUnauthorized)
+		return
+	}
+
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	var req messagesproto.DeleteDraftRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	resp, err := s.messageClient.DeleteDraft(ctx, &req)
+	if err != nil {
+		http.Error(w, "Failed to delete draft", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) sendDraftHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		http.Error(w, "Access token required", http.StatusUnauthorized)
+		return
+	}
+
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	var req messagesproto.SendDraftRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	resp, err := s.messageClient.SendDraft(ctx, &req)
+	if err != nil {
+		http.Error(w, "Failed to send draft", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
 
 func (s *Server) Stop(ctx context.Context) error {
