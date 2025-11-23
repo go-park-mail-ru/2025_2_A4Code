@@ -10,16 +10,18 @@ import (
 )
 
 type AvatarRepository struct {
-	Client              *minio.Client
-	publicPresignClient *minio.Client
-	BucketName          string
+	Client        *minio.Client
+	BucketName    string
+	publicBaseURL string
+	publicUseSSL  bool
 }
 
-func New(client *minio.Client, publicClient *minio.Client, bucketName string) *AvatarRepository {
+func New(client *minio.Client, bucketName string, publicBaseURL string, publicUseSSL bool) *AvatarRepository {
 	return &AvatarRepository{
-		Client:              client,
-		publicPresignClient: publicClient,
-		BucketName:          bucketName,
+		Client:        client,
+		BucketName:    bucketName,
+		publicBaseURL: publicBaseURL,
+		publicUseSSL:  publicUseSSL,
 	}
 }
 
@@ -31,15 +33,33 @@ func (repo *AvatarRepository) UploadFile(ctx context.Context, objectName string,
 }
 
 func (repo *AvatarRepository) GetAvatarPresignedURL(ctx context.Context, objectName string, duration time.Duration) (*url.URL, error) {
-	client := repo.Client
-	if repo.publicPresignClient != nil {
-		client = repo.publicPresignClient
-	}
-
-	presignedURL, err := client.PresignedGetObject(ctx, repo.BucketName, objectName, duration, nil)
+	presignedURL, err := repo.Client.PresignedGetObject(ctx, repo.BucketName, objectName, duration, nil)
 	if err != nil {
 		return nil, err
 	}
+
+	if repo.publicBaseURL != "" {
+		if override, err := url.Parse(repo.publicBaseURL); err == nil {
+			host := override.Host
+			if host == "" {
+				host = repo.publicBaseURL
+			}
+			scheme := override.Scheme
+			if scheme == "" {
+				if repo.publicUseSSL {
+					scheme = "https"
+				} else {
+					scheme = "http"
+				}
+			}
+
+			cloned := *presignedURL
+			cloned.Scheme = scheme
+			cloned.Host = host
+			presignedURL = &cloned
+		}
+	}
+
 	return presignedURL, nil
 }
 func (repo *AvatarRepository) DeleteAvatar(ctx context.Context, objectName string) error {

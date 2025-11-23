@@ -1,0 +1,118 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: a4-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgresql
+      POSTGRES_DB: a4code_db
+      POSTGRES_HOST_AUTH_METHOD: md5
+    ports:
+      - "8004:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio
+    container_name: a4-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniominio
+    ports:
+      - "8005:9000"
+      - "8006:9001"
+    volumes:
+      - minio-data:/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: a4-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    depends_on:
+      - postgres
+    ports:
+      - "8007:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+
+  portainer:
+    image: portainer/portainer-ce
+    container_name: a4-portainer
+    restart: unless-stopped
+    ports:
+      - "8008:9000"
+      - "8009:9443"
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:${DOCKER_SOCK:-/var/run/docker.sock}
+      - portainer-data:/data
+    command: -H ${PORTAINER_DOCKER_HOST:-unix:///var/run/docker.sock}
+
+  auth:
+    build:
+      context: .
+      dockerfile: Dockerfile.auth
+    container_name: a4-auth
+    environment:
+      CONFIG_PATH: config/docker.yml
+    volumes:
+      - ./db:/app/db:ro
+    ports:
+      - "8001:8001"
+    depends_on:
+      - postgres
+
+  messages:
+    build:
+      context: .
+      dockerfile: Dockerfile.messages
+    container_name: a4-messages
+    environment:
+      CONFIG_PATH: config/docker.yml
+    volumes:
+      - ./db:/app/db:ro
+    ports:
+      - "8002:8002"
+    depends_on:
+      - postgres
+
+  profile:
+    build:
+      context: .
+      dockerfile: Dockerfile.profile
+    container_name: a4-profile
+    environment:
+      CONFIG_PATH: config/docker.yml
+    volumes:
+      - ./db:/app/db:ro
+    ports:
+      - "8003:8003"
+    depends_on:
+      - postgres
+      - minio
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    container_name: a4-gateway
+    environment:
+      CONFIG_PATH: config/docker-gateway.yml
+    volumes:
+      - ./db:/app/db:ro
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - auth
+      - messages
+      - profile
+
+volumes:
+  pgdata:
+  minio-data:
+  pgadmin-data:
+  portainer-data:

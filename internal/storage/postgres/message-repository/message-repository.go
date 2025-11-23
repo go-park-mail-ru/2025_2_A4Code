@@ -989,8 +989,13 @@ func (repo *MessageRepository) GetFolderMessagesWithKeysetPagination(
             m.date_of_dispatch DESC, m.id DESC
         LIMIT $5`
 
+	lastUnix := int64(0)
+	if !lastDatetime.IsZero() {
+		lastUnix = lastDatetime.Unix()
+	}
+
 	log.Debug("Querying folder messages with pagination...")
-	rows, err := repo.db.QueryContext(ctx, query, profileID, folderID, lastMessageID, lastDatetime.Unix(), limit)
+	rows, err := repo.db.QueryContext(ctx, query, profileID, folderID, lastMessageID, lastUnix, limit)
 	if err != nil {
 		return nil, e.Wrap(op, err)
 	}

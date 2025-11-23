@@ -1,17 +1,20 @@
 package profile_service
 
 import (
-	"2025_2_a4code/internal/domain"
-	"2025_2_a4code/internal/http-server/middleware/logger"
-	"2025_2_a4code/internal/lib/session"
-	"2025_2_a4code/internal/usecase/profile"
+	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"2025_2_a4code/internal/domain"
+	"2025_2_a4code/internal/http-server/middleware/logger"
+	commonE "2025_2_a4code/internal/lib/errors"
+	"2025_2_a4code/internal/lib/session"
+	"2025_2_a4code/internal/usecase/profile"
 	pb "2025_2_a4code/profile-service/pkg/profileproto"
 
 	"google.golang.org/grpc/codes"
@@ -77,6 +80,9 @@ func (s *Server) GetProfile(ctx context.Context, req *pb.GetProfileRequest) (*pb
 	profileInfo, err := s.profileUCase.FindInfoByID(ctx, profileID)
 	if err != nil {
 		log.Error(op + ": failed to get profile: " + err.Error())
+		if errors.Is(err, commonE.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "profile not found")
+		}
 		return nil, status.Error(codes.Internal, "could not get profile")
 	}
 
@@ -109,12 +115,15 @@ func (s *Server) UpdateProfile(ctx context.Context, req *pb.UpdateProfileRequest
 
 	if err := s.profileUCase.UpdateProfileInfo(ctx, profileID, updateReq); err != nil {
 		log.Error(op + ": failed to update profile: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not update profile")
+		return nil, status.Error(codes.InvalidArgument, "could not update profile")
 	}
 
 	profileInfo, err := s.profileUCase.FindInfoByID(ctx, profileID)
 	if err != nil {
 		log.Error(op + ": failed to get updated profile: " + err.Error())
+		if errors.Is(err, commonE.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "profile not found")
+		}
 		return nil, status.Error(codes.Internal, "could not get updated profile")
 	}
 
@@ -164,7 +173,7 @@ func (s *Server) UploadAvatar(ctx context.Context, req *pb.UploadAvatarRequest) 
 	}
 
 	// Создаем reader из байтов
-	fileReader := strings.NewReader(string(req.AvatarData))
+	fileReader := bytes.NewReader(req.AvatarData)
 
 	stringID := strconv.FormatInt(profileID, 10)
 	objectName, presignedURL, err := s.avatarUCase.UploadAvatar(ctx, stringID, fileReader, int64(len(req.AvatarData)), req.FileName)

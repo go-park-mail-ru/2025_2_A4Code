@@ -63,21 +63,9 @@ func ProfileInit() {
 		log.Error("error checking bucket: " + err.Error())
 	}
 
-	var publicMinioClient *minio.Client
-	if cfg.MinioConfig.PublicEndpoint != "" {
-		publicMinioClient, err = minio.New(cfg.MinioConfig.PublicEndpoint, &minio.Options{
-			Creds:  credentials.NewStaticV4(cfg.MinioConfig.User, cfg.MinioConfig.Password, ""),
-			Secure: cfg.MinioConfig.PublicUseSSL,
-		})
-		if err != nil {
-			log.Error("error configuring public minio endpoint: " + err.Error())
-			os.Exit(1)
-		}
-	}
-
 	// Создание репозиториев
 	profileRepository := profilerepository.New(connection)
-	avatarRepository := avatarrepository.New(client, publicMinioClient, cfg.MinioConfig.BucketName)
+	avatarRepository := avatarrepository.New(client, cfg.MinioConfig.BucketName, cfg.MinioConfig.PublicEndpoint, cfg.MinioConfig.PublicUseSSL)
 
 	// Создание юзкейсов
 	profileUCase := profileUcase.New(profileRepository)

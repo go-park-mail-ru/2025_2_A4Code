@@ -294,12 +294,13 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 	profile.Username = username
 	profile.Domain = emailDomain
 	var profileSurname, profilePatronymic, profileAvatar sql.NullString
+	var profileBirthday sql.NullTime
 
 	log.Debug("Executing FindByUsernameAndDomain query...")
 	err = stmt.QueryRowContext(ctx, username, emailDomain).Scan(
 		&profile.ID, &profile.CreatedAt,
 		&profile.PasswordHash, &profile.AuthVersion, &profile.Name, &profileSurname,
-		&profilePatronymic, &profile.Gender, &profile.Birthday, &profileAvatar,
+		&profilePatronymic, &profile.Gender, &profileBirthday, &profileAvatar,
 	)
 
 	if err != nil {
@@ -317,6 +318,9 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 	}
 	if profileAvatar.Valid {
 		profile.AvatarPath = profileAvatar.String
+	}
+	if profileBirthday.Valid {
+		profile.Birthday = profileBirthday.Time
 	}
 
 	if profile.Domain == "flintmail.ru" {
@@ -352,12 +356,13 @@ func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64
 
 	var profileInfo domain.ProfileInfo
 	var profileInfoSurname, profileInfoPatronymic, profileInfoAvatar sql.NullString
+	var profileInfoBirthday sql.NullString
 
 	log.Debug("Executing FindInfoByID query...")
 	err = stmt.QueryRowContext(ctx, profileID).Scan(
 		&profileInfo.ID, &profileInfo.Username, &profileInfo.CreatedAt,
 		&profileInfo.Name, &profileInfoSurname,
-		&profileInfoPatronymic, &profileInfo.Gender, &profileInfo.Birthday, &profileInfoAvatar,
+		&profileInfoPatronymic, &profileInfo.Gender, &profileInfoBirthday, &profileInfoAvatar,
 	)
 
 	if err != nil {
@@ -375,6 +380,9 @@ func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64
 	}
 	if profileInfoAvatar.Valid {
 		profileInfo.AvatarPath = profileInfoAvatar.String
+	}
+	if profileInfoBirthday.Valid {
+		profileInfo.Birthday = profileInfoBirthday.String
 	}
 
 	return profileInfo, nil
