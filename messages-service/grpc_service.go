@@ -43,6 +43,7 @@ type MessageUsecase interface {
 	// методы для работы с сообщениями
 	MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error
 	MarkMessageAsSpam(ctx context.Context, messageID int64, profileID int64) error
+	IsUsersMessage(ctx context.Context, messageID int64, profileID int64) (bool, error)
 
 	// методы для черновиков
 	SaveDraft(ctx context.Context, profileID int64, draftID, receiverEmail, topic, text string) (int64, error)
@@ -122,6 +123,16 @@ func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*
 	messageID, err := strconv.ParseInt(req.MessageId, 10, 64)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid message id")
+	}
+
+	ok, err := s.messageUCase.IsUsersMessage(ctx, messageID, profileID)
+	if err != nil {
+		log.Error(op + ": failed to check if it is users message: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not get message")
+	}
+	if !ok {
+		log.Debug(op + ": unpermitted access to message")
+		return nil, status.Error(codes.PermissionDenied, "access denied")
 	}
 
 	fullMessage, err := s.messageUCase.FindFullByMessageID(ctx, messageID, profileID)
