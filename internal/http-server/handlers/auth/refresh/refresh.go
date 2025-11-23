@@ -68,7 +68,7 @@ func (h *HandlerRefresh) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		Path:     "/",
 		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
+		SameSite: http.SameSiteNoneMode,
 	}
 	http.SetCookie(w, accessCookie)
 

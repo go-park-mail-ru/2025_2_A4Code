@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"google.golang.org/grpc"
 )
 
 type contextKey string
@@ -49,5 +51,12 @@ func New(log *slog.Logger) func(next http.Handler) http.Handler {
 		}
 
 		return http.HandlerFunc(fn)
+	}
+}
+
+func GrpcLoggerInterceptor(log *slog.Logger) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		ctx = context.WithValue(ctx, loggerKey, log)
+		return handler(ctx, req)
 	}
 }

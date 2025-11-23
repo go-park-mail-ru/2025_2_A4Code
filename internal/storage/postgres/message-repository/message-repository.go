@@ -67,13 +67,16 @@ func (repo *MessageRepository) FindByMessageID(ctx context.Context, messageID in
 	var senderUsername, senderDomain, text string
 	var senderName, senderSurname, senderAvatar sql.NullString
 
-	log.Debug("Executing FindByMessageID query...")
+	log.Debug("Scanning message data...")
 	err = stmt.QueryRowContext(ctx, messageID).Scan(
 		&messageIdInt, &message.Topic, &text, &message.Datetime,
 		&senderId, &senderUsername, &senderDomain,
 		&senderName, &senderSurname, &senderAvatar,
 		&message.IsRead,
 	)
+	if err != nil {
+		return nil, e.Wrap(op, err)
+	}
 
 	// Создаем snippet из текста сообщения
 	message.Snippet = buildSnippet(text, 40)
@@ -131,7 +134,7 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 	var folderID, folderProfileID sql.NullInt64
 	var folderName, folderType sql.NullString
 
-	log.Debug("Executing FindFullByMessageID query...")
+	log.Debug("Scanning full message data...")
 	err = repo.db.QueryRowContext(ctx, query, messageID, profileID).Scan(
 		&messageIdInt, &msg.Topic, &msg.Text, &msg.Datetime,
 		&senderId, &senderUsername, &senderDomain,
@@ -169,7 +172,7 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 	}
 
 	// Получаем файлы
-	log.Debug("Executing FindFilesByMessageID query...")
+	log.Debug("Getting message files...")
 	rows, err := repo.db.QueryContext(ctx, `
         SELECT id, file_type, size, storage_path, message_id 
         FROM file 
@@ -197,197 +200,7 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 	return msg, nil
 }
 
-func (repo *MessageRepository) FindByProfileID(ctx context.Context, profileID int64) ([]domain.Message, error) {
-	const op = "storage.postgresql.message.FindByProfileID"
-	log := logger.GetLogger(ctx).With(slog.String("op", op))
-
-	const query = `
-        SELECT
-            m.id, m.topic, m.text, m.date_of_dispatch,
-            pm.read_status,
-            bp.id, bp.username, bp.domain,
-            sender_profile.name, sender_profile.surname, sender_profile.image_path
-        FROM
-            message m
-        JOIN
-            profile_message pm ON m.id = pm.message_id
-        JOIN
-            profile recipient_profile ON pm.profile_id = recipient_profile.id
-        LEFT JOIN
-            folder_profile_message fpm ON m.id = fpm.message_id
-        LEFT JOIN
-            folder f ON fpm.folder_id = f.id AND f.profile_id = recipient_profile.id
-        JOIN
-            base_profile bp ON m.sender_base_profile_id = bp.id
-        LEFT JOIN
-            profile sender_profile ON bp.id = sender_profile.base_profile_id
-        WHERE
-            recipient_profile.base_profile_id = $1
-        GROUP BY 
-            m.id, 
-            m.topic, 
-            m.text, 
-            m.date_of_dispatch,
-            pm.read_status,
-            bp.id, 
-            bp.username, 
-            bp.domain,
-            sender_profile.name, 
-            sender_profile.surname, 
-            sender_profile.image_path
-        ORDER BY
-            m.date_of_dispatch DESC`
-
-	stmt, err := repo.db.PrepareContext(ctx, query)
-	if err != nil {
-		return nil, e.Wrap(op, err)
-	}
-	defer stmt.Close()
-
-	log.Debug("Executing FindByMessageID query...")
-	rows, err := stmt.QueryContext(ctx, profileID)
-	if err != nil {
-		return nil, e.Wrap(op+": failed to execute query: ", err)
-	}
-	defer rows.Close()
-	var messages []domain.Message
-	for rows.Next() {
-		var message domain.Message
-		var messageIdInt int64
-		var senderId int64
-		var senderUsername, senderDomain string
-		var senderName, senderSurname, senderAvatar sql.NullString
-		var text string
-
-		err := rows.Scan(
-			&messageIdInt, &message.Topic, &text, &message.Datetime, &message.IsRead,
-			&senderId, &senderUsername, &senderDomain,
-			&senderName, &senderSurname, &senderAvatar,
-		)
-		if err != nil {
-			return nil, e.Wrap(op, err)
-		}
-		message.ID = strconv.FormatInt(messageIdInt, 10)
-		message.Snippet = buildSnippet(text, 40)
-		message.Sender = domain.Sender{
-			Id:    senderId,
-			Email: fmt.Sprintf("%s@%s", senderUsername, senderDomain),
-			Username: strings.TrimSpace(fmt.Sprintf("%s %s",
-				senderName.String, senderSurname.String)),
-			Avatar: senderAvatar.String,
-		}
-		messages = append(messages, message)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, e.Wrap(op, err)
-	}
-
-	return messages, nil
-}
-
-func (repo *MessageRepository) FindByProfileIDWithKeysetPagination(
-	ctx context.Context,
-	profileID int64,
-	lastMessageID int64,
-	lastDatetime time.Time,
-	limit int,
-) ([]domain.Message, error) {
-
-	const op = "storage.postgresql.message.FindByProfileID"
-	log := logger.GetLogger(ctx).With(slog.String("op", op))
-
-	const query = `
-        SELECT
-            m.id, m.topic, m.text, m.date_of_dispatch,
-            pm.read_status,
-            bp.id, bp.username, bp.domain,
-            sender_profile.name, sender_profile.surname, sender_profile.image_path
-        FROM
-            message m
-        JOIN
-            profile_message pm ON m.id = pm.message_id
-        JOIN
-            profile recipient_profile ON pm.profile_id = recipient_profile.id
-        LEFT JOIN
-            folder_profile_message fpm ON m.id = fpm.message_id
-        LEFT JOIN
-            folder f ON fpm.folder_id = f.id AND f.profile_id = recipient_profile.id
-        JOIN
-            base_profile bp ON m.sender_base_profile_id = bp.id
-        LEFT JOIN
-            profile sender_profile ON bp.id = sender_profile.base_profile_id
-        WHERE
-            recipient_profile.base_profile_id = $1
-			AND (($2 = 0 AND $3 = 0) OR (m.date_of_dispatch, m.id) < (to_timestamp($3), $2))
-        GROUP BY 
-            m.id, 
-            m.topic, 
-            m.text, 
-            m.date_of_dispatch,
-            pm.read_status,
-            bp.id, 
-            bp.username, 
-            bp.domain,
-            sender_profile.name, 
-            sender_profile.surname, 
-            sender_profile.image_path
-        ORDER BY
-            m.date_of_dispatch DESC, m.id DESC
-		FETCH FIRST $4 ROWS ONLY`
-
-	stmt, err := repo.db.PrepareContext(ctx, query)
-	if err != nil {
-		return nil, e.Wrap(op, err)
-	}
-	defer stmt.Close()
-
-	var lastDatetimeUnix int64
-	if !lastDatetime.IsZero() {
-		lastDatetimeUnix = lastDatetime.Unix()
-	}
-
-	log.Debug("Executing FindByProfileIDWithKeysetPagination query...")
-	rows, err := stmt.QueryContext(ctx, profileID, lastMessageID, lastDatetimeUnix, limit)
-	if err != nil {
-		return nil, e.Wrap(op+": failed to execute query: ", err)
-	}
-	defer rows.Close()
-
-	var messages []domain.Message
-	for rows.Next() {
-		var message domain.Message
-		var messageIdInt int64
-		var senderId int64
-		var senderUsername, senderDomain string
-		var senderName, senderSurname, senderAvatar sql.NullString
-		var text string
-
-		err := rows.Scan(
-			&messageIdInt, &message.Topic, &text, &message.Datetime, &message.IsRead,
-			&senderId, &senderUsername, &senderDomain,
-			&senderName, &senderSurname, &senderAvatar,
-		)
-		if err != nil {
-			return nil, e.Wrap(op, err)
-		}
-		message.ID = strconv.FormatInt(messageIdInt, 10)
-		message.Snippet = buildSnippet(text, 40)
-		message.Sender = domain.Sender{
-			Id:    senderId,
-			Email: fmt.Sprintf("%s@%s", senderUsername, senderDomain),
-			Username: strings.TrimSpace(fmt.Sprintf("%s %s",
-				senderName.String, senderSurname.String)),
-			Avatar: senderAvatar.String,
-		}
-		messages = append(messages, message)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, e.Wrap(op, err)
-	}
-
-	return messages, nil
-}
-
+// SaveMessage - сохраняет сообщение
 func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (messageID int64, err error) {
 	const op = "storage.postgresql.message.SaveMessage"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
@@ -404,7 +217,7 @@ func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileE
 		VALUES ($1, $2, $3, $4)
 		RETURNING id`
 
-	log.Debug("Executing InsertMessage query...")
+	log.Debug("Inserting message...")
 	err = tx.QueryRowContext(ctx, insertMessage, topic, text, time.Now(), senderBaseProfileID).Scan(&messageID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to insert message: ", err)
@@ -415,7 +228,7 @@ func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileE
 	domain := strings.Split(receiverProfileEmail, "@")[1]
 
 	var receiverProfileID int64
-	log.Debug("Executing GettingReceiverID query...")
+	log.Debug("Getting receiver profile ID...")
 	err = tx.QueryRowContext(ctx, `
 		SELECT p.id 
 		FROM profile p
@@ -433,7 +246,7 @@ func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileE
 		FROM folder f
 		WHERE f.profile_id = $2 AND f.folder_type = 'inbox'`
 
-	log.Debug("Executing AddToInbox query...")
+	log.Debug("Adding message to inbox...")
 	_, err = tx.ExecContext(ctx, insertFolder, messageID, receiverProfileID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to insert to inbox: ", err)
@@ -444,7 +257,7 @@ func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileE
 		INSERT INTO profile_message (profile_id, message_id, read_status)
 		VALUES ($1, $2, false)`
 
-	log.Debug("Executing CreateProfileMessageBond query...")
+	log.Debug("Creating profile message bond...")
 	_, err = tx.ExecContext(ctx, insertProfileMessage, receiverProfileID, messageID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to insert profile message: ", err)
@@ -473,7 +286,7 @@ func (repo *MessageRepository) SaveFile(ctx context.Context, messageID int64, fi
 	defer stmt.Close()
 
 	timeNow := time.Now()
-	log.Debug("Execute SaveFile query...")
+	log.Debug("Inserting file...")
 	err = stmt.QueryRowContext(ctx, fileType, size, storagePath, messageID, timeNow, timeNow).Scan(&fileID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to execute query: ", err)
@@ -498,7 +311,7 @@ func (repo *MessageRepository) SaveThread(ctx context.Context, messageID int64) 
 	defer stmt.Close()
 
 	timeNow := time.Now()
-	log.Debug("Execute SaveThread query...")
+	log.Debug("Inserting thread...")
 	err = stmt.QueryRowContext(ctx, messageID, timeNow, timeNow).Scan(&threadID)
 	if err != nil {
 		return 0, e.Wrap(op, err)
@@ -521,7 +334,7 @@ func (repo *MessageRepository) SaveThreadIdToMessage(ctx context.Context, messag
 	}
 	defer stmt.Close()
 	timeNow := time.Now()
-	log.Debug("Execute SaveThreadIdToMessage query...")
+	log.Debug("Updating message with thread ID...")
 	res, err := stmt.ExecContext(ctx, threadID, timeNow, messageID)
 	if err != nil {
 		return e.Wrap(op+": failed to execute query: ", err)
@@ -534,62 +347,6 @@ func (repo *MessageRepository) SaveThreadIdToMessage(ctx context.Context, messag
 	if rowsAffected == 0 {
 		return e.Wrap(op+": failed to insert to message (no rows affected): ", err)
 	}
-	return nil
-}
-
-func (repo *MessageRepository) GetMessagesStats(ctx context.Context, profileID int64) (int, int, error) {
-	const op = "storage.postgresql.message.GetMessagesStats"
-	log := logger.GetLogger(ctx).With(slog.String("op", op))
-
-	const query = `
-        SELECT 
-            COUNT(DISTINCT pm.message_id) as total_count,
-            COUNT(DISTINCT CASE WHEN pm.read_status = false THEN pm.message_id END) as unread_count
-        FROM profile_message pm
-        JOIN profile p ON pm.profile_id = p.id
-        WHERE p.base_profile_id = $1`
-
-	stmt, err := repo.db.PrepareContext(ctx, query)
-	if err != nil {
-		return 0, 0, e.Wrap(op, err)
-	}
-	defer stmt.Close()
-
-	var totalCount, unreadCount int
-	log.Debug("Executing GetMessagesStats query...")
-	err = stmt.QueryRowContext(ctx, profileID).Scan(&totalCount, &unreadCount)
-	if err != nil {
-		return 0, 0, e.Wrap(op, err)
-	}
-
-	return totalCount, unreadCount, nil
-}
-
-func (repo *MessageRepository) MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error {
-	const op = "storage.postgresql.message.MarkMessageAsRead"
-	log := logger.GetLogger(ctx).With(slog.String("op", op))
-
-	const query = `
-		INSERT INTO profile_message (profile_id, message_id, read_status)
-		SELECT p.id, $2, TRUE
-		FROM profile p
-		WHERE p.base_profile_id = $1
-		ON CONFLICT (profile_id, message_id)
-		DO UPDATE SET read_status = TRUE
-	`
-
-	stmt, err := repo.db.PrepareContext(ctx, query)
-	if err != nil {
-		return e.Wrap(op, err)
-	}
-	defer stmt.Close()
-
-	log.Debug("Executing MarkMessageAsRead query...")
-	_, err = stmt.ExecContext(ctx, profileID, messageID)
-	if err != nil {
-		return e.Wrap(op, err)
-	}
-
 	return nil
 }
 
@@ -627,7 +384,7 @@ func (repo *MessageRepository) FindThreadsByProfileID(ctx context.Context, profi
 	}
 	defer stmt.Close()
 
-	log.Debug("Executing FindThreadsByProfileID query...")
+	log.Debug("Querying threads...")
 	rows, err := stmt.QueryContext(ctx, profileID)
 	if err != nil {
 		return nil, e.Wrap(op+": failed to execute query: ", err)
@@ -635,6 +392,7 @@ func (repo *MessageRepository) FindThreadsByProfileID(ctx context.Context, profi
 	defer rows.Close()
 
 	var threads []domain.ThreadInfo
+	log.Debug("Scanning threads...")
 	for rows.Next() {
 		var threadInfo domain.ThreadInfo
 
@@ -653,61 +411,593 @@ func (repo *MessageRepository) FindThreadsByProfileID(ctx context.Context, profi
 	return threads, nil
 }
 
-func (repo *MessageRepository) FindSentMessagesByProfileIDWithKeysetPagination(
+func (repo *MessageRepository) MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error {
+	const op = "storage.postgresql.message.MarkMessageAsRead"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+		INSERT INTO profile_message (profile_id, message_id, read_status)
+		SELECT p.id, $2, TRUE
+		FROM profile p
+		WHERE p.base_profile_id = $1
+		ON CONFLICT (profile_id, message_id)
+		DO UPDATE SET read_status = TRUE
+	`
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	log.Debug("Marking message as read...")
+	_, err = stmt.ExecContext(ctx, profileID, messageID)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+
+	return nil
+}
+
+func (repo *MessageRepository) MarkMessageAsSpam(ctx context.Context, messageID int64, profileID int64) error {
+	const op = "storage.postgresql.message.MarkMessageAsSpam"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return e.Wrap(op+": failed to begin transaction: ", err)
+	}
+	defer tx.Rollback()
+
+	var spamFolderID int64
+	log.Debug("Getting spam folder ID...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT id FROM folder 
+        WHERE profile_id = $1 AND folder_type = 'spam'`,
+		profileID).Scan(&spamFolderID)
+	if err != nil {
+		return e.Wrap(op+": failed to get spam folder: ", err)
+	}
+
+	const moveQuery = `
+        INSERT INTO folder_profile_message (message_id, folder_id)
+        SELECT $1, $2
+        ON CONFLICT (message_id, folder_id) DO NOTHING`
+
+	log.Debug("Moving message to spam folder...")
+	_, err = tx.ExecContext(ctx, moveQuery, messageID, spamFolderID)
+	if err != nil {
+		return e.Wrap(op+": failed to move message to spam: ", err)
+	}
+
+	const deleteQuery = `
+        DELETE FROM folder_profile_message 
+        WHERE message_id = $1 
+        AND folder_id IN (
+            SELECT id FROM folder 
+            WHERE profile_id = $2 AND folder_type != 'spam'
+        )`
+
+	log.Debug("Removing message from other folders...")
+	_, err = tx.ExecContext(ctx, deleteQuery, messageID, profileID)
+	if err != nil {
+		return e.Wrap(op+": failed to remove from other folders: ", err)
+	}
+
+	log.Debug("Committing transaction...")
+	return tx.Commit()
+}
+
+func (repo *MessageRepository) SaveDraft(ctx context.Context, profileID int64, draftID, receiverEmail, topic, text string) (int64, error) {
+	const op = "storage.postgresql.message.SaveDraft"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to begin transaction: ", err)
+	}
+	defer tx.Rollback()
+
+	var messageID int64
+
+	if draftID != "" {
+		log.Debug("Updating existing draft...")
+		existingDraftID, err := strconv.ParseInt(draftID, 10, 64)
+		if err != nil {
+			return 0, e.Wrap(op+": invalid draft id: ", err)
+		}
+
+		var count int
+		log.Debug("Checking draft ownership...")
+		err = tx.QueryRowContext(ctx, `
+            SELECT COUNT(*) FROM folder_profile_message fpm
+            JOIN folder f ON fpm.folder_id = f.id
+            WHERE fpm.message_id = $1 AND f.profile_id = $2 AND f.folder_type = 'draft'`,
+			existingDraftID, profileID).Scan(&count)
+		if err != nil {
+			return 0, e.Wrap(op+": failed to check draft ownership: ", err)
+		}
+
+		if count == 0 {
+			return 0, e.Wrap(op+": draft not found or access denied: ", err)
+		}
+
+		log.Debug("Updating draft message...")
+		_, err = tx.ExecContext(ctx, `
+            UPDATE message 
+            SET topic = $1, text = $2, updated_at = $3
+            WHERE id = $4`,
+			topic, text, time.Now(), existingDraftID)
+		if err != nil {
+			return 0, e.Wrap(op+": failed to update draft: ", err)
+		}
+
+		messageID = existingDraftID
+	} else {
+		log.Debug("Creating new draft...")
+
+		var senderBaseProfileID int64
+		log.Debug("Getting sender base profile ID...")
+		err = tx.QueryRowContext(ctx, `
+            SELECT base_profile_id FROM profile WHERE id = $1`,
+			profileID).Scan(&senderBaseProfileID)
+		if err != nil {
+			return 0, e.Wrap(op+": failed to get sender base profile: ", err)
+		}
+
+		log.Debug("Creating draft message...")
+		err = tx.QueryRowContext(ctx, `
+            INSERT INTO message (topic, text, date_of_dispatch, sender_base_profile_id)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id`,
+			topic, text, time.Now(), senderBaseProfileID).Scan(&messageID)
+		if err != nil {
+			return 0, e.Wrap(op+": failed to create draft message: ", err)
+		}
+
+		var draftFolderID int64
+		log.Debug("Getting draft folder ID...")
+		err = tx.QueryRowContext(ctx, `
+            SELECT id FROM folder 
+            WHERE profile_id = $1 AND folder_type = 'draft'`,
+			profileID).Scan(&draftFolderID)
+		if err != nil {
+			return 0, e.Wrap(op+": failed to get draft folder: ", err)
+		}
+
+		log.Debug("Adding draft to folder...")
+		_, err = tx.ExecContext(ctx, `
+            INSERT INTO folder_profile_message (message_id, folder_id)
+            VALUES ($1, $2)`,
+			messageID, draftFolderID)
+		if err != nil {
+			return 0, e.Wrap(op+": failed to add to draft folder: ", err)
+		}
+	}
+
+	log.Debug("Committing transaction...")
+	return messageID, tx.Commit()
+}
+
+func (repo *MessageRepository) IsDraftBelongsToUser(ctx context.Context, draftID, profileID int64) (bool, error) {
+	const op = "storage.postgresql.message.IsDraftBelongsToUser"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+	log.Debug("Executing IsDraftBelongsToUser...")
+
+	var count int
+	log.Debug("Checking draft ownership...")
+	err := repo.db.QueryRowContext(ctx, `
+        SELECT COUNT(*) FROM folder_profile_message fpm
+        JOIN folder f ON fpm.folder_id = f.id
+        WHERE fpm.message_id = $1 AND f.profile_id = $2 AND f.folder_type = 'draft'`,
+		draftID, profileID).Scan(&count)
+	if err != nil {
+		return false, e.Wrap(op, err)
+	}
+
+	log.Debug("Draft ownership check result", "belongs", count > 0)
+	return count > 0, nil
+}
+
+func (repo *MessageRepository) DeleteDraft(ctx context.Context, draftID, profileID int64) error {
+	const op = "storage.postgresql.message.DeleteDraft"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+	log.Debug("Executing DeleteDraft...")
+
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return e.Wrap(op+": failed to begin transaction: ", err)
+	}
+	defer tx.Rollback()
+
+	log.Debug("Checking draft ownership...")
+	belongs, err := repo.IsDraftBelongsToUser(ctx, draftID, profileID)
+	if err != nil {
+		return e.Wrap(op+": failed to check draft ownership: ", err)
+	}
+	if !belongs {
+		return e.Wrap(op+": draft not found or access denied: ", err)
+	}
+
+	log.Debug("Removing draft from folders...")
+	_, err = tx.ExecContext(ctx, `
+        DELETE FROM folder_profile_message 
+        WHERE message_id = $1 AND folder_id IN (
+            SELECT id FROM folder WHERE profile_id = $2
+        )`, draftID, profileID)
+	if err != nil {
+		return e.Wrap(op+": failed to remove from folders: ", err)
+	}
+
+	log.Debug("Deleting draft message...")
+	_, err = tx.ExecContext(ctx, `DELETE FROM message WHERE id = $1`, draftID)
+	if err != nil {
+		return e.Wrap(op+": failed to delete draft message: ", err)
+	}
+
+	log.Debug("Committing transaction...")
+	return tx.Commit()
+}
+
+func (repo *MessageRepository) SendDraft(ctx context.Context, draftID, profileID int64) error {
+	const op = "storage.postgresql.message.SendDraft"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return e.Wrap(op+": failed to begin transaction: ", err)
+	}
+	defer tx.Rollback()
+
+	log.Debug("Getting draft info...")
+	var topic, text string
+	var senderBaseProfileID int64
+	err = tx.QueryRowContext(ctx, `
+        SELECT m.topic, m.text, m.sender_base_profile_id 
+        FROM message m
+        WHERE m.id = $1`, draftID).Scan(&topic, &text, &senderBaseProfileID)
+	if err != nil {
+		return e.Wrap(op+": failed to get draft info: ", err)
+	}
+
+	log.Debug("Updating draft send time...")
+	_, err = tx.ExecContext(ctx, `
+        UPDATE message 
+        SET date_of_dispatch = $1, updated_at = $2
+        WHERE id = $3`,
+		time.Now(), time.Now(), draftID)
+	if err != nil {
+		return e.Wrap(op+": failed to update draft send time: ", err)
+	}
+
+	log.Debug("Removing from draft folder...")
+	_, err = tx.ExecContext(ctx, `
+        DELETE FROM folder_profile_message 
+        WHERE message_id = $1 AND folder_id IN (
+            SELECT id FROM folder WHERE profile_id = $2 AND folder_type = 'draft'
+        )`, draftID, profileID)
+	if err != nil {
+		return e.Wrap(op+": failed to remove from draft folder: ", err)
+	}
+
+	var sentFolderID int64
+	log.Debug("Getting sent folder ID...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT id FROM folder 
+        WHERE profile_id = $1 AND folder_type = 'sent'`,
+		profileID).Scan(&sentFolderID)
+	if err != nil {
+		return e.Wrap(op+": failed to get sent folder: ", err)
+	}
+
+	log.Debug("Adding to sent folder...")
+	_, err = tx.ExecContext(ctx, `
+        INSERT INTO folder_profile_message (message_id, folder_id)
+        VALUES ($1, $2)`,
+		draftID, sentFolderID)
+	if err != nil {
+		return e.Wrap(op+": failed to add to sent folder: ", err)
+	}
+
+	log.Debug("Committing transaction...")
+	return tx.Commit()
+}
+
+func (repo *MessageRepository) GetDraft(ctx context.Context, draftID, profileID int64) (domain.FullMessage, error) {
+	const op = "storage.postgresql.message.GetDraft"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	log.Debug("Checking draft ownership...")
+	belongs, err := repo.IsDraftBelongsToUser(ctx, draftID, profileID)
+	if err != nil {
+		return domain.FullMessage{}, e.Wrap(op+": failed to check draft ownership: ", err)
+	}
+	if !belongs {
+		return domain.FullMessage{}, e.Wrap(op+": draft not found or access denied: ", err)
+	}
+
+	return repo.FindFullByMessageID(ctx, draftID, profileID)
+}
+
+func (repo *MessageRepository) MoveToFolder(ctx context.Context, profileID, messageID, folderID int64) error {
+	const op = "storage.postgresql.message.MoveToFolder"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return e.Wrap(op+": failed to begin transaction: ", err)
+	}
+	defer tx.Rollback()
+
+	log.Debug("Removing from all user folders...")
+	_, err = tx.ExecContext(ctx, `
+        DELETE FROM folder_profile_message 
+        WHERE message_id = $1 AND folder_id IN (
+            SELECT id FROM folder WHERE profile_id = $2
+        )`, messageID, profileID)
+	if err != nil {
+		return e.Wrap(op+": failed to remove from folders: ", err)
+	}
+
+	log.Debug("Adding to target folder...")
+	_, err = tx.ExecContext(ctx, `
+        INSERT INTO folder_profile_message (message_id, folder_id)
+        VALUES ($1, $2)`, messageID, folderID)
+	if err != nil {
+		return e.Wrap(op+": failed to add to folder: ", err)
+	}
+
+	log.Debug("Committing transaction...")
+	return tx.Commit()
+}
+
+func (repo *MessageRepository) GetFolderByType(ctx context.Context, profileID int64, folderType string) (int64, error) {
+	const op = "storage.postgresql.message.GetFolderByType"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+        SELECT id FROM folder 
+        WHERE profile_id = $1 AND folder_type = $2`
+
+	var folderID int64
+	log.Debug("Querying folder by type...")
+	err := repo.db.QueryRowContext(ctx, query, profileID, folderType).Scan(&folderID)
+	if err != nil {
+		return 0, e.Wrap(op, err)
+	}
+
+	return folderID, nil
+}
+
+func (repo *MessageRepository) ShouldMarkAsRead(ctx context.Context, messageID, profileID int64) (bool, error) {
+	const op = "storage.postgresql.message.ShouldMarkAsRead"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	var shouldMark bool
+	log.Debug("Checking if should mark as read...")
+	err := repo.db.QueryRowContext(ctx, `
+        SELECT 
+            CASE 
+                WHEN f.folder_type = 'inbox' AND pm.read_status = false THEN true
+                ELSE false
+            END as should_mark
+        FROM folder_profile_message fpm
+        JOIN folder f ON fpm.folder_id = f.id
+        JOIN profile_message pm ON pm.message_id = fpm.message_id AND pm.profile_id = f.profile_id
+        WHERE fpm.message_id = $1 AND f.profile_id = $2
+        LIMIT 1`,
+		messageID, profileID).Scan(&shouldMark)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Debug("No rows found, returning false")
+			return false, nil
+		}
+		return false, e.Wrap(op, err)
+	}
+
+	return shouldMark, nil
+}
+
+func (repo *MessageRepository) CreateFolder(ctx context.Context, profileID int64, folderName string) (*domain.Folder, error) {
+	const op = "storage.postgresql.message.CreateFolder"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+        INSERT INTO folder (profile_id, folder_name, folder_type)
+        VALUES ($1, $2, 'custom')
+        RETURNING id, folder_name, folder_type`
+
+	var folder domain.Folder
+	log.Debug("Creating folder...")
+	err := repo.db.QueryRowContext(ctx, query, profileID, folderName).Scan(
+		&folder.ID, &folder.Name, &folder.Type)
+	if err != nil {
+		return nil, e.Wrap(op, err)
+	}
+
+	folder.ProfileID = profileID
+	return &folder, nil
+}
+
+func (repo *MessageRepository) GetUserFolders(ctx context.Context, profileID int64) ([]domain.Folder, error) {
+	const op = "storage.postgresql.message.GetUserFolders"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+        SELECT id, folder_name, folder_type
+        FROM folder
+        WHERE profile_id = $1
+        ORDER BY 
+            CASE folder_type
+                WHEN 'inbox' THEN 1
+                WHEN 'sent' THEN 2
+                WHEN 'draft' THEN 3
+                WHEN 'spam' THEN 4
+                WHEN 'trash' THEN 5
+                ELSE 6
+            END, folder_name`
+
+	log.Debug("Querying user folders...")
+	rows, err := repo.db.QueryContext(ctx, query, profileID)
+	if err != nil {
+		return nil, e.Wrap(op, err)
+	}
+	defer rows.Close()
+
+	var folders []domain.Folder
+	log.Debug("Scanning folders...")
+	for rows.Next() {
+		var folder domain.Folder
+		err := rows.Scan(&folder.ID, &folder.Name, &folder.Type)
+		if err != nil {
+			return nil, e.Wrap(op, err)
+		}
+		folder.ProfileID = profileID
+		folders = append(folders, folder)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, e.Wrap(op, err)
+	}
+
+	return folders, nil
+}
+
+func (repo *MessageRepository) RenameFolder(ctx context.Context, profileID, folderID int64, newName string) (*domain.Folder, error) {
+	const op = "storage.postgresql.message.RenameFolder"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+        UPDATE folder 
+        SET folder_name = $1, updated_at = $2
+        WHERE id = $3 AND profile_id = $4 AND folder_type = 'custom'
+        RETURNING id, folder_name, folder_type`
+
+	var folder domain.Folder
+	log.Debug("Renaming folder...")
+	err := repo.db.QueryRowContext(ctx, query, newName, time.Now(), folderID, profileID).Scan(
+		&folder.ID, &folder.Name, &folder.Type)
+	if err != nil {
+		return nil, e.Wrap(op, err)
+	}
+
+	folder.ProfileID = profileID
+	return &folder, nil
+}
+
+func (repo *MessageRepository) DeleteFolder(ctx context.Context, profileID, folderID int64) error {
+	const op = "storage.postgresql.message.DeleteFolder"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return e.Wrap(op+": failed to begin transaction: ", err)
+	}
+	defer tx.Rollback()
+
+	var folderType string
+	log.Debug("Checking folder type...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT folder_type FROM folder 
+        WHERE id = $1 AND profile_id = $2`,
+		folderID, profileID).Scan(&folderType)
+	if err != nil {
+		return e.Wrap(op+": failed to get folder info: ", err)
+	}
+
+	if folderType != "custom" {
+		return e.Wrap(op+": cannot delete system folder: ", err)
+	}
+
+	log.Debug("Removing folder messages...")
+	_, err = tx.ExecContext(ctx, `
+        DELETE FROM folder_profile_message 
+        WHERE folder_id = $1`, folderID)
+	if err != nil {
+		return e.Wrap(op+": failed to remove folder messages: ", err)
+	}
+
+	log.Debug("Deleting folder...")
+	_, err = tx.ExecContext(ctx, `DELETE FROM folder WHERE id = $1`, folderID)
+	if err != nil {
+		return e.Wrap(op+": failed to delete folder: ", err)
+	}
+
+	log.Debug("Committing transaction...")
+	return tx.Commit()
+}
+
+func (repo *MessageRepository) DeleteMessageFromFolder(ctx context.Context, profileID, messageID, folderID int64) error {
+	const op = "storage.postgresql.message.DeleteMessageFromFolder"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+        DELETE FROM folder_profile_message 
+        WHERE message_id = $1 AND folder_id = $2
+        AND folder_id IN (SELECT id FROM folder WHERE profile_id = $3)`
+
+	log.Debug("Deleting message from folder...")
+	result, err := repo.db.ExecContext(ctx, query, messageID, folderID, profileID)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+
+	if rowsAffected == 0 {
+		return e.Wrap(op+": message not found in folder or access denied: ", err)
+	}
+
+	log.Debug("Successfully deleted message from folder")
+	return nil
+}
+
+func (repo *MessageRepository) GetFolderMessagesWithKeysetPagination(
 	ctx context.Context,
-	profileID int64,
-	lastMessageID int64,
+	profileID, folderID, lastMessageID int64,
 	lastDatetime time.Time,
 	limit int,
 ) ([]domain.Message, error) {
-
-	const op = "storage.postgresql.message.FindSentMessagesByProfileIDWithKeysetPagination" // Renamed op for clarity
+	const op = "storage.postgresql.message.GetFolderMessagesWithKeysetPagination"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
-	// UPDATED QUERY
 	const query = `
         SELECT
             m.id, m.topic, m.text, m.date_of_dispatch,
-            -- Check if *any* recipient has read the message
-            EXISTS (
-                SELECT 1 
-                FROM profile_message pm 
-                WHERE pm.message_id = m.id AND pm.read_status = TRUE
-            ) as read_status,
+            pm.read_status,
             bp.id, bp.username, bp.domain,
             sender_profile.name, sender_profile.surname, sender_profile.image_path
         FROM
             message m
         JOIN
+            profile_message pm ON m.id = pm.message_id
+        JOIN
+            folder_profile_message fpm ON m.id = fpm.message_id
+        JOIN
+            folder f ON fpm.folder_id = f.id
+        JOIN
             base_profile bp ON m.sender_base_profile_id = bp.id
         LEFT JOIN
             profile sender_profile ON bp.id = sender_profile.base_profile_id
         WHERE
-            m.sender_base_profile_id = $1  -- Filter by SENDER's base_profile_id
-			AND (($2 = 0 AND $3 = 0) OR (m.date_of_dispatch, m.id) < (to_timestamp($3), $2))
+            f.profile_id = $1 AND f.id = $2
+            AND (($3 = 0 AND $4 = 0) OR (m.date_of_dispatch, m.id) < (to_timestamp($4), $3))
         ORDER BY
             m.date_of_dispatch DESC, m.id DESC
-		FETCH FIRST $4 ROWS ONLY`
+        LIMIT $5`
 
-	stmt, err := repo.db.PrepareContext(ctx, query)
+	log.Debug("Querying folder messages with pagination...")
+	rows, err := repo.db.QueryContext(ctx, query, profileID, folderID, lastMessageID, lastDatetime.Unix(), limit)
 	if err != nil {
 		return nil, e.Wrap(op, err)
-	}
-	defer stmt.Close()
-
-	var lastDatetimeUnix int64
-	if !lastDatetime.IsZero() {
-		lastDatetimeUnix = lastDatetime.Unix()
-	}
-
-	log.Debug("Executing FindSentMessagesByProfileIDWithKeysetPagination query...")
-	rows, err := stmt.QueryContext(ctx, profileID, lastMessageID, lastDatetimeUnix, limit)
-	if err != nil {
-		return nil, e.Wrap(op+": failed to execute query: ", err)
 	}
 	defer rows.Close()
 
 	var messages []domain.Message
+	log.Debug("Scanning messages...")
 	for rows.Next() {
 		var message domain.Message
 		var messageIdInt int64
@@ -725,11 +1015,7 @@ func (repo *MessageRepository) FindSentMessagesByProfileIDWithKeysetPagination(
 			return nil, e.Wrap(op, err)
 		}
 		message.ID = strconv.FormatInt(messageIdInt, 10)
-		if len(text) > 40 {
-			message.Snippet = text[:40] + "..."
-		} else {
-			message.Snippet = text
-		}
+		message.Snippet = buildSnippet(text, 40)
 		message.Sender = domain.Sender{
 			Id:    senderId,
 			Email: fmt.Sprintf("%s@%s", senderUsername, senderDomain),
@@ -739,6 +1025,7 @@ func (repo *MessageRepository) FindSentMessagesByProfileIDWithKeysetPagination(
 		}
 		messages = append(messages, message)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, e.Wrap(op, err)
 	}
@@ -746,41 +1033,211 @@ func (repo *MessageRepository) FindSentMessagesByProfileIDWithKeysetPagination(
 	return messages, nil
 }
 
-func (repo *MessageRepository) GetSentMessagesStats(ctx context.Context, profileID int64) (int, int, error) {
-	const op = "storage.postgresql.message.GetSentMessagesStats"
+func (repo *MessageRepository) GetFolderMessagesInfo(ctx context.Context, profileID, folderID int64) (domain.Messages, error) {
+	const op = "storage.postgresql.message.GetFolderMessagesInfo"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
         SELECT 
-            -- Total number of messages sent by this user
-            COUNT(m.id) as total_count,
-            
-            -- Count of messages where NO recipient has read_status = TRUE
-            COUNT(m.id) FILTER (
-                WHERE NOT EXISTS (
-                    SELECT 1 
-                    FROM profile_message pm 
-                    WHERE pm.message_id = m.id AND pm.read_status = TRUE
-                )
-            ) as unread_count
-        FROM 
-            message m
-        WHERE 
-            m.sender_base_profile_id = $1
-    `
+            COUNT(*) as total_count,
+            COUNT(CASE WHEN pm.read_status = false THEN 1 END) as unread_count
+        FROM folder_profile_message fpm
+        JOIN profile_message pm ON fpm.message_id = pm.message_id AND pm.profile_id = $1
+        WHERE fpm.folder_id = $2`
 
-	stmt, err := repo.db.PrepareContext(ctx, query)
+	var messagesInfo domain.Messages
+	log.Debug("Getting folder messages info...")
+	err := repo.db.QueryRowContext(ctx, query, profileID, folderID).Scan(
+		&messagesInfo.MessageTotal, &messagesInfo.MessageUnread)
 	if err != nil {
-		return 0, 0, e.Wrap(op, err)
-	}
-	defer stmt.Close()
-
-	var totalCount, unreadCount int
-	log.Debug("Executing GetSentMessagesStats query...")
-	err = stmt.QueryRowContext(ctx, profileID).Scan(&totalCount, &unreadCount)
-	if err != nil {
-		return 0, 0, e.Wrap(op, err)
+		return domain.Messages{}, e.Wrap(op, err)
 	}
 
-	return totalCount, unreadCount, nil
+	return messagesInfo, nil
+}
+
+func (repo *MessageRepository) SaveMessageWithFolderDistribution(
+	ctx context.Context,
+	receiverProfileEmail string,
+	senderBaseProfileID int64,
+	topic, text string,
+) (messageID int64, err error) {
+	const op = "storage.postgresql.message.SaveMessageWithFolderDistribution"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to begin transaction: ", err)
+	}
+	defer tx.Rollback()
+
+	const insertMessage = `
+        INSERT INTO message (topic, text, date_of_dispatch, sender_base_profile_id)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id`
+
+	log.Debug("Inserting message...")
+	err = tx.QueryRowContext(ctx, insertMessage, topic, text, time.Now(), senderBaseProfileID).Scan(&messageID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert message: ", err)
+	}
+
+	username := strings.Split(receiverProfileEmail, "@")[0]
+	domain := strings.Split(receiverProfileEmail, "@")[1]
+
+	var receiverProfileID int64
+	log.Debug("Getting receiver profile ID...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT p.id 
+        FROM profile p
+        JOIN base_profile bp ON p.base_profile_id = bp.id
+        WHERE bp.username = $1 AND bp.domain = $2`,
+		username, domain).Scan(&receiverProfileID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to get receiver id: ", err)
+	}
+
+	var senderProfileID int64
+	log.Debug("Getting sender profile ID...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT id FROM profile WHERE base_profile_id = $1`,
+		senderBaseProfileID).Scan(&senderProfileID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to get sender profile id: ", err)
+	}
+
+	const insertToInbox = `
+        INSERT INTO folder_profile_message (message_id, folder_id)
+        SELECT $1, f.id
+        FROM folder f
+        WHERE f.profile_id = $2 AND f.folder_type = 'inbox'`
+
+	log.Debug("Adding to receiver's inbox...")
+	_, err = tx.ExecContext(ctx, insertToInbox, messageID, receiverProfileID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert to inbox: ", err)
+	}
+
+	const insertToSent = `
+        INSERT INTO folder_profile_message (message_id, folder_id)
+        SELECT $1, f.id
+        FROM folder f
+        WHERE f.profile_id = $2 AND f.folder_type = 'sent'`
+
+	log.Debug("Adding to sender's sent folder...")
+	_, err = tx.ExecContext(ctx, insertToSent, messageID, senderProfileID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert to sent: ", err)
+	}
+
+	const insertProfileMessage = `
+        INSERT INTO profile_message (profile_id, message_id, read_status)
+        VALUES ($1, $2, false)`
+
+	log.Debug("Creating profile message bond...")
+	_, err = tx.ExecContext(ctx, insertProfileMessage, receiverProfileID, messageID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert profile message: ", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return 0, e.Wrap(op+": failed to commit transaction: ", err)
+	}
+
+	return messageID, nil
+}
+
+func (repo *MessageRepository) ReplyToMessageWithFolderDistribution(
+	ctx context.Context,
+	receiverEmail string,
+	senderProfileID int64,
+	threadRoot int64,
+	topic, text string,
+) (int64, error) {
+	const op = "storage.postgresql.message.ReplyToMessageWithFolderDistribution"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to begin transaction: ", err)
+	}
+	defer tx.Rollback()
+
+	var senderBaseProfileID int64
+	log.Debug("Getting sender base profile ID...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT base_profile_id FROM profile WHERE id = $1`,
+		senderProfileID).Scan(&senderBaseProfileID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to get sender base profile id: ", err)
+	}
+
+	const insertMessage = `
+        INSERT INTO message (topic, text, date_of_dispatch, sender_base_profile_id, thread_id)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id`
+
+	var messageID int64
+	log.Debug("Inserting reply message...")
+	err = tx.QueryRowContext(ctx, insertMessage, topic, text, time.Now(), senderBaseProfileID, threadRoot).Scan(&messageID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert message: ", err)
+	}
+
+	username := strings.Split(receiverEmail, "@")[0]
+	domain := strings.Split(receiverEmail, "@")[1]
+
+	var receiverProfileID int64
+	log.Debug("Getting receiver profile ID...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT p.id 
+        FROM profile p
+        JOIN base_profile bp ON p.base_profile_id = bp.id
+        WHERE bp.username = $1 AND bp.domain = $2`,
+		username, domain).Scan(&receiverProfileID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to get receiver id: ", err)
+	}
+
+	const insertToInbox = `
+        INSERT INTO folder_profile_message (message_id, folder_id)
+        SELECT $1, f.id
+        FROM folder f
+        WHERE f.profile_id = $2 AND f.folder_type = 'inbox'`
+
+	log.Debug("Adding to receiver's inbox...")
+	_, err = tx.ExecContext(ctx, insertToInbox, messageID, receiverProfileID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert to inbox: ", err)
+	}
+
+	const insertToSent = `
+        INSERT INTO folder_profile_message (message_id, folder_id)
+        SELECT $1, f.id
+        FROM folder f
+        WHERE f.profile_id = $2 AND f.folder_type = 'sent'`
+
+	log.Debug("Adding to sender's sent folder...")
+	_, err = tx.ExecContext(ctx, insertToSent, messageID, senderProfileID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert to sent: ", err)
+	}
+
+	const insertProfileMessage = `
+        INSERT INTO profile_message (profile_id, message_id, read_status)
+        VALUES ($1, $2, false)`
+
+	log.Debug("Creating profile message bond...")
+	_, err = tx.ExecContext(ctx, insertProfileMessage, receiverProfileID, messageID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert profile message: ", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return 0, e.Wrap(op+": failed to commit transaction: ", err)
+	}
+
+	return messageID, nil
 }
