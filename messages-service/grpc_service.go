@@ -29,17 +29,43 @@ type Server struct {
 }
 
 type MessageUsecase interface {
-	FindByProfileIDWithKeysetPagination(ctx context.Context, profileID, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
-	GetMessagesInfoWithPagination(ctx context.Context, profileID int64) (domain.Messages, error)
-	FindSentMessagesByProfileIDWithKeysetPagination(ctx context.Context, profileID int64, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
-	GetSentMessagesInfoWithPagination(ctx context.Context, profileID int64) (domain.Messages, error)
+	// базовые методы для сообщений
+	FindByMessageID(ctx context.Context, messageID int64) (*domain.Message, error)
 	FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
-	MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error
-	MarkMessageAsSpam(ctx context.Context, messageID int64, profileID int64) error
 	SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
 	SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
-	SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error
+
+	// методы для тредов
 	SaveThread(ctx context.Context, messageID int64) (threadID int64, err error)
+	SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error
+	FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error)
+
+	// методы для работы с сообщениями
+	MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error
+	MarkMessageAsSpam(ctx context.Context, messageID int64, profileID int64) error
+
+	// методы для черновиков
+	SaveDraft(ctx context.Context, profileID int64, draftID, receiverEmail, topic, text string) (int64, error)
+	IsDraftBelongsToUser(ctx context.Context, draftID, profileID int64) (bool, error)
+	DeleteDraft(ctx context.Context, draftID, profileID int64) error
+	SendDraft(ctx context.Context, draftID, profileID int64) error
+	GetDraft(ctx context.Context, draftID, profileID int64) (domain.FullMessage, error)
+
+	// методы для папок
+	MoveToFolder(ctx context.Context, profileID, messageID, folderID int64) error
+	GetFolderByType(ctx context.Context, profileID int64, folderType string) (int64, error)
+	ShouldMarkAsRead(ctx context.Context, messageID, profileID int64) (bool, error)
+	CreateFolder(ctx context.Context, profileID int64, folderName string) (*domain.Folder, error)
+	GetUserFolders(ctx context.Context, profileID int64) ([]domain.Folder, error)
+	RenameFolder(ctx context.Context, profileID, folderID int64, newName string) (*domain.Folder, error)
+	DeleteFolder(ctx context.Context, profileID, folderID int64) error
+	DeleteMessageFromFolder(ctx context.Context, profileID, messageID, folderID int64) error
+	GetFolderMessagesWithKeysetPagination(ctx context.Context, profileID, folderID, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
+	GetFolderMessagesInfo(ctx context.Context, profileID, folderID int64) (domain.Messages, error)
+
+	// методы для отправки сообщений с автоматическим распределением по папкам
+	SendMessage(ctx context.Context, receiverEmail string, senderProfileID int64, topic, text string) (int64, error)
+	ReplyToMessage(ctx context.Context, receiverEmail string, senderProfileID int64, threadRoot int64, topic, text string) (int64, error)
 }
 
 type AvatarUsecase interface {
@@ -104,8 +130,16 @@ func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*
 		return nil, status.Error(codes.Internal, "could not get message")
 	}
 
-	if err := s.messageUCase.MarkMessageAsRead(ctx, messageID, profileID); err != nil {
-		log.Warn("failed to mark message as read: " + err.Error())
+	shouldMarkAsRead, err := s.messageUCase.ShouldMarkAsRead(ctx, messageID, profileID)
+	if err != nil {
+		log.Warn("failed to check if should mark as read: " + err.Error())
+		shouldMarkAsRead = false
+	}
+
+	if shouldMarkAsRead {
+		if err := s.messageUCase.MarkMessageAsRead(ctx, messageID, profileID); err != nil {
+			log.Warn("failed to mark message as read: " + err.Error())
+		}
 	}
 
 	if err := s.enrichSenderAvatar(ctx, &fullMessage.Sender); err != nil {
@@ -155,15 +189,10 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 
 	var messageID int64
 	for _, receiver := range req.Receivers {
-		msgID, err := s.messageUCase.SaveMessage(ctx, receiver.Email, profileID, req.Topic, req.Text)
+		msgID, err := s.messageUCase.ReplyToMessage(ctx, receiver.Email, profileID, threadRoot, req.Topic, req.Text)
 		if err != nil {
-			log.Error(op + ": failed to save message: " + err.Error())
-			return nil, status.Error(codes.Internal, "could not save message")
-		}
-
-		if err := s.messageUCase.SaveThreadIdToMessage(ctx, msgID, threadRoot); err != nil {
-			log.Error(op + ": failed to save thread id: " + err.Error())
-			return nil, status.Error(codes.Internal, "could not save thread id")
+			log.Error(op + ": failed to reply to message: " + err.Error())
+			return nil, status.Error(codes.Internal, "could not reply to message")
 		}
 
 		for _, file := range req.Files {
@@ -199,21 +228,23 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 
 	var messageID int64
 	for _, receiver := range req.Receivers {
-		msgID, err := s.messageUCase.SaveMessage(ctx, receiver.Email, profileID, req.Topic, req.Text)
+		msgID, err := s.messageUCase.SendMessage(ctx, receiver.Email, profileID, req.Topic, req.Text)
 		if err != nil {
-			log.Error(op + ": failed to save message: " + err.Error())
-			return nil, status.Error(codes.Internal, "could not save message")
+			log.Error(op + ": failed to send message: " + err.Error())
+			return nil, status.Error(codes.Internal, "could not send message")
 		}
 
-		threadID, err := s.messageUCase.SaveThread(ctx, msgID)
-		if err != nil {
-			log.Error(op + ": failed to save thread: " + err.Error())
-			return nil, status.Error(codes.Internal, "could not save thread")
-		}
+		if messageID == 0 {
+			threadID, err := s.messageUCase.SaveThread(ctx, msgID)
+			if err != nil {
+				log.Error(op + ": failed to save thread: " + err.Error())
+				return nil, status.Error(codes.Internal, "could not save thread")
+			}
 
-		if err := s.messageUCase.SaveThreadIdToMessage(ctx, msgID, threadID); err != nil {
-			log.Error(op + ": failed to save thread id: " + err.Error())
-			return nil, status.Error(codes.Internal, "could not save thread id")
+			if err := s.messageUCase.SaveThreadIdToMessage(ctx, msgID, threadID); err != nil {
+				log.Error(op + ": failed to save thread id: " + err.Error())
+				return nil, status.Error(codes.Internal, "could not save thread id")
+			}
 		}
 
 		for _, file := range req.Files {
@@ -413,7 +444,7 @@ func (s *Server) validateSendRequest(req *pb.SendRequest) error {
 	return nil
 }
 
-func (s *Server) MarkAsSpam(ctx context.Context, req *pb.MarkAsSpamRequest) (*pb.SendResponse, error) {
+func (s *Server) MarkAsSpam(ctx context.Context, req *pb.MarkAsSpamRequest) (*pb.MarkAsSpamResponse, error) {
 	const op = "messagesservice.MarkAsSpam"
 	log := logger.GetLogger(ctx)
 	log.Debug("handle messages/mark-as-spam")
@@ -436,7 +467,7 @@ func (s *Server) MarkAsSpam(ctx context.Context, req *pb.MarkAsSpamRequest) (*pb
 	return &pb.MarkAsSpamResponse{}, nil
 }
 
-func (s *Server) MoveToFolder(ctx context.Context, req *pb.MoveToFolderRequest) (*pb.SendResponse, error) {
+func (s *Server) MoveToFolder(ctx context.Context, req *pb.MoveToFolderRequest) (*pb.MoveToFolderResponse, error) {
 	const op = "messagesservice.MoveToFolder"
 	log := logger.GetLogger(ctx)
 	log.Debug("handle messages/move-to-folder")
@@ -487,7 +518,7 @@ func (s *Server) CreateFolder(ctx context.Context, req *pb.CreateFolderRequest) 
 	return &pb.CreateFolderResponse{
 		FolderId:   strconv.FormatInt(folder.ID, 10),
 		FolderName: folder.Name,
-		FolderType: folder.Type,
+		FolderType: string(folder.Type),
 	}, nil
 }
 
@@ -631,7 +662,7 @@ func (s *Server) GetFolders(ctx context.Context, req *pb.GetFoldersRequest) (*pb
 		pbFolders = append(pbFolders, &pb.Folder{
 			FolderId:   strconv.FormatInt(folder.ID, 10),
 			FolderName: folder.Name,
-			FolderType: folder.Type,
+			FolderType: string(folder.Type),
 		})
 	}
 
@@ -668,7 +699,7 @@ func (s *Server) RenameFolder(ctx context.Context, req *pb.RenameFolderRequest) 
 	return &pb.RenameFolderResponse{
 		FolderId:   strconv.FormatInt(folder.ID, 10),
 		FolderName: folder.Name,
-		FolderType: folder.Type,
+		FolderType: string(folder.Type),
 	}, nil
 }
 
@@ -723,4 +754,210 @@ func (s *Server) DeleteMessageFromFolder(ctx context.Context, req *pb.DeleteMess
 	}
 
 	return &pb.DeleteMessageFromFolderResponse{}, nil
+}
+
+func (s *Server) SaveDraft(ctx context.Context, req *pb.SaveDraftRequest) (*pb.SaveDraftResponse, error) {
+	const op = "messagesservice.SaveDraft"
+	log := logger.GetLogger(ctx)
+	log.Debug("handle messages/save-draft")
+
+	profileID, err := s.getProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	if err := s.validateDraftRequest(req); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	receivers := req.Receivers
+	if len(receivers) == 0 {
+		receivers = []*pb.Receiver{{Email: ""}}
+	}
+
+	var draftID int64
+
+	for _, receiver := range receivers {
+		msgID, err := s.messageUCase.SaveDraft(ctx, profileID, req.DraftId, receiver.Email, req.Topic, req.Text)
+		if err != nil {
+			log.Error(op + ": failed to save draft: " + err.Error())
+			return nil, status.Error(codes.Internal, "could not save draft")
+		}
+		draftID = msgID
+
+		if req.DraftId == "" {
+			var threadID int64
+			if req.ThreadId != "" {
+				threadID, err = strconv.ParseInt(req.ThreadId, 10, 64)
+				if err != nil {
+					log.Error(op + ": invalid thread id: " + err.Error())
+					return nil, status.Error(codes.InvalidArgument, "invalid thread id")
+				}
+			} else {
+				threadID, err = s.messageUCase.SaveThread(ctx, draftID)
+				if err != nil {
+					log.Error(op + ": failed to save thread: " + err.Error())
+					return nil, status.Error(codes.Internal, "could not save thread")
+				}
+			}
+			if err := s.messageUCase.SaveThreadIdToMessage(ctx, draftID, threadID); err != nil {
+				log.Error(op + ": failed to save thread id: " + err.Error())
+				return nil, status.Error(codes.Internal, "could not save thread id")
+			}
+
+			draftFolderID, err := s.messageUCase.GetFolderByType(ctx, profileID, "draft")
+			if err != nil {
+				log.Error(op + ": failed to get draft folder: " + err.Error())
+				return nil, status.Error(codes.Internal, "could not get draft folder")
+			}
+
+			if err := s.messageUCase.MoveToFolder(ctx, profileID, draftID, draftFolderID); err != nil {
+				log.Error(op + ": failed to put draft to folder: " + err.Error())
+				return nil, status.Error(codes.Internal, "could not save draft to folder")
+			}
+		}
+
+		for _, file := range req.Files {
+			size, _ := strconv.ParseInt(file.Size, 10, 64)
+			_, err = s.messageUCase.SaveFile(ctx, draftID, file.Name, file.FileType, file.StoragePath, size)
+			if err != nil {
+				log.Error(op + ": failed to save file: " + err.Error())
+				return nil, status.Error(codes.Internal, "could not save file")
+			}
+		}
+	}
+
+	return &pb.SaveDraftResponse{
+		DraftId: strconv.FormatInt(draftID, 10),
+	}, nil
+}
+
+func (s *Server) validateDraftRequest(req *pb.SaveDraftRequest) error {
+	if len(req.Topic) > maxTopicLen {
+		return fmt.Errorf("topic too long")
+	}
+	if len(req.Text) > maxTextLen {
+		return fmt.Errorf("text too long")
+	}
+
+	if validation.HasDangerousCharacters(req.Topic) {
+		return fmt.Errorf("topic contains forbidden characters")
+	}
+	if validation.HasDangerousCharacters(req.Text) {
+		return fmt.Errorf("text contains forbidden characters")
+	}
+
+	if len(req.Receivers) > 0 {
+		for _, r := range req.Receivers {
+			email := strings.TrimSpace(r.Email)
+			if email != "" {
+				if validation.HasDangerousCharacters(email) {
+					return fmt.Errorf("receiver email contains forbidden characters: %s", email)
+				}
+			}
+		}
+	}
+
+	if len(req.Files) > defaultLimitFiles {
+		return fmt.Errorf("too many files")
+	}
+	for _, f := range req.Files {
+		size, _ := strconv.ParseInt(f.Size, 10, 64)
+		if size < 0 || size > maxFileSize {
+			return fmt.Errorf("file size invalid or too large: %s", f.Name)
+		}
+		if _, ok := allowedFileTypes[f.FileType]; !ok {
+			return fmt.Errorf("unsupported file type: %s", f.FileType)
+		}
+		base := filepath.Base(f.Name)
+		if base != f.Name || strings.Contains(f.Name, "..") {
+			return fmt.Errorf("invalid file name: %s", f.Name)
+		}
+		if validation.HasDangerousCharacters(f.StoragePath) {
+			return fmt.Errorf("invalid storage path for file: %s", f.Name)
+		}
+		if validation.HasDangerousCharacters(f.Name) {
+			return fmt.Errorf("invalid file name: %s", f.Name)
+		}
+	}
+
+	return nil
+}
+
+func (s *Server) DeleteDraft(ctx context.Context, req *pb.DeleteDraftRequest) (*pb.DeleteDraftResponse, error) {
+	const op = "messagesservice.DeleteDraft"
+	log := logger.GetLogger(ctx)
+	log.Debug("handle messages/delete-draft")
+
+	profileID, err := s.getProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	if req.DraftId == "" {
+		return nil, status.Error(codes.InvalidArgument, "draft id is required")
+	}
+
+	draftID, err := strconv.ParseInt(req.DraftId, 10, 64)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid draft id format")
+	}
+
+	belongs, err := s.messageUCase.IsDraftBelongsToUser(ctx, draftID, profileID)
+	if err != nil {
+		log.Error(op + ": failed to check draft ownership: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not verify draft ownership")
+	}
+
+	if !belongs {
+		return nil, status.Error(codes.PermissionDenied, "draft not found or access denied")
+	}
+
+	err = s.messageUCase.DeleteDraft(ctx, draftID, profileID)
+	if err != nil {
+		log.Error(op + ": failed to delete draft: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not delete draft")
+	}
+
+	log.Debug("draft deleted successfully", "draft_id", draftID)
+	return &pb.DeleteDraftResponse{
+		Success: true,
+	}, nil
+}
+
+func (s *Server) SendDraft(ctx context.Context, req *pb.SendDraftRequest) (*pb.SendDraftResponse, error) {
+	const op = "messagesservice.SendDraft"
+	log := logger.GetLogger(ctx)
+	log.Debug("handle messages/send-draft")
+
+	profileID, err := s.getProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	draftID, err := strconv.ParseInt(req.DraftId, 10, 64)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid draft id")
+	}
+
+	belongs, err := s.messageUCase.IsDraftBelongsToUser(ctx, draftID, profileID)
+	if err != nil {
+		log.Error(op + ": failed to check draft ownership: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not verify draft ownership")
+	}
+
+	if !belongs {
+		return nil, status.Error(codes.PermissionDenied, "draft not found or access denied")
+	}
+
+	err = s.messageUCase.SendDraft(ctx, draftID, profileID)
+	if err != nil {
+		log.Error(op + ": failed to send draft: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not send draft")
+	}
+
+	return &pb.SendDraftResponse{
+		Success:   true,
+		MessageId: req.DraftId,
+	}, nil
 }

@@ -222,11 +222,50 @@ func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Pr
 		return 0, e.Wrap(op+": failed to create profile: ", err)
 	}
 
+	if err := repo.createSystemFolders(ctx, tx, newProfileId); err != nil {
+		return 0, e.Wrap(op+": failed to create system folders: ", err)
+	}
+
 	if err := tx.Commit(); err != nil {
 		return 0, e.Wrap(op+": failed to commit transaction: ", err)
 	}
 
 	return newBaseProfileId, nil
+}
+
+func (repo *ProfileRepository) createSystemFolders(ctx context.Context, tx *sql.Tx, profileID int64) error {
+	const op = "storage.postgres.profile-repository.createSystemFolders"
+
+	systemFolders := []struct {
+		name  string
+		ftype string
+	}{
+		{"Входящие", "inbox"},
+		{"Отправленные", "sent"},
+		{"Черновики", "draft"},
+		{"Спам", "spam"},
+		{"Корзина", "trash"},
+	}
+
+	const query = `
+        INSERT INTO folder (profile_id, folder_name, folder_type)
+        VALUES ($1, $2, $3)
+    `
+
+	stmt, err := tx.PrepareContext(ctx, query)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	for _, folder := range systemFolders {
+		_, err = stmt.ExecContext(ctx, profileID, folder.name, folder.ftype)
+		if err != nil {
+			return e.Wrap(op+": failed to create folder "+folder.ftype, err)
+		}
+	}
+
+	return nil
 }
 
 func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, username string, emailDomain string) (*domain.Profile, error) {
