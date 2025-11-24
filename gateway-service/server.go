@@ -452,7 +452,7 @@ func (s *Server) renameFolderHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.messageClient.RenameFolder(ctx, &req)
 	if err != nil {
-		respondError(w, "Failed to rename folder")
+		writeGrpcAwareError(w, err, "Failed to rename folder")
 		return
 	}
 
@@ -756,7 +756,7 @@ func (s *Server) createFolderHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.messageClient.CreateFolder(ctx, &req)
 	if err != nil {
-		respondError(w, "Failed to create folder")
+		writeGrpcAwareError(w, err, "Failed to create folder")
 		return
 	}
 
@@ -799,6 +799,13 @@ func writeGrpcAwareError(w http.ResponseWriter, err error, defaultMessage string
 			return
 		case codes.PermissionDenied:
 			writeResponse(w, http.StatusForbidden, defaultMessage, nil)
+			return
+		case codes.AlreadyExists:
+			msg := grpcStatus.Message()
+			if strings.TrimSpace(msg) == "" {
+				msg = defaultMessage
+			}
+			writeResponse(w, http.StatusConflict, msg, nil)
 			return
 		}
 	}

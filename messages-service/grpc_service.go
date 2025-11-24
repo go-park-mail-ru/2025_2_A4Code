@@ -2,17 +2,21 @@ package messages_service
 
 import (
 	"2025_2_a4code/internal/domain"
-	"2025_2_a4code/internal/http-server/middleware/logger"
-	"2025_2_a4code/internal/lib/session"
-	"2025_2_a4code/internal/lib/validation"
 	"context"
+	"errors"
 	"fmt"
+	"html"
+	"log/slog"
 	"net/mail"
 	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"2025_2_a4code/internal/http-server/middleware/logger"
+	"2025_2_a4code/internal/lib/session"
+	"2025_2_a4code/internal/lib/validation"
 
 	pb "2025_2_a4code/messages-service/pkg/messagesproto"
 
@@ -182,14 +186,16 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	threadRoot, err := strconv.ParseInt(req.ThreadRoot, 10, 64)
+	threadRoot, err := s.resolveThreadRoot(ctx, req, profileID, log)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid thread root")
+		return nil, err
 	}
+
+	safeTopic, safeText := sanitizeContent(req.Topic, req.Text)
 
 	var messageID int64
 	for _, receiver := range req.Receivers {
-		msgID, err := s.messageUCase.ReplyToMessage(ctx, receiver.Email, profileID, threadRoot, req.Topic, req.Text)
+		msgID, err := s.messageUCase.ReplyToMessage(ctx, receiver.Email, profileID, threadRoot, safeTopic, safeText)
 		if err != nil {
 			log.Error(op + ": failed to reply to message: " + err.Error())
 			return nil, status.Error(codes.Internal, "could not reply to message")
@@ -226,9 +232,11 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
+	safeTopic, safeText := sanitizeContent(req.Topic, req.Text)
+
 	var messageID int64
 	for _, receiver := range req.Receivers {
-		msgID, err := s.messageUCase.SendMessage(ctx, receiver.Email, profileID, req.Topic, req.Text)
+		msgID, err := s.messageUCase.SendMessage(ctx, receiver.Email, profileID, safeTopic, safeText)
 		if err != nil {
 			log.Error(op + ": failed to send message: " + err.Error())
 			return nil, status.Error(codes.Internal, "could not send message")
@@ -314,6 +322,59 @@ func (s *Server) enrichSenderAvatar(ctx context.Context, sender *domain.Sender) 
 	return nil
 }
 
+func sanitizeContent(topic, text string) (string, string) {
+	return html.EscapeString(topic), html.EscapeString(text)
+}
+
+func (s *Server) resolveThreadRoot(ctx context.Context, req *pb.ReplyRequest, profileID int64, log *slog.Logger) (int64, error) {
+	rootMessageRaw := strings.TrimSpace(req.RootMessageId)
+	if rootMessageRaw == "" {
+		return 0, status.Error(codes.InvalidArgument, "thread root is required")
+	}
+
+	rootMessageID, err := strconv.ParseInt(rootMessageRaw, 10, 64)
+	if err != nil {
+		return 0, status.Error(codes.InvalidArgument, "invalid root message id")
+	}
+
+	threadRootRaw := strings.TrimSpace(req.ThreadRoot)
+	if threadRootRaw != "" {
+		threadRoot, err := strconv.ParseInt(threadRootRaw, 10, 64)
+		if err != nil {
+			log.Warn("invalid thread_root, recreating thread", "thread_root", threadRootRaw, "err", err)
+		} else {
+			// try to bind provided thread to root message to ensure it exists
+			if err := s.messageUCase.SaveThreadIdToMessage(ctx, rootMessageID, threadRoot); err != nil {
+				log.Warn("failed to attach provided thread to message, will recreate", "thread_root", threadRoot, "err", err)
+			} else {
+				return threadRoot, nil
+			}
+		}
+	}
+
+	// try to reuse existing thread if message already has it
+	if full, err := s.messageUCase.FindFullByMessageID(ctx, rootMessageID, profileID); err == nil {
+		if parsed, parseErr := strconv.ParseInt(strings.TrimSpace(full.ThreadRoot), 10, 64); parseErr == nil && parsed > 0 {
+			return parsed, nil
+		}
+	} else {
+		log.Warn("failed to fetch message to determine thread, will create new", "err", err)
+	}
+
+	threadRoot, err := s.messageUCase.SaveThread(ctx, rootMessageID)
+	if err != nil {
+		log.Error("failed to create thread for reply: " + err.Error())
+		return 0, status.Error(codes.Internal, "could not create thread")
+	}
+
+	if err := s.messageUCase.SaveThreadIdToMessage(ctx, rootMessageID, threadRoot); err != nil {
+		log.Error("failed to attach thread to message: " + err.Error())
+		return 0, status.Error(codes.Internal, "could not attach thread to message")
+	}
+
+	return threadRoot, nil
+}
+
 func (s *Server) validateReplyRequest(req *pb.ReplyRequest) error {
 	if req.Text == "" || req.Receivers == nil || len(req.Receivers) == 0 {
 		return fmt.Errorf("empty request body")
@@ -328,9 +389,6 @@ func (s *Server) validateReplyRequest(req *pb.ReplyRequest) error {
 
 	if validation.HasDangerousCharacters(req.Topic) {
 		return fmt.Errorf("topic contains forbidden characters")
-	}
-	if validation.HasDangerousCharacters(req.Text) {
-		return fmt.Errorf("text contains forbidden characters")
 	}
 
 	seen := make(map[string]struct{})
@@ -393,9 +451,6 @@ func (s *Server) validateSendRequest(req *pb.SendRequest) error {
 
 	if validation.HasDangerousCharacters(req.Topic) {
 		return fmt.Errorf("topic contains forbidden characters")
-	}
-	if validation.HasDangerousCharacters(req.Text) {
-		return fmt.Errorf("text contains forbidden characters")
 	}
 
 	seen := make(map[string]struct{})
@@ -511,6 +566,9 @@ func (s *Server) CreateFolder(ctx context.Context, req *pb.CreateFolderRequest) 
 
 	folder, err := s.messageUCase.CreateFolder(ctx, profileID, req.FolderName)
 	if err != nil {
+		if errors.Is(err, domain.ErrFolderExists) {
+			return nil, status.Error(codes.AlreadyExists, err.Error())
+		}
 		log.Error(op + ": failed to create folder: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not create folder")
 	}
@@ -692,6 +750,9 @@ func (s *Server) RenameFolder(ctx context.Context, req *pb.RenameFolderRequest) 
 
 	folder, err := s.messageUCase.RenameFolder(ctx, profileID, folderID, req.NewFolderName)
 	if err != nil {
+		if errors.Is(err, domain.ErrFolderExists) {
+			return nil, status.Error(codes.AlreadyExists, err.Error())
+		}
 		log.Error(op + ": failed to rename folder: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not rename folder")
 	}
@@ -720,6 +781,12 @@ func (s *Server) DeleteFolder(ctx context.Context, req *pb.DeleteFolderRequest) 
 	}
 
 	if err := s.messageUCase.DeleteFolder(ctx, profileID, folderID); err != nil {
+		if errors.Is(err, domain.ErrFolderNotFound) {
+			return nil, status.Error(codes.NotFound, err.Error())
+		}
+		if errors.Is(err, domain.ErrFolderSystem) {
+			return nil, status.Error(codes.PermissionDenied, err.Error())
+		}
 		log.Error(op + ": failed to delete folder: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not delete folder")
 	}
@@ -775,10 +842,12 @@ func (s *Server) SaveDraft(ctx context.Context, req *pb.SaveDraftRequest) (*pb.S
 		receivers = []*pb.Receiver{{Email: ""}}
 	}
 
+	safeTopic, safeText := sanitizeContent(req.Topic, req.Text)
+
 	var draftID int64
 
 	for _, receiver := range receivers {
-		msgID, err := s.messageUCase.SaveDraft(ctx, profileID, req.DraftId, receiver.Email, req.Topic, req.Text)
+		msgID, err := s.messageUCase.SaveDraft(ctx, profileID, req.DraftId, receiver.Email, safeTopic, safeText)
 		if err != nil {
 			log.Error(op + ": failed to save draft: " + err.Error())
 			return nil, status.Error(codes.Internal, "could not save draft")
@@ -842,9 +911,6 @@ func (s *Server) validateDraftRequest(req *pb.SaveDraftRequest) error {
 
 	if validation.HasDangerousCharacters(req.Topic) {
 		return fmt.Errorf("topic contains forbidden characters")
-	}
-	if validation.HasDangerousCharacters(req.Text) {
-		return fmt.Errorf("text contains forbidden characters")
 	}
 
 	if len(req.Receivers) > 0 {

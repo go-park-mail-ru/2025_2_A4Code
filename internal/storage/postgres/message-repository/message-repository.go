@@ -533,6 +533,16 @@ func (repo *MessageRepository) SaveDraft(ctx context.Context, profileID int64, d
 		}
 
 		messageID = existingDraftID
+
+		log.Debug("Ensuring profile message bond for existing draft...")
+		_, err = tx.ExecContext(ctx, `
+            INSERT INTO profile_message (profile_id, message_id, read_status)
+            VALUES ($1, $2, false)
+            ON CONFLICT (profile_id, message_id) DO NOTHING`,
+			profileID, messageID)
+		if err != nil {
+			return 0, e.Wrap(op+": failed to ensure profile_message for existing draft: ", err)
+		}
 	} else {
 		log.Debug("Creating new draft...")
 
@@ -572,6 +582,16 @@ func (repo *MessageRepository) SaveDraft(ctx context.Context, profileID int64, d
 			messageID, draftFolderID)
 		if err != nil {
 			return 0, e.Wrap(op+": failed to add to draft folder: ", err)
+		}
+
+		log.Debug("Ensuring profile message bond for draft...")
+		_, err = tx.ExecContext(ctx, `
+            INSERT INTO profile_message (profile_id, message_id, read_status)
+            VALUES ($1, $2, false)
+            ON CONFLICT (profile_id, message_id) DO NOTHING`,
+			profileID, messageID)
+		if err != nil {
+			return 0, e.Wrap(op+": failed to ensure profile_message for draft: ", err)
 		}
 	}
 
@@ -699,6 +719,27 @@ func (repo *MessageRepository) SendDraft(ctx context.Context, draftID, profileID
 		return e.Wrap(op+": failed to add to sent folder: ", err)
 	}
 
+	// Если отправляем себе, продублируем в inbox отправителя
+	var inboxFolderID int64
+	log.Debug("Getting inbox folder ID...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT id FROM folder 
+        WHERE profile_id = $1 AND folder_type = 'inbox'`,
+		profileID).Scan(&inboxFolderID)
+	if err != nil {
+		return e.Wrap(op+": failed to get inbox folder: ", err)
+	}
+
+	log.Debug("Adding to inbox folder for sender...")
+	_, err = tx.ExecContext(ctx, `
+        INSERT INTO folder_profile_message (message_id, folder_id)
+        VALUES ($1, $2)
+        ON CONFLICT DO NOTHING`,
+		draftID, inboxFolderID)
+	if err != nil {
+		return e.Wrap(op+": failed to add to inbox folder: ", err)
+	}
+
 	log.Debug("Committing transaction...")
 	return tx.Commit()
 }
@@ -778,13 +819,11 @@ func (repo *MessageRepository) ShouldMarkAsRead(ctx context.Context, messageID, 
 	err := repo.db.QueryRowContext(ctx, `
         SELECT 
             CASE 
-                WHEN f.folder_type = 'inbox' AND pm.read_status = false THEN true
+                WHEN pm.read_status = false THEN true
                 ELSE false
             END as should_mark
-        FROM folder_profile_message fpm
-        JOIN folder f ON fpm.folder_id = f.id
-        JOIN profile_message pm ON pm.message_id = fpm.message_id AND pm.profile_id = f.profile_id
-        WHERE fpm.message_id = $1 AND f.profile_id = $2
+        FROM profile_message pm
+        WHERE pm.message_id = $1 AND pm.profile_id = $2
         LIMIT 1`,
 		messageID, profileID).Scan(&shouldMark)
 	if err != nil {
@@ -802,6 +841,14 @@ func (repo *MessageRepository) CreateFolder(ctx context.Context, profileID int64
 	const op = "storage.postgresql.message.CreateFolder"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
+	exists, err := repo.folderExists(ctx, profileID, folderName, 0)
+	if err != nil {
+		return nil, e.Wrap(op, err)
+	}
+	if exists {
+		return nil, domain.ErrFolderExists
+	}
+
 	const query = `
         INSERT INTO folder (profile_id, folder_name, folder_type)
         VALUES ($1, $2, 'custom')
@@ -809,7 +856,7 @@ func (repo *MessageRepository) CreateFolder(ctx context.Context, profileID int64
 
 	var folder domain.Folder
 	log.Debug("Creating folder...")
-	err := repo.db.QueryRowContext(ctx, query, profileID, folderName).Scan(
+	err = repo.db.QueryRowContext(ctx, query, profileID, folderName).Scan(
 		&folder.ID, &folder.Name, &folder.Type)
 	if err != nil {
 		return nil, e.Wrap(op, err)
@@ -867,6 +914,14 @@ func (repo *MessageRepository) RenameFolder(ctx context.Context, profileID, fold
 	const op = "storage.postgresql.message.RenameFolder"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
+	exists, err := repo.folderExists(ctx, profileID, newName, folderID)
+	if err != nil {
+		return nil, e.Wrap(op, err)
+	}
+	if exists {
+		return nil, domain.ErrFolderExists
+	}
+
 	const query = `
         UPDATE folder 
         SET folder_name = $1, updated_at = $2
@@ -875,7 +930,7 @@ func (repo *MessageRepository) RenameFolder(ctx context.Context, profileID, fold
 
 	var folder domain.Folder
 	log.Debug("Renaming folder...")
-	err := repo.db.QueryRowContext(ctx, query, newName, time.Now(), folderID, profileID).Scan(
+	err = repo.db.QueryRowContext(ctx, query, newName, time.Now(), folderID, profileID).Scan(
 		&folder.ID, &folder.Name, &folder.Type)
 	if err != nil {
 		return nil, e.Wrap(op, err)
@@ -902,11 +957,36 @@ func (repo *MessageRepository) DeleteFolder(ctx context.Context, profileID, fold
         WHERE id = $1 AND profile_id = $2`,
 		folderID, profileID).Scan(&folderType)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return domain.ErrFolderNotFound
+		}
 		return e.Wrap(op+": failed to get folder info: ", err)
 	}
 
 	if folderType != "custom" {
-		return e.Wrap(op+": cannot delete system folder: ", err)
+		return domain.ErrFolderSystem
+	}
+
+	var trashFolderID int64
+	log.Debug("Fetching trash folder id...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT id FROM folder 
+        WHERE profile_id = $1 AND folder_type = 'trash'`,
+		profileID).Scan(&trashFolderID)
+	if err != nil {
+		return e.Wrap(op+": failed to get trash folder: ", err)
+	}
+
+	log.Debug("Moving messages from deleted folder to trash...")
+	_, err = tx.ExecContext(ctx, `
+        INSERT INTO folder_profile_message (message_id, folder_id)
+        SELECT fpm.message_id, $1
+        FROM folder_profile_message fpm
+        WHERE fpm.folder_id = $2
+        ON CONFLICT DO NOTHING`,
+		trashFolderID, folderID)
+	if err != nil {
+		return e.Wrap(op+": failed to move messages to trash: ", err)
 	}
 
 	log.Debug("Removing folder messages...")
@@ -953,6 +1033,26 @@ func (repo *MessageRepository) DeleteMessageFromFolder(ctx context.Context, prof
 
 	log.Debug("Successfully deleted message from folder")
 	return nil
+}
+
+func (repo *MessageRepository) folderExists(ctx context.Context, profileID int64, name string, excludeID int64) (bool, error) {
+	const op = "storage.postgresql.message.folderExists"
+	const query = `
+        SELECT 1 FROM folder
+        WHERE profile_id = $1
+          AND LOWER(folder_name) = LOWER($2)
+          AND ($3 = 0 OR id <> $3)
+        LIMIT 1`
+
+	var stub int
+	err := repo.db.QueryRowContext(ctx, query, profileID, name, excludeID).Scan(&stub)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, e.Wrap(op, err)
+	}
+	return true, nil
 }
 
 func (repo *MessageRepository) GetFolderMessagesWithKeysetPagination(
@@ -1137,10 +1237,17 @@ func (repo *MessageRepository) SaveMessageWithFolderDistribution(
 
 	const insertProfileMessage = `
         INSERT INTO profile_message (profile_id, message_id, read_status)
-        VALUES ($1, $2, false)`
+        VALUES ($1, $2, false)
+        ON CONFLICT (profile_id, message_id) DO NOTHING`
 
-	log.Debug("Creating profile message bond...")
+	log.Debug("Creating profile message bond for receiver...")
 	_, err = tx.ExecContext(ctx, insertProfileMessage, receiverProfileID, messageID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert profile message for receiver: ", err)
+	}
+
+	log.Debug("Creating profile message bond for sender...")
+	_, err = tx.ExecContext(ctx, insertProfileMessage, senderProfileID, messageID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to insert profile message: ", err)
 	}
@@ -1231,12 +1338,19 @@ func (repo *MessageRepository) ReplyToMessageWithFolderDistribution(
 
 	const insertProfileMessage = `
         INSERT INTO profile_message (profile_id, message_id, read_status)
-        VALUES ($1, $2, false)`
+        VALUES ($1, $2, false)
+        ON CONFLICT (profile_id, message_id) DO NOTHING`
 
-	log.Debug("Creating profile message bond...")
+	log.Debug("Creating profile message bond for receiver...")
 	_, err = tx.ExecContext(ctx, insertProfileMessage, receiverProfileID, messageID)
 	if err != nil {
-		return 0, e.Wrap(op+": failed to insert profile message: ", err)
+		return 0, e.Wrap(op+": failed to insert profile message for receiver: ", err)
+	}
+
+	log.Debug("Creating profile message bond for sender...")
+	_, err = tx.ExecContext(ctx, insertProfileMessage, senderProfileID, messageID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert profile message for sender: ", err)
 	}
 
 	err = tx.Commit()
