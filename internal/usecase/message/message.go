@@ -21,6 +21,7 @@ type MessageRepository interface {
 	// методы для работы с сообщениями
 	MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error
 	MarkMessageAsSpam(ctx context.Context, messageID int64, profileID int64) error
+	IsUsersMessage(ctx context.Context, messageID int64, profileID int64) (bool, error)
 
 	// методы для черновиков
 	SaveDraft(ctx context.Context, profileID int64, draftID, receiverEmail, topic, text string) (int64, error)
@@ -161,4 +162,8 @@ func (uc *MessageUcase) SendMessage(ctx context.Context, receiverEmail string, s
 
 func (uc *MessageUcase) ReplyToMessage(ctx context.Context, receiverEmail string, senderProfileID int64, threadRoot int64, topic, text string) (int64, error) {
 	return uc.repo.ReplyToMessageWithFolderDistribution(ctx, receiverEmail, senderProfileID, threadRoot, topic, text)
+}
+
+func (uc *MessageUcase) IsUsersMessage(ctx context.Context, messageID int64, profileID int64) (bool, error) {
+	return uc.repo.IsUsersMessage(ctx, messageID, profileID)
 }

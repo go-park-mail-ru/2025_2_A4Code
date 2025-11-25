@@ -284,7 +284,8 @@ func (s *Server) messagePageHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.messageClient.MessagePage(ctx, req)
 	if err != nil {
-		respondError(w, "Failed to get message")
+		//respondError(w, "Failed to get message")
+		writeGrpcAwareError(w, err, "Failed to get message")
 		return
 	}
 

@@ -1360,3 +1360,35 @@ func (repo *MessageRepository) ReplyToMessageWithFolderDistribution(
 
 	return messageID, nil
 }
+
+func (repo *MessageRepository) IsUsersMessage(ctx context.Context, messageID int64, profileID int64) (bool, error) {
+	const op = "storage.postgres.profile-repository.IsUsersMessage"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM profile_message pm
+			JOIN profile p ON pm.profile_id = p.id
+			WHERE pm.message_id = $1 AND p.base_profile_id = $2
+		)`
+
+	stmt, err := repo.db.PrepareContext(ctx, query)
+	if err != nil {
+		return false, e.Wrap(op, err)
+	}
+	defer stmt.Close()
+
+	var isUserMessage bool
+
+	log.Debug("Executing IsUsersMessage query...", slog.Int64("message_id", messageID), slog.Int64("base_profile_id", profileID))
+	err = stmt.QueryRowContext(ctx, messageID, profileID).Scan(
+		&isUserMessage,
+	)
+
+	if err != nil {
+		return false, e.Wrap(op, err)
+	}
+
+	return isUserMessage, nil
+}
