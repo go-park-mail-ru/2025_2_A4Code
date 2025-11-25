@@ -189,7 +189,8 @@ func (s *Server) refreshHandler(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   15 * 60,
 		HttpOnly: true,
 		Path:     "/",
-		SameSite: http.SameSiteLaxMode,
+		Secure:   true,
+		SameSite: http.SameSiteNoneMode,
 	})
 
 	respondSuccess(w, resp)
@@ -867,7 +868,8 @@ func setAuthCookies(w http.ResponseWriter, access, refresh string) {
 		MaxAge:   15 * 60,
 		HttpOnly: true,
 		Path:     "/",
-		SameSite: http.SameSiteLaxMode,
+		Secure:   true,
+		SameSite: http.SameSiteNoneMode,
 	})
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
@@ -875,6 +877,7 @@ func setAuthCookies(w http.ResponseWriter, access, refresh string) {
 		MaxAge:   7 * 24 * 3600,
 		HttpOnly: true,
 		Path:     "/",
-		SameSite: http.SameSiteLaxMode,
+		Secure:   true,
+		SameSite: http.SameSiteNoneMode,
 	})
 }
