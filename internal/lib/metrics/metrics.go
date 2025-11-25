@@ -51,7 +51,6 @@ var (
 		[]string{"service", "method"},
 	)
 
-	// === Бизнес-метрики для auth ===
 	AuthLoginAttempts = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "auth_login_attempts_total",
