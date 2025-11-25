@@ -5,6 +5,7 @@ import (
 	"2025_2_a4code/internal/config"
 	"2025_2_a4code/internal/http-server/middleware/cors"
 	"2025_2_a4code/internal/http-server/middleware/logger"
+	"2025_2_a4code/internal/http-server/middleware/metrics"
 	"2025_2_a4code/messages-service/pkg/messagesproto"
 	"2025_2_a4code/profile-service/pkg/profileproto"
 	"context"
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -77,6 +79,16 @@ func (s *Server) Start(ctx context.Context) error {
 	log := logger.GetLogger(ctx)
 	slog.SetDefault(log)
 
+	// Запуск сервера метрик
+	go func() {
+		http.Handle("/metrics", promhttp.Handler()) // promhttp экспортирует CPU/Mem автоматически
+		metricsAddr := ":" + s.cfg.GatewayMetricsPort
+		log.Info("Gateway metrics server started on " + metricsAddr)
+		if err := http.ListenAndServe(metricsAddr, nil); err != nil {
+			log.Error("Failed to start metrics server: " + err.Error())
+		}
+	}()
+
 	mux := http.NewServeMux()
 
 	mux.Handle("POST /auth/login", http.HandlerFunc(s.loginHandler))
@@ -109,6 +121,7 @@ func (s *Server) Start(ctx context.Context) error {
 	var handler http.Handler = mux
 	handler = logger.New(log)(handler)
 	handler = cors.New()(handler)
+	handler = metrics.Middleware(handler)
 
 	s.httpServer = &http.Server{
 		Addr:         ":" + s.cfg.GatewayPort,
