@@ -127,6 +127,15 @@ var (
 	)
 
 	// === Бизнес-метрики для messages ===
+
+	MessagesSentTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "messages_service_sent_total",
+			Help: "Total number of successfully sent messages by type (send, reply, draft_send)",
+		},
+		[]string{"type"},
+	)
+
 	MessagesOperationsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "messages_operations_total",

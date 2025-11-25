@@ -15,14 +15,16 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Host               string `yaml:"host"`
-	AuthPort           string `yaml:"auth_port"`
-	MessagesPort       string `yaml:"messages_port"`
-	ProfilePort        string `yaml:"profile_port"`
-	GatewayPort        string `yaml:"gateway_port"`
-	GatewayMetricsPort string `yaml:"gateway_metrics_port"`
-	AuthMetricsPort    string `yaml:"auth_metrics_port"`
-	Secret             string `yaml:"secret"`
+	Host                string `yaml:"host"`
+	AuthPort            string `yaml:"auth_port"`
+	MessagesPort        string `yaml:"messages_port"`
+	ProfilePort         string `yaml:"profile_port"`
+	GatewayPort         string `yaml:"gateway_port"`
+	GatewayMetricsPort  string `yaml:"gateway_metrics_port"`
+	AuthMetricsPort     string `yaml:"auth_metrics_port"`
+	MessagesMetricsPort string `yaml:"messages_metrics_port"`
+	ProfileMetricsPort  string `yaml:"profile_metrics_port"`
+	Secret              string `yaml:"secret"`
 }
 
 type DBConfig struct {

@@ -3,6 +3,7 @@ package app
 import (
 	"2025_2_a4code/internal/config"
 	in "2025_2_a4code/internal/lib/init"
+	"2025_2_a4code/internal/lib/metrics"
 	messagesservice "2025_2_a4code/messages-service"
 	"net"
 
@@ -50,6 +51,8 @@ func MessagesInit() {
 	slog.SetDefault(log)
 	log.Debug("messages: debug messages are enabled")
 
+	go metrics.StartMetricsServer(cfg.AppConfig.MessagesMetricsPort, log)
+
 	// Установка соединения с бд
 	connection, err := in.NewDbConnection(cfg.DBConfig)
 	if err != nil {
@@ -79,7 +82,8 @@ func MessagesInit() {
 
 	slog.Info("Messages microservice: server has started working...")
 
-	grpcServer := grpc.NewServer()
+	metricsInterceptor := metrics.NewGRPCMetricsInterceptor("messages")
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(metricsInterceptor))
 	messagesService := messagesservice.New(messageUCase, avatarUCase, SECRET)
 	pb.RegisterMessagesServiceServer(grpcServer, messagesService)
 

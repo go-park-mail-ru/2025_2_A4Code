@@ -6,6 +6,7 @@ app:
   gateway_port: 8000
   gateway_metrics_port: 8012
   auth_metrics_port: 8013
+  messages_metrics_port: 8014
   secret: secret
 db:
   host: postgres

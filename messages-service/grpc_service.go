@@ -2,6 +2,7 @@ package messages_service
 
 import (
 	"2025_2_a4code/internal/domain"
+	"2025_2_a4code/internal/lib/metrics"
 	"context"
 	"errors"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 
 	pb "2025_2_a4code/messages-service/pkg/messagesproto"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -116,32 +118,41 @@ func (s *Server) getProfileID(ctx context.Context) (int64, error) {
 
 func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*pb.MessagePageResponse, error) {
 	const op = "messagesservice.MessagePage"
+
+	timer := prometheus.NewTimer(metrics.MessagesOperationsDuration.WithLabelValues("messages", "get_message"))
+	defer timer.ObserveDuration()
+
 	log := logger.GetLogger(ctx)
 	log.Debug("handle messages/{message_id}")
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "error").Inc()
 		return nil, status.Error(codes.Unauthenticated, "unauthorized")
 	}
 
 	messageID, err := strconv.ParseInt(req.MessageId, 10, 64)
 	if err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "error").Inc()
 		return nil, status.Error(codes.InvalidArgument, "invalid message id")
 	}
 
 	ok, err := s.messageUCase.IsUsersMessage(ctx, messageID, profileID)
 	if err != nil {
 		log.Error(op + ": failed to check if it is users message: " + err.Error())
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "error").Inc()
 		return nil, status.Error(codes.Internal, "could not get message")
 	}
 	if !ok {
 		log.Debug(op + ": unpermitted access to message")
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "error").Inc()
 		return nil, status.Error(codes.PermissionDenied, "access denied")
 	}
 
 	fullMessage, err := s.messageUCase.FindFullByMessageID(ctx, messageID, profileID)
 	if err != nil {
 		log.Error(op + ": failed to get message: " + err.Error())
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "error").Inc()
 		return nil, status.Error(codes.Internal, "could not get message")
 	}
 
@@ -171,6 +182,8 @@ func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*
 		}
 	}
 
+	metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "ok").Inc()
+
 	return &pb.MessagePageResponse{
 		Message: &pb.FullMessage{
 			Topic:    fullMessage.Topic,
@@ -185,20 +198,27 @@ func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*
 
 func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResponse, error) {
 	const op = "messagesservice.Reply"
+
+	timer := prometheus.NewTimer(metrics.MessagesOperationsDuration.WithLabelValues("messages", "reply"))
+	defer timer.ObserveDuration()
+
 	log := logger.GetLogger(ctx)
 	log.Debug("handle messages/reply")
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
 		return nil, status.Error(codes.Unauthenticated, "unauthorized")
 	}
 
 	if err := s.validateReplyRequest(req); err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	threadRoot, err := s.resolveThreadRoot(ctx, req, profileID, log)
 	if err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
 		return nil, err
 	}
 
@@ -209,20 +229,29 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 		msgID, err := s.messageUCase.ReplyToMessage(ctx, receiver.Email, profileID, threadRoot, safeTopic, safeText)
 		if err != nil {
 			log.Error(op + ": failed to reply to message: " + err.Error())
+			metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
 			return nil, status.Error(codes.Internal, "could not reply to message")
 		}
+
+		metrics.MessagesSentTotal.WithLabelValues("reply").Inc()
 
 		for _, file := range req.Files {
 			size, _ := strconv.ParseInt(file.Size, 10, 64)
 			_, err = s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size)
 			if err != nil {
 				log.Error(op + ": failed to save file: " + err.Error())
+				metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
 				return nil, status.Error(codes.Internal, "could not save file")
 			}
+
+			metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
+			metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
 		}
 
 		messageID = msgID
 	}
+
+	metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "ok").Inc()
 
 	return &pb.ReplyResponse{
 		MessageId: strconv.FormatInt(messageID, 10),
@@ -231,15 +260,21 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 
 func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendResponse, error) {
 	const op = "messagesservice.Send"
+
+	timer := prometheus.NewTimer(metrics.MessagesOperationsDuration.WithLabelValues("messages", "send"))
+	defer timer.ObserveDuration()
+
 	log := logger.GetLogger(ctx)
 	log.Debug("handle messages/send")
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
 		return nil, status.Error(codes.Unauthenticated, "unauthorized")
 	}
 
 	if err := s.validateSendRequest(req); err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -250,18 +285,23 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 		msgID, err := s.messageUCase.SendMessage(ctx, receiver.Email, profileID, safeTopic, safeText)
 		if err != nil {
 			log.Error(op + ": failed to send message: " + err.Error())
+			metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
 			return nil, status.Error(codes.Internal, "could not send message")
 		}
+
+		metrics.MessagesSentTotal.WithLabelValues("send").Inc()
 
 		if messageID == 0 {
 			threadID, err := s.messageUCase.SaveThread(ctx, msgID)
 			if err != nil {
 				log.Error(op + ": failed to save thread: " + err.Error())
+				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
 				return nil, status.Error(codes.Internal, "could not save thread")
 			}
 
 			if err := s.messageUCase.SaveThreadIdToMessage(ctx, msgID, threadID); err != nil {
 				log.Error(op + ": failed to save thread id: " + err.Error())
+				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
 				return nil, status.Error(codes.Internal, "could not save thread id")
 			}
 		}
@@ -271,12 +311,18 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 			_, err = s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size)
 			if err != nil {
 				log.Error(op + ": failed to save file: " + err.Error())
+				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
 				return nil, status.Error(codes.Internal, "could not save file")
 			}
+
+			metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
+			metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
 		}
 
 		messageID = msgID
 	}
+
+	metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "ok").Inc()
 
 	return &pb.SendResponse{
 		MessageId: strconv.FormatInt(messageID, 10),
@@ -527,9 +573,11 @@ func (s *Server) MarkAsSpam(ctx context.Context, req *pb.MarkAsSpamRequest) (*pb
 
 	if err := s.messageUCase.MarkMessageAsSpam(ctx, messageID, profileID); err != nil {
 		log.Warn("failed to mark message as spam: " + err.Error())
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "mark_spam", "error").Inc()
 		return nil, status.Error(codes.Internal, "could not mark message as spam")
 	}
 
+	metrics.MessagesOperationsTotal.WithLabelValues("messages", "mark_spam", "ok").Inc()
 	return &pb.MarkAsSpamResponse{}, nil
 }
 
@@ -555,9 +603,11 @@ func (s *Server) MoveToFolder(ctx context.Context, req *pb.MoveToFolderRequest) 
 
 	if err := s.messageUCase.MoveToFolder(ctx, profileID, messageID, folderID); err != nil {
 		log.Error(op + ": failed to move message to folder: " + err.Error())
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "move_to_folder", "error").Inc()
 		return nil, status.Error(codes.Internal, "could not move message to folder")
 	}
 
+	metrics.MessagesOperationsTotal.WithLabelValues("messages", "move_to_folder", "ok").Inc()
 	return &pb.MoveToFolderResponse{}, nil
 }
 
@@ -581,9 +631,11 @@ func (s *Server) CreateFolder(ctx context.Context, req *pb.CreateFolderRequest) 
 			return nil, status.Error(codes.AlreadyExists, err.Error())
 		}
 		log.Error(op + ": failed to create folder: " + err.Error())
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "create_folder", "error").Inc()
 		return nil, status.Error(codes.Internal, "could not create folder")
 	}
 
+	metrics.MessagesOperationsTotal.WithLabelValues("messages", "create_folder", "ok").Inc()
 	return &pb.CreateFolderResponse{
 		FolderId:   strconv.FormatInt(folder.ID, 10),
 		FolderName: folder.Name,
@@ -630,8 +682,12 @@ func (s *Server) GetFolder(ctx context.Context, req *pb.GetFolderRequest) (*pb.G
 	log := logger.GetLogger(ctx)
 	log.Debug("handle messages/get-folder")
 
+	timer := prometheus.NewTimer(metrics.MessagesOperationsDuration.WithLabelValues("messages", "get_folder_messages"))
+	defer timer.ObserveDuration()
+
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_folder_messages", "error").Inc()
 		return nil, status.Error(codes.Unauthenticated, "unauthorized")
 	}
 
@@ -664,12 +720,14 @@ func (s *Server) GetFolder(ctx context.Context, req *pb.GetFolderRequest) (*pb.G
 
 	messages, err := s.messageUCase.GetFolderMessagesWithKeysetPagination(ctx, profileID, folderID, lastMessageID, lastDatetime, limit)
 	if err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_folder_messages", "error").Inc()
 		log.Error(op + ": failed to get folder messages: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not get folder messages")
 	}
 
 	messagesInfo, err := s.messageUCase.GetFolderMessagesInfo(ctx, profileID, folderID)
 	if err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_folder_messages", "error").Inc()
 		log.Error(op + ": failed to get folder messages info: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not get folder messages info")
 	}
@@ -697,6 +755,7 @@ func (s *Server) GetFolder(ctx context.Context, req *pb.GetFolderRequest) (*pb.G
 		nextLastDatetime = m.Datetime
 	}
 
+	metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_folder_messages", "ok").Inc()
 	return &pb.GetFolderResponse{
 		MessageTotal:  strconv.Itoa(messagesInfo.MessageTotal),
 		MessageUnread: strconv.Itoa(messagesInfo.MessageUnread),
@@ -711,21 +770,26 @@ func (s *Server) GetFolder(ctx context.Context, req *pb.GetFolderRequest) (*pb.G
 
 func (s *Server) GetFolders(ctx context.Context, req *pb.GetFoldersRequest) (*pb.GetFoldersResponse, error) {
 	const op = "messagesservice.GetFolders"
+
+	timer := prometheus.NewTimer(metrics.MessagesOperationsDuration.WithLabelValues("messages", "get_folders"))
+	defer timer.ObserveDuration()
+
 	log := logger.GetLogger(ctx)
 	log.Debug("handle messages/get-folders")
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_folders", "error").Inc()
 		return nil, status.Error(codes.Unauthenticated, "unauthorized")
 	}
 
 	folders, err := s.messageUCase.GetUserFolders(ctx, profileID)
 	if err != nil {
 		log.Error(op + ": failed to get user folders: " + err.Error())
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_folders", "error").Inc()
 		return nil, status.Error(codes.Internal, "could not get folders")
 	}
 
-	// конвертируем domain папки в proto папки
 	pbFolders := make([]*pb.Folder, 0, len(folders))
 	for _, folder := range folders {
 		pbFolders = append(pbFolders, &pb.Folder{
@@ -735,6 +799,7 @@ func (s *Server) GetFolders(ctx context.Context, req *pb.GetFoldersRequest) (*pb
 		})
 	}
 
+	metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_folders", "ok").Inc()
 	return &pb.GetFoldersResponse{
 		Folders: pbFolders,
 	}, nil
@@ -836,15 +901,21 @@ func (s *Server) DeleteMessageFromFolder(ctx context.Context, req *pb.DeleteMess
 
 func (s *Server) SaveDraft(ctx context.Context, req *pb.SaveDraftRequest) (*pb.SaveDraftResponse, error) {
 	const op = "messagesservice.SaveDraft"
+
+	timer := prometheus.NewTimer(metrics.MessagesOperationsDuration.WithLabelValues("messages", "save_draft"))
+	defer timer.ObserveDuration()
+
 	log := logger.GetLogger(ctx)
 	log.Debug("handle messages/save-draft")
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "save_draft", "error").Inc()
 		return nil, status.Error(codes.Unauthenticated, "unauthorized")
 	}
 
 	if err := s.validateDraftRequest(req); err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "save_draft", "error").Inc()
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -861,6 +932,7 @@ func (s *Server) SaveDraft(ctx context.Context, req *pb.SaveDraftRequest) (*pb.S
 		msgID, err := s.messageUCase.SaveDraft(ctx, profileID, req.DraftId, receiver.Email, safeTopic, safeText)
 		if err != nil {
 			log.Error(op + ": failed to save draft: " + err.Error())
+			metrics.MessagesOperationsTotal.WithLabelValues("messages", "save_draft", "error").Inc()
 			return nil, status.Error(codes.Internal, "could not save draft")
 		}
 		draftID = msgID
@@ -902,10 +974,16 @@ func (s *Server) SaveDraft(ctx context.Context, req *pb.SaveDraftRequest) (*pb.S
 			_, err = s.messageUCase.SaveFile(ctx, draftID, file.Name, file.FileType, file.StoragePath, size)
 			if err != nil {
 				log.Error(op + ": failed to save file: " + err.Error())
+				metrics.MessagesOperationsTotal.WithLabelValues("messages", "save_draft", "error").Inc()
 				return nil, status.Error(codes.Internal, "could not save file")
 			}
+
+			metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
+			metrics.FileOperations.WithLabelValues("messages", "upload_draft", "ok").Inc()
 		}
 	}
+
+	metrics.MessagesOperationsTotal.WithLabelValues("messages", "save_draft", "ok").Inc()
 
 	return &pb.SaveDraftResponse{
 		DraftId: strconv.FormatInt(draftID, 10),
@@ -1004,11 +1082,16 @@ func (s *Server) DeleteDraft(ctx context.Context, req *pb.DeleteDraftRequest) (*
 
 func (s *Server) SendDraft(ctx context.Context, req *pb.SendDraftRequest) (*pb.SendDraftResponse, error) {
 	const op = "messagesservice.SendDraft"
+
+	timer := prometheus.NewTimer(metrics.MessagesOperationsDuration.WithLabelValues("messages", "send_draft"))
+	defer timer.ObserveDuration()
+
 	log := logger.GetLogger(ctx)
 	log.Debug("handle messages/send-draft")
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send_draft", "error").Inc()
 		return nil, status.Error(codes.Unauthenticated, "unauthorized")
 	}
 
@@ -1020,18 +1103,24 @@ func (s *Server) SendDraft(ctx context.Context, req *pb.SendDraftRequest) (*pb.S
 	belongs, err := s.messageUCase.IsDraftBelongsToUser(ctx, draftID, profileID)
 	if err != nil {
 		log.Error(op + ": failed to check draft ownership: " + err.Error())
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send_draft", "error").Inc()
 		return nil, status.Error(codes.Internal, "could not verify draft ownership")
 	}
 
 	if !belongs {
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send_draft", "error").Inc()
 		return nil, status.Error(codes.PermissionDenied, "draft not found or access denied")
 	}
 
 	err = s.messageUCase.SendDraft(ctx, draftID, profileID)
 	if err != nil {
 		log.Error(op + ": failed to send draft: " + err.Error())
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send_draft", "error").Inc()
 		return nil, status.Error(codes.Internal, "could not send draft")
 	}
+
+	metrics.MessagesSentTotal.WithLabelValues("draft_send").Inc()
+	metrics.MessagesOperationsTotal.WithLabelValues("messages", "send_draft", "ok").Inc()
 
 	return &pb.SendDraftResponse{
 		Success:   true,
