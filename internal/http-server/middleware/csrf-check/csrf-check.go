@@ -44,9 +44,9 @@ func New() func(next http.Handler) http.Handler {
 						Name:     csrfCookieName,
 						Value:    newToken,
 						Path:     "/",
-						Secure:   false,
-						HttpOnly: false,
-						SameSite: http.SameSiteStrictMode,
+						Secure:   true,
+						HttpOnly: true,
+						SameSite: http.SameSiteNoneMode,
 					})
 					clientCookieToken = newToken
 				}
