@@ -4,16 +4,8 @@ global:
 scrape_configs:
   - job_name: 'auth-service'
     static_configs:
-      - targets: ['a4-auth:8001']
+      - targets: ['a4-auth:8013']
 
   - job_name: 'gateway-service'
     static_configs:
-      - targets: ['a4-gateway:8000']
-
-  - job_name: 'messages-service'
-    static_configs:
-      - targets: ['a4-messages:8002']
-
-  - job_name: 'profile-service'
-    static_configs:
-      - targets: ['a4-profile:8003']
+      - targets: ['a4-gateway:8012']
