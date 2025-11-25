@@ -45,7 +45,7 @@ func AuthInit() {
 	log.Debug("auth: debug messages are enabled")
 	//loggerMiddleware := logger.New(log)
 
-	go startMetricsServer("8081", log)
+	go startMetricsServer(cfg.AppConfig.AuthMetricsPort, log)
 
 	// Установка соединения с бд
 	log.Info(cfg.DBConfig.Host + ":" + cfg.DBConfig.Port)

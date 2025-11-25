@@ -9,7 +9,7 @@ import (
 	"os"
 )
 
-const ( // TODO: или убрать в init_logger "2025_2_a4code/internal/pkg/init-logger" или здесь или вынести в отдельный файл
+const (
 	envLocal = "local"
 	envDev   = "dev"
 	envProd  = "prod"
