@@ -84,6 +84,7 @@ services:
       - ./db:/app/db:ro
     ports:
       - "8001:8001"
+      - "8013:8013"
     depends_on:
       - postgres
 
@@ -113,6 +114,7 @@ services:
       - ./db:/app/db:ro
     ports:
       - "8003:8003"
+      - "8015:8015"
     depends_on:
       - postgres
       - minio
@@ -128,6 +130,7 @@ services:
       - ./db:/app/db:ro
     ports:
       - "8000:8000"
+      - "8012:8012"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
