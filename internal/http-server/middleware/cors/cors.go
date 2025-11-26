@@ -28,6 +28,7 @@ func New() func(http.Handler) http.Handler {
 }
 
 func allowOrigin(origin string) bool {
+	return true
 	switch origin {
 	case "http://localhost:8080", "http://127.0.0.1:8080", "http://217.16.16.26:80":
 		return true

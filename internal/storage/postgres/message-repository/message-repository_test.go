@@ -1,6 +1,7 @@
 package message_repository
 
 import (
+	"2025_2_a4code/internal/domain"
 	"context"
 	"database/sql"
 	"fmt"
@@ -30,6 +31,55 @@ func setupTest(t *testing.T) (context.Context, *MessageRepository, sqlmock.Sqlmo
 
 func quote(query string) string {
 	return regexp.QuoteMeta(query)
+}
+
+func TestMessageRepository_FindByMessageID(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	mockMessageID := int64(1)
+	mockTime := time.Now()
+
+	const query = `
+        SELECT
+            m.id, m.topic, m.text, m.date_of_dispatch,
+            bp.id, bp.username, bp.domain,
+            p.name, p.surname, p.image_path,
+            pm.read_status
+        FROM
+            message m
+        JOIN
+            base_profile bp ON m.sender_base_profile_id = bp.id
+        LEFT JOIN
+            profile p ON bp.id = p.base_profile_id
+        LEFT JOIN
+            profile_message pm ON m.id = pm.message_id
+        WHERE
+            m.id = $1`
+
+	mock.ExpectPrepare(quote(query)).
+		ExpectQuery().
+		WithArgs(mockMessageID).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"m.id", "m.topic", "m.text", "m.date_of_dispatch",
+			"bp.id", "bp.username", "bp.domain",
+			"p.name", "p.surname", "p.image_path",
+			"pm.read_status",
+		}).AddRow(
+			mockMessageID, "Test Topic", "This is a test message text", mockTime,
+			int64(2), "sender", "example.com",
+			"John", "Doe", "avatar.jpg",
+			false,
+		))
+
+	message, err := repo.FindByMessageID(ctx, mockMessageID)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, message)
+	assert.Equal(t, "Test Topic", message.Topic)
+	assert.Equal(t, "This is a test message te...", message.Snippet)
+	assert.Equal(t, "John Doe", message.Sender.Username)
+	assert.Equal(t, "sender@example.com", message.Sender.Email)
+	assert.False(t, message.IsRead)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestMessageRepository_FindFullByMessageID(t *testing.T) {
@@ -109,99 +159,6 @@ func TestMessageRepository_FindFullByMessageID(t *testing.T) {
 	assert.Equal(t, "image/png", msg.Files[0].FileType)
 	assert.Equal(t, "path/to/file2.pdf", msg.Files[1].StoragePath)
 	assert.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestMessageRepository_FindByProfileIDWithKeysetPagination(t *testing.T) {
-	ctx, repo, mock := setupTest(t)
-	mockProfileID := int64(1)
-	limit := 10
-
-	const query = `
-        SELECT
-            m.id, m.topic, m.text, m.date_of_dispatch,
-            pm.read_status,
-            bp.id, bp.username, bp.domain,
-            sender_profile.name, sender_profile.surname, sender_profile.image_path
-        FROM
-            message m
-        JOIN
-            profile_message pm ON m.id = pm.message_id
-        JOIN
-            profile recipient_profile ON pm.profile_id = recipient_profile.id
-        LEFT JOIN
-            folder_profile_message fpm ON m.id = fpm.message_id
-        LEFT JOIN
-            folder f ON fpm.folder_id = f.id AND f.profile_id = recipient_profile.id
-        JOIN
-            base_profile bp ON m.sender_base_profile_id = bp.id
-        LEFT JOIN
-            profile sender_profile ON bp.id = sender_profile.base_profile_id
-        WHERE
-            recipient_profile.base_profile_id = $1
-			AND (($2 = 0 AND $3 = 0) OR (m.date_of_dispatch, m.id) < (to_timestamp($3), $2))
-        GROUP BY 
-            m.id, 
-            m.topic, 
-            m.text, 
-            m.date_of_dispatch,
-            pm.read_status,
-            bp.id, 
-            bp.username, 
-            bp.domain,
-            sender_profile.name, 
-            sender_profile.surname, 
-            sender_profile.image_path
-        ORDER BY
-            m.date_of_dispatch DESC, m.id DESC
-		FETCH FIRST $4 ROWS ONLY`
-
-	rows := sqlmock.NewRows([]string{
-		"m.id", "m.topic", "m.text", "m.date_of_dispatch", "pm.read_status",
-		"bp.id", "bp.username", "bp.domain",
-		"sender_profile.name", "sender_profile.surname", "sender_profile.image_path",
-	}).
-		AddRow(
-			int64(10), "Topic 1", "Text 1", time.Now(), false,
-			int64(2), "sender1", "a.com", "Sender", "One", "avatar1.png",
-		)
-
-	t.Run("FirstPage", func(t *testing.T) {
-		mock.ExpectPrepare(quote(query)).
-			ExpectQuery().
-			WithArgs(mockProfileID, int64(0), int64(0), limit).
-			WillReturnRows(rows)
-
-		messages, err := repo.FindByProfileIDWithKeysetPagination(ctx, mockProfileID, 0, time.Time{}, limit)
-		assert.NoError(t, err)
-		assert.Len(t, messages, 1)
-		assert.NoError(t, mock.ExpectationsWereMet())
-	})
-
-	t.Run("NextPage", func(t *testing.T) {
-		lastTime := time.Now().Add(-time.Hour)
-		lastID := int64(10)
-
-		rows := sqlmock.NewRows([]string{
-			"m.id", "m.topic", "m.text", "m.date_of_dispatch", "pm.read_status",
-			"bp.id", "bp.username", "bp.domain",
-			"sender_profile.name", "sender_profile.surname", "sender_profile.image_path",
-		}).
-			AddRow(
-				int64(9), "Topic 2", "Text 2", lastTime.Add(-time.Minute), false,
-				int64(3), "sender2", "b.com", "Sender", "Two", "avatar2.png",
-			)
-
-		mock.ExpectPrepare(quote(query)).
-			ExpectQuery().
-			WithArgs(mockProfileID, lastID, lastTime.Unix(), limit).
-			WillReturnRows(rows)
-
-		messages, err := repo.FindByProfileIDWithKeysetPagination(ctx, mockProfileID, lastID, lastTime, limit)
-		assert.NoError(t, err)
-		assert.Len(t, messages, 1)
-		assert.Equal(t, "9", messages[0].ID)
-		assert.NoError(t, mock.ExpectationsWereMet())
-	})
 }
 
 func TestMessageRepository_SaveMessage(t *testing.T) {
@@ -346,33 +303,17 @@ func TestMessageRepository_SaveThreadIdToMessage(t *testing.T) {
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
-}
+	t.Run("ErrorOnExec", func(t *testing.T) {
+		mock.ExpectPrepare(quote(query)).
+			ExpectExec().
+			WithArgs(threadID, sqlmock.AnyArg(), messageID).
+			WillReturnError(fmt.Errorf("db error"))
 
-func TestMessageRepository_GetMessagesStats(t *testing.T) {
-	ctx, repo, mock := setupTest(t)
-	profileID := int64(1)
+		err := repo.SaveThreadIdToMessage(ctx, messageID, threadID)
 
-	const query = `
-        SELECT 
-            COUNT(DISTINCT pm.message_id) as total_count,
-            COUNT(DISTINCT CASE WHEN pm.read_status = false THEN pm.message_id END) as unread_count
-        FROM profile_message pm
-        JOIN profile p ON pm.profile_id = p.id
-        WHERE p.base_profile_id = $1`
-
-	rows := sqlmock.NewRows([]string{"total_count", "unread_count"}).AddRow(100, 5)
-
-	mock.ExpectPrepare(quote(query)).
-		ExpectQuery().
-		WithArgs(profileID).
-		WillReturnRows(rows)
-
-	total, unread, err := repo.GetMessagesStats(ctx, profileID)
-
-	assert.NoError(t, err)
-	assert.Equal(t, 100, total)
-	assert.Equal(t, 5, unread)
-	assert.NoError(t, mock.ExpectationsWereMet())
+		assert.Error(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
 }
 
 func TestMessageRepository_MarkMessageAsRead(t *testing.T) {
@@ -398,6 +339,733 @@ func TestMessageRepository_MarkMessageAsRead(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestMessageRepository_MarkMessageAsSpam(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	messageID := int64(123)
+	profileID := int64(1)
+
+	t.Run("Success", func(t *testing.T) {
+		mock.ExpectBegin()
+
+		mock.ExpectQuery(`SELECT id FROM folder WHERE profile_id = \$1 AND folder_type = 'spam'`).
+			WithArgs(profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(5)))
+
+		mock.ExpectExec(`INSERT INTO folder_profile_message`).
+			WithArgs(messageID, int64(5)).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectExec(`DELETE FROM folder_profile_message`).
+			WithArgs(messageID, profileID).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+
+		mock.ExpectCommit()
+
+		err := repo.MarkMessageAsSpam(ctx, messageID, profileID)
+
+		assert.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("ErrorOnGetSpamFolder", func(t *testing.T) {
+		mock.ExpectBegin()
+		mock.ExpectQuery(`SELECT id FROM folder WHERE profile_id = \$1 AND folder_type = 'spam'`).
+			WithArgs(profileID).
+			WillReturnError(fmt.Errorf("db error"))
+		mock.ExpectRollback()
+
+		err := repo.MarkMessageAsSpam(ctx, messageID, profileID)
+
+		assert.Error(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_SaveDraft(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	profileID := int64(1)
+	draftID := "123"
+	topic := "Draft Topic"
+	text := "Draft Text"
+	receiverEmail := "test@example.com"
+
+	t.Run("UpdateExistingDraft", func(t *testing.T) {
+		mock.ExpectBegin()
+
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM folder_profile_message fpm`).
+			WithArgs(int64(123), profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+		mock.ExpectExec(`UPDATE message SET topic = \$1, text = \$2, updated_at = \$3 WHERE id = \$4`).
+			WithArgs(topic, text, sqlmock.AnyArg(), int64(123)).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectExec(`INSERT INTO profile_message`).
+			WithArgs(profileID, int64(123)).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectCommit()
+
+		resultID, err := repo.SaveDraft(ctx, profileID, draftID, receiverEmail, topic, text)
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(123), resultID)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("CreateNewDraft", func(t *testing.T) {
+		mock.ExpectBegin()
+
+		mock.ExpectQuery(`SELECT base_profile_id FROM profile WHERE id = \$1`).
+			WithArgs(profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"base_profile_id"}).AddRow(int64(10)))
+
+		mock.ExpectQuery(`INSERT INTO message`).
+			WithArgs(topic, text, sqlmock.AnyArg(), int64(10)).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(456)))
+
+		mock.ExpectQuery(`SELECT id FROM folder WHERE profile_id = \$1 AND folder_type = 'draft'`).
+			WithArgs(profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(20)))
+
+		mock.ExpectExec(`INSERT INTO folder_profile_message`).
+			WithArgs(int64(456), int64(20)).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectExec(`INSERT INTO profile_message`).
+			WithArgs(profileID, int64(456)).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectCommit()
+
+		resultID, err := repo.SaveDraft(ctx, profileID, "", receiverEmail, topic, text)
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(456), resultID)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_IsDraftBelongsToUser(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	draftID := int64(123)
+	profileID := int64(1)
+
+	t.Run("DraftBelongsToUser", func(t *testing.T) {
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM folder_profile_message fpm`).
+			WithArgs(draftID, profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+		belongs, err := repo.IsDraftBelongsToUser(ctx, draftID, profileID)
+
+		assert.NoError(t, err)
+		assert.True(t, belongs)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("DraftDoesNotBelongToUser", func(t *testing.T) {
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM folder_profile_message fpm`).
+			WithArgs(draftID, profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+		belongs, err := repo.IsDraftBelongsToUser(ctx, draftID, profileID)
+
+		assert.NoError(t, err)
+		assert.False(t, belongs)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_DeleteDraft(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	draftID := int64(123)
+	profileID := int64(1)
+
+	t.Run("Success", func(t *testing.T) {
+		mock.ExpectBegin()
+
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM folder_profile_message fpm`).
+			WithArgs(draftID, profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+		mock.ExpectExec(`DELETE FROM folder_profile_message`).
+			WithArgs(draftID, profileID).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+
+		mock.ExpectExec(`DELETE FROM message WHERE id = \$1`).
+			WithArgs(draftID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectCommit()
+
+		err := repo.DeleteDraft(ctx, draftID, profileID)
+
+		assert.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("DraftNotBelongsToUser", func(t *testing.T) {
+		mock.ExpectBegin()
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM folder_profile_message fpm`).
+			WithArgs(draftID, profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+		mock.ExpectRollback()
+
+		err := repo.DeleteDraft(ctx, draftID, profileID)
+
+		assert.Error(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_SendDraft(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	draftID := int64(123)
+	profileID := int64(1)
+
+	t.Run("Success", func(t *testing.T) {
+		mock.ExpectBegin()
+
+		mock.ExpectQuery(`SELECT m.topic, m.text, m.sender_base_profile_id FROM message m WHERE m.id = \$1`).
+			WithArgs(draftID).
+			WillReturnRows(sqlmock.NewRows([]string{"topic", "text", "sender_base_profile_id"}).
+				AddRow("Topic", "Text", int64(10)))
+
+		mock.ExpectExec(`UPDATE message SET date_of_dispatch = \$1, updated_at = \$2 WHERE id = \$3`).
+			WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), draftID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectExec(`DELETE FROM folder_profile_message`).
+			WithArgs(draftID, profileID).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+
+		mock.ExpectQuery(`SELECT id FROM folder WHERE profile_id = \$1 AND folder_type = 'sent'`).
+			WithArgs(profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(20)))
+
+		mock.ExpectExec(`INSERT INTO folder_profile_message`).
+			WithArgs(draftID, int64(20)).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectQuery(`SELECT id FROM folder WHERE profile_id = \$1 AND folder_type = 'inbox'`).
+			WithArgs(profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(30)))
+
+		mock.ExpectExec(`INSERT INTO folder_profile_message`).
+			WithArgs(draftID, int64(30)).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectCommit()
+
+		err := repo.SendDraft(ctx, draftID, profileID)
+
+		assert.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_GetDraft(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	draftID := int64(123)
+	profileID := int64(1)
+
+	t.Run("Success", func(t *testing.T) {
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM folder_profile_message fpm`).
+			WithArgs(draftID, profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+		mock.ExpectBegin()
+		mock.ExpectQuery(`SELECT`).
+			WithArgs(draftID, profileID).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"m.id", "m.topic", "m.text", "m.date_of_dispatch",
+				"bp.id", "bp.username", "bp.domain",
+				"p.name", "p.surname", "p.image_path",
+				"t.id", "t.root_message_id",
+				"f.id", "f.profile_id", "f.folder_name", "f.folder_type",
+			}).AddRow(
+				draftID, "Topic", "Text", time.Now(),
+				int64(2), "user", "domain.com",
+				sql.NullString{}, sql.NullString{}, sql.NullString{},
+				sql.NullInt64{}, sql.NullInt64{},
+				sql.NullInt64{}, sql.NullInt64{}, sql.NullString{}, sql.NullString{},
+			))
+		mock.ExpectQuery(`SELECT id, file_type, size, storage_path, message_id FROM file`).
+			WithArgs(draftID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "file_type", "size", "storage_path", "message_id"}))
+		mock.ExpectCommit()
+
+		draft, err := repo.GetDraft(ctx, draftID, profileID)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, draft)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_MoveToFolder(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	profileID := int64(1)
+	messageID := int64(123)
+	folderID := int64(5)
+
+	t.Run("Success", func(t *testing.T) {
+		mock.ExpectBegin()
+
+		mock.ExpectExec(`DELETE FROM folder_profile_message`).
+			WithArgs(messageID, profileID).
+			WillReturnResult(sqlmock.NewResult(0, 2))
+
+		mock.ExpectExec(`INSERT INTO folder_profile_message`).
+			WithArgs(messageID, folderID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectCommit()
+
+		err := repo.MoveToFolder(ctx, profileID, messageID, folderID)
+
+		assert.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_GetFolderByType(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	profileID := int64(1)
+
+	t.Run("Success", func(t *testing.T) {
+		mock.ExpectQuery(`SELECT id FROM folder WHERE profile_id = \$1 AND folder_type = \$2`).
+			WithArgs(profileID, "inbox").
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(5)))
+
+		folderID, err := repo.GetFolderByType(ctx, profileID, "inbox")
+
+		assert.NoError(t, err)
+		assert.Equal(t, int64(5), folderID)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("FolderNotFound", func(t *testing.T) {
+		mock.ExpectQuery(`SELECT id FROM folder WHERE profile_id = \$1 AND folder_type = \$2`).
+			WithArgs(profileID, "nonexistent").
+			WillReturnError(sql.ErrNoRows)
+
+		folderID, err := repo.GetFolderByType(ctx, profileID, "nonexistent")
+
+		assert.Error(t, err)
+		assert.Equal(t, int64(0), folderID)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_ShouldMarkAsRead(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	messageID := int64(123)
+	profileID := int64(1)
+
+	t.Run("ShouldMark", func(t *testing.T) {
+		mock.ExpectQuery(`SELECT`).
+			WithArgs(messageID, profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"should_mark"}).AddRow(true))
+
+		shouldMark, err := repo.ShouldMarkAsRead(ctx, messageID, profileID)
+
+		assert.NoError(t, err)
+		assert.True(t, shouldMark)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("ShouldNotMark", func(t *testing.T) {
+		mock.ExpectQuery(`SELECT`).
+			WithArgs(messageID, profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"should_mark"}).AddRow(false))
+
+		shouldMark, err := repo.ShouldMarkAsRead(ctx, messageID, profileID)
+
+		assert.NoError(t, err)
+		assert.False(t, shouldMark)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("NoRows", func(t *testing.T) {
+		mock.ExpectQuery(`SELECT`).
+			WithArgs(messageID, profileID).
+			WillReturnError(sql.ErrNoRows)
+
+		shouldMark, err := repo.ShouldMarkAsRead(ctx, messageID, profileID)
+
+		assert.NoError(t, err)
+		assert.False(t, shouldMark)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_CreateFolder(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	profileID := int64(1)
+	folderName := "Test Folder"
+
+	t.Run("Success", func(t *testing.T) {
+		mock.ExpectQuery(`SELECT 1 FROM folder`).
+			WithArgs(profileID, folderName, int64(0)).
+			WillReturnError(sql.ErrNoRows)
+
+		mock.ExpectQuery(`INSERT INTO folder`).
+			WithArgs(profileID, folderName).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "folder_name", "folder_type"}).
+				AddRow(int64(5), folderName, "custom"))
+
+		folder, err := repo.CreateFolder(ctx, profileID, folderName)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, folder)
+		assert.Equal(t, folderName, folder.Name)
+		assert.Equal(t, domain.FolderType("custom"), folder.Type)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("FolderAlreadyExists", func(t *testing.T) {
+		mock.ExpectQuery(`SELECT 1 FROM folder`).
+			WithArgs(profileID, folderName, int64(0)).
+			WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
+
+		folder, err := repo.CreateFolder(ctx, profileID, folderName)
+
+		assert.Error(t, err)
+		assert.Nil(t, folder)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_GetUserFolders(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	profileID := int64(1)
+
+	t.Run("Success", func(t *testing.T) {
+		rows := sqlmock.NewRows([]string{"id", "folder_name", "folder_type"}).
+			AddRow(int64(1), "Inbox", "inbox").
+			AddRow(int64(2), "Sent", "sent").
+			AddRow(int64(3), "Custom Folder", "custom")
+
+		mock.ExpectQuery(`SELECT id, folder_name, folder_type FROM folder`).
+			WithArgs(profileID).
+			WillReturnRows(rows)
+
+		folders, err := repo.GetUserFolders(ctx, profileID)
+
+		assert.NoError(t, err)
+		assert.Len(t, folders, 3)
+		assert.Equal(t, "Inbox", folders[0].Name)
+		assert.Equal(t, "Custom Folder", folders[2].Name)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_RenameFolder(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	profileID := int64(1)
+	folderID := int64(5)
+	newName := "Renamed Folder"
+
+	t.Run("Success", func(t *testing.T) {
+		mock.ExpectQuery(`SELECT 1 FROM folder`).
+			WithArgs(profileID, newName, folderID).
+			WillReturnError(sql.ErrNoRows)
+
+		mock.ExpectQuery(`UPDATE folder`).
+			WithArgs(newName, sqlmock.AnyArg(), folderID, profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "folder_name", "folder_type"}).
+				AddRow(folderID, newName, "custom"))
+
+		folder, err := repo.RenameFolder(ctx, profileID, folderID, newName)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, folder)
+		assert.Equal(t, newName, folder.Name)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_DeleteFolder(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	profileID := int64(1)
+	folderID := int64(5)
+
+	t.Run("Success", func(t *testing.T) {
+		mock.ExpectBegin()
+
+		mock.ExpectQuery(`SELECT folder_type FROM folder`).
+			WithArgs(folderID, profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"folder_type"}).AddRow("custom"))
+
+		mock.ExpectQuery(`SELECT id FROM folder WHERE profile_id = \$1 AND folder_type = 'trash'`).
+			WithArgs(profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(10)))
+
+		mock.ExpectExec(`INSERT INTO folder_profile_message`).
+			WithArgs(int64(10), folderID).
+			WillReturnResult(sqlmock.NewResult(0, 3))
+
+		mock.ExpectExec(`DELETE FROM folder_profile_message`).
+			WithArgs(folderID).
+			WillReturnResult(sqlmock.NewResult(0, 3))
+
+		mock.ExpectExec(`DELETE FROM folder WHERE id = \$1`).
+			WithArgs(folderID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectCommit()
+
+		err := repo.DeleteFolder(ctx, profileID, folderID)
+
+		assert.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("SystemFolder", func(t *testing.T) {
+		mock.ExpectBegin()
+		mock.ExpectQuery(`SELECT folder_type FROM folder`).
+			WithArgs(folderID, profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"folder_type"}).AddRow("inbox"))
+		mock.ExpectRollback()
+
+		err := repo.DeleteFolder(ctx, profileID, folderID)
+
+		assert.Error(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_DeleteMessageFromFolder(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	profileID := int64(1)
+	messageID := int64(123)
+	folderID := int64(5)
+
+	t.Run("Success", func(t *testing.T) {
+		mock.ExpectExec(`DELETE FROM folder_profile_message`).
+			WithArgs(messageID, folderID, profileID).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+
+		err := repo.DeleteMessageFromFolder(ctx, profileID, messageID, folderID)
+
+		assert.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("NoRowsAffected", func(t *testing.T) {
+		mock.ExpectExec(`DELETE FROM folder_profile_message`).
+			WithArgs(messageID, folderID, profileID).
+			WillReturnResult(sqlmock.NewResult(0, 0))
+
+		err := repo.DeleteMessageFromFolder(ctx, profileID, messageID, folderID)
+
+		assert.Error(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_GetFolderMessagesWithKeysetPagination(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	profileID := int64(1)
+	folderID := int64(5)
+	lastMessageID := int64(100)
+	lastDatetime := time.Now().Add(-time.Hour)
+	limit := 10
+
+	t.Run("Success", func(t *testing.T) {
+		rows := sqlmock.NewRows([]string{
+			"m.id", "m.topic", "m.text", "m.date_of_dispatch", "pm.read_status",
+			"bp.id", "bp.username", "bp.domain",
+			"p.name", "p.surname", "p.image_path",
+		}).
+			AddRow(
+				int64(101), "Topic 1", "Message text 1", time.Now(), false,
+				int64(2), "user1", "domain.com",
+				sql.NullString{String: "John", Valid: true}, sql.NullString{String: "Doe", Valid: true}, sql.NullString{String: "avatar1.jpg", Valid: true},
+			).
+			AddRow(
+				int64(102), "Topic 2", "Message text 2", time.Now().Add(-30*time.Minute), true,
+				int64(3), "user2", "domain.com",
+				sql.NullString{String: "Jane", Valid: true}, sql.NullString{String: "Smith", Valid: true}, sql.NullString{String: "avatar2.jpg", Valid: true},
+			)
+
+		mock.ExpectQuery(`SELECT`).
+			WithArgs(profileID, folderID, lastMessageID, lastDatetime.Unix(), limit).
+			WillReturnRows(rows)
+
+		messages, err := repo.GetFolderMessagesWithKeysetPagination(ctx, profileID, folderID, lastMessageID, lastDatetime, limit)
+
+		assert.NoError(t, err)
+		assert.Len(t, messages, 2)
+		assert.Equal(t, "101", messages[0].ID)
+		assert.Equal(t, "John Doe", messages[0].Sender.Username)
+		assert.Equal(t, "Message text 1...", messages[0].Snippet)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_GetFolderMessagesInfo(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	profileID := int64(1)
+	folderID := int64(5)
+
+	t.Run("Success", func(t *testing.T) {
+		mock.ExpectQuery(`SELECT`).
+			WithArgs(profileID, folderID).
+			WillReturnRows(sqlmock.NewRows([]string{"total_count", "unread_count"}).
+				AddRow(100, 25))
+
+		info, err := repo.GetFolderMessagesInfo(ctx, profileID, folderID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 100, info.MessageTotal)
+		assert.Equal(t, 25, info.MessageUnread)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_SaveMessageWithFolderDistribution(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	receiverEmail := "receiver@domain.com"
+	senderBaseProfileID := int64(1)
+	topic := "Test Topic"
+	text := "Test Text"
+	expectedMessageID := int64(123)
+	expectedReceiverProfileID := int64(456)
+	expectedSenderProfileID := int64(789)
+
+	t.Run("Success", func(t *testing.T) {
+		mock.ExpectBegin()
+
+		mock.ExpectQuery(`INSERT INTO message`).
+			WithArgs(topic, text, sqlmock.AnyArg(), senderBaseProfileID).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(expectedMessageID))
+
+		username := strings.Split(receiverEmail, "@")[0]
+		domain := strings.Split(receiverEmail, "@")[1]
+
+		mock.ExpectQuery(`SELECT p.id FROM profile p`).
+			WithArgs(username, domain).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(expectedReceiverProfileID))
+
+		mock.ExpectQuery(`SELECT id FROM profile WHERE base_profile_id = \$1`).
+			WithArgs(senderBaseProfileID).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(expectedSenderProfileID))
+
+		mock.ExpectExec(`INSERT INTO folder_profile_message`).
+			WithArgs(expectedMessageID, expectedReceiverProfileID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectExec(`INSERT INTO folder_profile_message`).
+			WithArgs(expectedMessageID, expectedSenderProfileID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectExec(`INSERT INTO profile_message`).
+			WithArgs(expectedReceiverProfileID, expectedMessageID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectExec(`INSERT INTO profile_message`).
+			WithArgs(expectedSenderProfileID, expectedMessageID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectCommit()
+
+		messageID, err := repo.SaveMessageWithFolderDistribution(ctx, receiverEmail, senderBaseProfileID, topic, text)
+
+		assert.NoError(t, err)
+		assert.Equal(t, expectedMessageID, messageID)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_ReplyToMessageWithFolderDistribution(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	receiverEmail := "receiver@domain.com"
+	senderProfileID := int64(1)
+	threadRoot := int64(100)
+	topic := "Reply Topic"
+	text := "Reply Text"
+	expectedMessageID := int64(123)
+	expectedReceiverProfileID := int64(456)
+	expectedSenderBaseProfileID := int64(789)
+
+	t.Run("Success", func(t *testing.T) {
+		mock.ExpectBegin()
+
+		mock.ExpectQuery(`SELECT base_profile_id FROM profile WHERE id = \$1`).
+			WithArgs(senderProfileID).
+			WillReturnRows(sqlmock.NewRows([]string{"base_profile_id"}).AddRow(expectedSenderBaseProfileID))
+
+		mock.ExpectQuery(`INSERT INTO message`).
+			WithArgs(topic, text, sqlmock.AnyArg(), expectedSenderBaseProfileID, threadRoot).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(expectedMessageID))
+
+		username := strings.Split(receiverEmail, "@")[0]
+		domain := strings.Split(receiverEmail, "@")[1]
+
+		mock.ExpectQuery(`SELECT p.id FROM profile p`).
+			WithArgs(username, domain).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(expectedReceiverProfileID))
+
+		mock.ExpectExec(`INSERT INTO folder_profile_message`).
+			WithArgs(expectedMessageID, expectedReceiverProfileID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectExec(`INSERT INTO folder_profile_message`).
+			WithArgs(expectedMessageID, senderProfileID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectExec(`INSERT INTO profile_message`).
+			WithArgs(expectedReceiverProfileID, expectedMessageID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectExec(`INSERT INTO profile_message`).
+			WithArgs(senderProfileID, expectedMessageID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		mock.ExpectCommit()
+
+		messageID, err := repo.ReplyToMessageWithFolderDistribution(ctx, receiverEmail, senderProfileID, threadRoot, topic, text)
+
+		assert.NoError(t, err)
+		assert.Equal(t, expectedMessageID, messageID)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestMessageRepository_IsUsersMessage(t *testing.T) {
+	ctx, repo, mock := setupTest(t)
+	messageID := int64(123)
+	profileID := int64(1)
+
+	t.Run("IsUsersMessage", func(t *testing.T) {
+		mock.ExpectPrepare(`SELECT EXISTS`).
+			ExpectQuery().
+			WithArgs(messageID, profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+
+		isUserMessage, err := repo.IsUsersMessage(ctx, messageID, profileID)
+
+		assert.NoError(t, err)
+		assert.True(t, isUserMessage)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("IsNotUsersMessage", func(t *testing.T) {
+		mock.ExpectPrepare(`SELECT EXISTS`).
+			ExpectQuery().
+			WithArgs(messageID, profileID).
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+		isUserMessage, err := repo.IsUsersMessage(ctx, messageID, profileID)
+
+		assert.NoError(t, err)
+		assert.False(t, isUserMessage)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
 }
 
 func TestMessageRepository_FindThreadsByProfileID(t *testing.T) {
@@ -447,94 +1115,55 @@ func TestMessageRepository_FindThreadsByProfileID(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestMessageRepository_FindSentMessagesByProfileIDWithKeysetPagination(t *testing.T) {
-	ctx, repo, mock := setupTest(t)
-	profileID := int64(1)
-	limit := 10
+func TestBuildSnippet(t *testing.T) {
+	tests := []struct {
+		name     string
+		text     string
+		limit    int
+		expected string
+	}{
+		{
+			name:     "Text shorter than limit",
+			text:     "Short text",
+			limit:    20,
+			expected: "Short text",
+		},
+		{
+			name:     "Text longer than limit",
+			text:     "This is a very long text that exceeds the limit",
+			limit:    20,
+			expected: "This is a very long...",
+		},
+		{
+			name:     "Text equal to limit",
+			text:     "Exactly twenty chars",
+			limit:    20,
+			expected: "Exactly twenty chars",
+		},
+		{
+			name:     "Empty text",
+			text:     "",
+			limit:    20,
+			expected: "",
+		},
+		{
+			name:     "Zero limit",
+			text:     "Some text",
+			limit:    0,
+			expected: "",
+		},
+		{
+			name:     "Unicode characters",
+			text:     "Привет мир это тест",
+			limit:    10,
+			expected: "Привет ми...",
+		},
+	}
 
-	const query = `
-        SELECT
-            m.id, m.topic, m.text, m.date_of_dispatch,
-            -- Check if *any* recipient has read the message
-            EXISTS (
-                SELECT 1 
-                FROM profile_message pm 
-                WHERE pm.message_id = m.id AND pm.read_status = TRUE
-            ) as read_status,
-            bp.id, bp.username, bp.domain,
-            sender_profile.name, sender_profile.surname, sender_profile.image_path
-        FROM
-            message m
-        JOIN
-            base_profile bp ON m.sender_base_profile_id = bp.id
-        LEFT JOIN
-            profile sender_profile ON bp.id = sender_profile.base_profile_id
-        WHERE
-            m.sender_base_profile_id = $1  -- Filter by SENDER's base_profile_id
-			AND (($2 = 0 AND $3 = 0) OR (m.date_of_dispatch, m.id) < (to_timestamp($3), $2))
-        ORDER BY
-            m.date_of_dispatch DESC, m.id DESC
-		FETCH FIRST $4 ROWS ONLY`
-
-	rows := sqlmock.NewRows([]string{
-		"m.id", "m.topic", "m.text", "m.date_of_dispatch", "read_status",
-		"bp.id", "bp.username", "bp.domain",
-		"sender_profile.name", "sender_profile.surname", "sender_profile.image_path",
-	}).
-		AddRow(
-			int64(10), "Sent Topic 1", "Sent Text 1", time.Now(), true, // read
-			profileID, "sender", "a.com", "My", "Name", "my_avatar.png",
-		)
-
-	mock.ExpectPrepare(quote(query)).
-		ExpectQuery().
-		WithArgs(profileID, int64(0), int64(0), limit).
-		WillReturnRows(rows)
-
-	messages, err := repo.FindSentMessagesByProfileIDWithKeysetPagination(ctx, profileID, 0, time.Time{}, limit)
-
-	assert.NoError(t, err)
-	assert.Len(t, messages, 1)
-	assert.Equal(t, "10", messages[0].ID)
-	assert.Equal(t, "My Name", messages[0].Sender.Username)
-	assert.True(t, messages[0].IsRead)
-	assert.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestMessageRepository_GetSentMessagesStats(t *testing.T) {
-	ctx, repo, mock := setupTest(t)
-	profileID := int64(1)
-
-	const query = `
-        SELECT 
-            -- Total number of messages sent by this user
-            COUNT(m.id) as total_count,
-            
-            -- Count of messages where NO recipient has read_status = TRUE
-            COUNT(m.id) FILTER (
-                WHERE NOT EXISTS (
-                    SELECT 1 
-                    FROM profile_message pm 
-                    WHERE pm.message_id = m.id AND pm.read_status = TRUE
-                )
-            ) as unread_count
-        FROM 
-            message m
-        WHERE 
-            m.sender_base_profile_id = $1
-    `
-
-	rows := sqlmock.NewRows([]string{"total_count", "unread_count"}).AddRow(50, 10)
-
-	mock.ExpectPrepare(quote(query)).
-		ExpectQuery().
-		WithArgs(profileID).
-		WillReturnRows(rows)
-
-	total, unread, err := repo.GetSentMessagesStats(ctx, profileID)
-
-	assert.NoError(t, err)
-	assert.Equal(t, 50, total)
-	assert.Equal(t, 10, unread) // 10 "непрочитанных" (т.е. никем не прочитанных)
-	assert.NoError(t, mock.ExpectationsWereMet())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildSnippet(tt.text, tt.limit)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

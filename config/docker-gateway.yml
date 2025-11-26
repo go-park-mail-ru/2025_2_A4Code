@@ -1,0 +1,28 @@
+app:
+  host: host.docker.internal
+  auth_port: 8001
+  messages_port: 8002
+  profile_port: 8003
+  gateway_port: 8000
+  gateway_metrics_port: 8012
+  auth_metrics_port: 8013
+  messages_metrics_port: 8014
+  profile_metrics_port: 8015
+  secret: secret
+db:
+  host: postgres
+  port: 5432
+  user: postgres
+  password: postgresql
+  name: a4code_db
+  sslmode: disable
+minio:
+  host: minio
+  port: 9000
+  user: minio
+  password: miniominio
+  bucket_name: avatars
+  endpoint: minio:9000
+  use_ssl: false
+  public_endpoint: 127.0.0.1
+  public_use_ssl: false

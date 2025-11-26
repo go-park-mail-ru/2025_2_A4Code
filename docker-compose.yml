@@ -1,0 +1,165 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: a4-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgresql
+      POSTGRES_DB: a4code_db
+      POSTGRES_HOST_AUTH_METHOD: md5
+    ports:
+      - "8004:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio
+    container_name: a4-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniominio
+    ports:
+      - "8005:9000"
+      - "8006:9001"
+    volumes:
+      - minio-data:/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: a4-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    depends_on:
+      - postgres
+    ports:
+      - "8007:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+
+  portainer:
+    image: portainer/portainer-ce
+    container_name: a4-portainer
+    restart: unless-stopped
+    ports:
+      - "8008:9000"
+      - "8009:9443"
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:${DOCKER_SOCK:-/var/run/docker.sock}
+      - portainer-data:/data
+    command: -H ${PORTAINER_DOCKER_HOST:-unix:///var/run/docker.sock}
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: a4-prometheus
+    restart: unless-stopped
+    ports:
+      - "8010:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    depends_on:
+      - node-exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: a4-grafana
+    restart: unless-stopped
+    ports:
+      - "8011:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+  node-exporter:
+    image: prom/node-exporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    container_name: exporter
+    hostname: exporter
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.ignored-mount-points
+      - ^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)
+    ports:
+      - "8016:9100"
+    restart: unless-stopped
+
+  auth:
+    build:
+      context: .
+      dockerfile: Dockerfile.auth
+    container_name: a4-auth
+    environment:
+      CONFIG_PATH: config/docker.yml
+    volumes:
+      - ./db:/app/db:ro
+    ports:
+      - "8001:8001"
+      - "8013:8013"
+    depends_on:
+      - postgres
+
+  messages:
+    build:
+      context: .
+      dockerfile: Dockerfile.messages
+    container_name: a4-messages
+    environment:
+      CONFIG_PATH: config/docker.yml
+    volumes:
+      - ./db:/app/db:ro
+    ports:
+      - "8002:8002"
+      - "8014:8014"
+    depends_on:
+      - postgres
+
+  profile:
+    build:
+      context: .
+      dockerfile: Dockerfile.profile
+    container_name: a4-profile
+    environment:
+      CONFIG_PATH: config/docker.yml
+    volumes:
+      - ./db:/app/db:ro
+    ports:
+      - "8003:8003"
+      - "8015:8015"
+    depends_on:
+      - postgres
+      - minio
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    container_name: a4-gateway
+    environment:
+      CONFIG_PATH: config/docker-gateway.yml
+    volumes:
+      - ./db:/app/db:ro
+    ports:
+      - "8000:8000"
+      - "8012:8012"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - auth
+      - messages
+      - profile
+
+volumes:
+  pgdata:
+  minio-data:
+  pgadmin-data:
+  portainer-data:
+  grafana_data:

@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+
+  - job_name: 'gateway-service'
+    static_configs:
+      - targets: ['gateway:8012']
+
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: [ 'auth:8013' ]
+
+  - job_name: 'messages-service'
+    static_configs:
+      - targets: [ 'messages:8014' ]
+
+  - job_name: 'profile-service'
+    static_configs:
+      - targets: [ 'profile:8015' ]
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: node
+    static_configs:
+      - targets: [ 'node-exporter:9100' ]
