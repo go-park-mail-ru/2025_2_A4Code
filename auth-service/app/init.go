@@ -72,10 +72,7 @@ func AuthInit() {
 
 	// создаем gRPC сервер и регистрируем наш сервис
 	grpcServer := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(
-			logger.GrpcLoggerInterceptor(log),
-			metricsInterceptor("auth-service"),
-		),
+		grpc.ChainUnaryInterceptor(logger.GrpcLoggerInterceptor(log), metricsInterceptor("auth-service")),
 	)
 	authService := authservice.New(profileUCase, SECRET)
 	pb.RegisterAuthServiceServer(grpcServer, authService)

@@ -1,6 +1,7 @@
 package profile_service
 
 import (
+	"2025_2_a4code/internal/lib/metrics"
 	"bytes"
 	"context"
 	"errors"
@@ -162,6 +163,12 @@ func (s *Server) UploadAvatar(ctx context.Context, req *pb.UploadAvatarRequest) 
 	log := logger.GetLogger(ctx)
 	log.Debug("Handling user/upload/avatar")
 
+	// Будем отслеживать статус
+	opStatus := "error"
+	defer func() {
+		metrics.AvatarOperations.WithLabelValues("profile-service", op, opStatus).Inc()
+	}()
+
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, "unauthorized")
@@ -172,6 +179,7 @@ func (s *Server) UploadAvatar(ctx context.Context, req *pb.UploadAvatarRequest) 
 		return nil, status.Error(codes.InvalidArgument, "file too large")
 	}
 
+	metrics.FileSize.WithLabelValues("profile-service", "avatar").Observe(float64(len(req.AvatarData)))
 	// Создаем reader из байтов
 	fileReader := bytes.NewReader(req.AvatarData)
 
@@ -188,6 +196,7 @@ func (s *Server) UploadAvatar(ctx context.Context, req *pb.UploadAvatarRequest) 
 		return nil, status.Error(codes.Internal, "could not save avatar")
 	}
 
+	opStatus = "success"
 	return &pb.UploadAvatarResponse{
 		AvatarPath: presignedURL,
 	}, nil
