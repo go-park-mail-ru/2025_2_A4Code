@@ -1,7 +1,7 @@
 package app
 
 import (
-	gatewayservice "2025_2_a4code/gateway-service"
+	gatewayservice "2025_2_a4code/gateway-service/server"
 	"2025_2_a4code/internal/config"
 	in "2025_2_a4code/internal/lib/init"
 	"context"

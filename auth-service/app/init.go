@@ -1,7 +1,7 @@
 package app
 
 import (
-	authservice "2025_2_a4code/auth-service"
+	authservice "2025_2_a4code/auth-service/grpc_service"
 	pb "2025_2_a4code/auth-service/pkg/authproto"
 	"2025_2_a4code/internal/config"
 	"2025_2_a4code/internal/http-server/middleware/logger"

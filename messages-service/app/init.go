@@ -5,7 +5,7 @@ import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	in "2025_2_a4code/internal/lib/init"
 	"2025_2_a4code/internal/lib/metrics"
-	messagesservice "2025_2_a4code/messages-service"
+	messagesservice "2025_2_a4code/messages-service/grpc-service"
 	"database/sql"
 	"net"
 	"net/http"

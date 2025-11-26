@@ -9,7 +9,7 @@ import (
 	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	avatarUcase "2025_2_a4code/internal/usecase/avatar"
 	profileUcase "2025_2_a4code/internal/usecase/profile"
-	profileservice "2025_2_a4code/profile-service"
+	profileservice "2025_2_a4code/profile-service/grpc-service"
 	pb "2025_2_a4code/profile-service/pkg/profileproto"
 	"context"
 	"database/sql"
