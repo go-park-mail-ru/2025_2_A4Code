@@ -1084,6 +1084,7 @@ func (repo *MessageRepository) GetFolderMessagesWithKeysetPagination(
             profile sender_profile ON bp.id = sender_profile.base_profile_id
         WHERE
             f.profile_id = $1 AND f.id = $2
+            AND pm.profile_id = $1
             AND (($3 = 0 AND $4 = 0) OR (m.date_of_dispatch, m.id) < (to_timestamp($4), $3))
         ORDER BY
             m.date_of_dispatch DESC, m.id DESC
