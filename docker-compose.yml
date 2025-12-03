@@ -94,7 +94,7 @@ services:
 
   auth:
     build:
-      context: .
+      context: ./auth-service
       dockerfile: Dockerfile.auth
     container_name: a4-auth
     environment:
@@ -109,7 +109,7 @@ services:
 
   messages:
     build:
-      context: .
+      context: ./messages-service
       dockerfile: Dockerfile.messages
     container_name: a4-messages
     environment:
@@ -124,7 +124,7 @@ services:
 
   profile:
     build:
-      context: .
+      context: ./profile-service
       dockerfile: Dockerfile.profile
     container_name: a4-profile
     environment:
@@ -140,7 +140,7 @@ services:
 
   gateway:
     build:
-      context: .
+      context: ./gateway-service
       dockerfile: Dockerfile.gateway
     container_name: a4-gateway
     environment:

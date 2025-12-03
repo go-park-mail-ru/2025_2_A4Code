@@ -12,11 +12,13 @@ message File {
 }
 
 message UploadFileRequest {
-  File file = 1;
+  string message_id = 1;
+  File file = 2;
 }
 
 message UploadFileResponse {
   string file_path = 1;
+  bytes file_data = 2;
 }
 
 message DeleteFileRequest {
