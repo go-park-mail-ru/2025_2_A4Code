@@ -6,10 +6,7 @@ import (
 	in "2025_2_a4code/internal/lib/init"
 	"2025_2_a4code/internal/lib/metrics"
 	messagesservice "2025_2_a4code/messages-service/grpc-service"
-	"database/sql"
 	"net"
-	"net/http"
-
 	// "2025_2_a4code/internal/http-server/handlers/messages/threads"
 	// uploadfile "2025_2_a4code/internal/http-server/handlers/user/upload/upload-file"
 
@@ -27,7 +24,6 @@ import (
 
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v4/stdlib"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 
 	"github.com/minio/minio-go/v7"
@@ -55,7 +51,7 @@ func MessagesInit() {
 	slog.SetDefault(log)
 	log.Debug("messages: debug messages are enabled")
 
-	go startMetricsServer(cfg.AppConfig.MessagesMetricsPort, log)
+	go metrics.StartMetricsServer(cfg.AppConfig.MessagesMetricsPort, log)
 
 	// Установка соединения с бд
 	connection, err := in.NewDbConnection(cfg.DBConfig)
@@ -66,7 +62,7 @@ func MessagesInit() {
 
 	connection.SetMaxOpenConns(20)
 	connection.SetMaxIdleConns(8)
-	go monitorDBConnections(connection)
+	go metrics.MonitorDBConnections(connection)
 
 	// Подключение MinIO
 	client, err := newMinioConnection(cfg.MinioConfig.Endpoint, cfg.MinioConfig.User, cfg.MinioConfig.Password, cfg.MinioConfig.UseSSL)
@@ -93,7 +89,7 @@ func MessagesInit() {
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			logger.GrpcLoggerInterceptor(log),
-			metricsInterceptor("messages-service"),
+			metrics.MetricsInterceptor("messages-service"),
 		),
 	)
 
@@ -156,53 +152,4 @@ func bucketExists(client *minio.Client, bucketName string) error {
 	}
 
 	return nil
-}
-
-func startMetricsServer(port string, log *slog.Logger) {
-	http.Handle("/metrics", promhttp.Handler())
-	addr := ":" + port
-	log.Info("Starting metrics server on " + addr)
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		log.Error("Failed to start metrics server: " + err.Error())
-	}
-}
-
-func monitorDBConnections(connection *sql.DB) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		stats := connection.Stats()
-		// установка метрик состояния соединений БД
-		metrics.DBConnections.WithLabelValues("idle").Set(float64(stats.Idle))
-		metrics.DBConnections.WithLabelValues("active").Set(float64(stats.InUse))
-		metrics.DBConnections.WithLabelValues("open").Set(float64(stats.OpenConnections))
-		metrics.DBConnections.WithLabelValues("max_open").Set(float64(stats.MaxOpenConnections))
-	}
-}
-
-func metricsInterceptor(serviceName string) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		start := time.Now()
-
-		// увеличение счетчика активных запросов
-		metrics.GRPCRequestsInProgress.WithLabelValues(serviceName, info.FullMethod).Inc()
-		defer metrics.GRPCRequestsInProgress.WithLabelValues(serviceName, info.FullMethod).Dec()
-
-		resp, err := handler(ctx, req)
-		duration := time.Since(start).Seconds()
-
-		status := "success"
-		if err != nil {
-			status = "error"
-			// сбор ошибок по методам
-			metrics.BusinessErrorsTotal.WithLabelValues(serviceName, info.FullMethod, "grpc_error").Inc()
-		}
-
-		// сбор метрик запросов и времени выполнения
-		metrics.GRPCRequestsTotal.WithLabelValues(serviceName, info.FullMethod, status).Inc()
-		metrics.GRPCRequestDuration.WithLabelValues(serviceName, info.FullMethod).Observe(duration)
-
-		return resp, err
-	}
 }

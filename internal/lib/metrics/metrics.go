@@ -1,8 +1,16 @@
 package metrics
 
 import (
+	"context"
+	"database/sql"
+	"log/slog"
+	"net/http"
+	"time"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -241,3 +249,52 @@ var (
 		[]string{"service", "operation"},
 	)
 )
+
+func StartMetricsServer(port string, log *slog.Logger) {
+	http.Handle("/metrics", promhttp.Handler())
+	addr := ":" + port
+	log.Info("Starting metrics server on " + addr)
+	if err := http.ListenAndServe(addr, nil); err != nil {
+		log.Error("Failed to start metrics server: " + err.Error())
+	}
+}
+
+func MetricsInterceptor(serviceName string) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		start := time.Now()
+
+		// увеличение счетчика активных запросов
+		GRPCRequestsInProgress.WithLabelValues(serviceName, info.FullMethod).Inc()
+		defer GRPCRequestsInProgress.WithLabelValues(serviceName, info.FullMethod).Dec()
+
+		resp, err := handler(ctx, req)
+		duration := time.Since(start).Seconds()
+
+		status := "success"
+		if err != nil {
+			status = "error"
+			// сбор ошибок по методам
+			BusinessErrorsTotal.WithLabelValues(serviceName, info.FullMethod, "grpc_error").Inc()
+		}
+
+		// сбор метрик запросов и времени выполнения
+		GRPCRequestsTotal.WithLabelValues(serviceName, info.FullMethod, status).Inc()
+		GRPCRequestDuration.WithLabelValues(serviceName, info.FullMethod).Observe(duration)
+
+		return resp, err
+	}
+}
+
+func MonitorDBConnections(connection *sql.DB) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		stats := connection.Stats()
+		// установка метрик состояния соединений БД
+		DBConnections.WithLabelValues("idle").Set(float64(stats.Idle))
+		DBConnections.WithLabelValues("active").Set(float64(stats.InUse))
+		DBConnections.WithLabelValues("open").Set(float64(stats.OpenConnections))
+		DBConnections.WithLabelValues("max_open").Set(float64(stats.MaxOpenConnections))
+	}
+}

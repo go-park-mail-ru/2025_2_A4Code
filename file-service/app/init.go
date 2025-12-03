@@ -1,16 +1,12 @@
 package app
 
 import (
+	"2025_2_a4code/file-service/grpc_service"
+	fb "2025_2_a4code/file-service/pkg/fileproto"
 	"2025_2_a4code/internal/config"
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	in "2025_2_a4code/internal/lib/init"
 	"2025_2_a4code/internal/lib/metrics"
-	avatarrepository "2025_2_a4code/internal/storage/minio/avatar-repository"
-	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
-	avatarUcase "2025_2_a4code/internal/usecase/avatar"
-	profileUcase "2025_2_a4code/internal/usecase/profile"
-	profileservice "2025_2_a4code/profile-service/grpc-service"
-	pb "2025_2_a4code/profile-service/pkg/profileproto"
 	"context"
 	"fmt"
 	"log/slog"
@@ -27,12 +23,12 @@ import (
 )
 
 const (
-	envLocal = "local" // TO DO: или убрать в init_logger "2025_2_a4code/internal/pkg/init-logger" или здесь или вынести в отдельный файл
+	envLocal = "local"
 	envDev   = "dev"
 	envProd  = "prod"
 )
 
-func ProfileInit() {
+func FileInit() {
 	// Читаем конфиг
 	cfg, err := config.GetConfig()
 	if err != nil {
@@ -73,20 +69,17 @@ func ProfileInit() {
 	}
 
 	// Создание репозиториев
-	profileRepository := profilerepository.New(connection)
-	avatarRepository := avatarrepository.New(client, cfg.MinioConfig.BucketName, cfg.MinioConfig.PublicEndpoint, cfg.MinioConfig.PublicUseSSL)
 
 	// Создание юзкейсов
-	profileUCase := profileUcase.New(profileRepository)
-	avatarUCase := avatarUcase.New(avatarRepository, profileRepository)
 
 	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.ProfilePort))
 
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(logger.GrpcLoggerInterceptor(log), metrics.MetricsInterceptor("profile-service")),
 	)
-	profileService := profileservice.New(profileUCase, avatarUCase, SECRET)
-	pb.RegisterProfileServiceServer(grpcServer, profileService)
+
+	fileService := grpc_service.New(connection, client)
+	fb.RegisterProfileServiceServer(grpcServer, fileService)
 
 	lis, err := net.Listen("tcp", cfg.AppConfig.Host+":"+cfg.AppConfig.ProfilePort)
 	if err != nil {
