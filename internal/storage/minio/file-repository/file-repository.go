@@ -1,4 +1,4 @@
-package files_repository
+package file_repository
 
 import (
 	"context"

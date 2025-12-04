@@ -469,7 +469,7 @@ func (s *Server) validateReplyRequest(req *pb.ReplyRequest) error {
 	}
 
 	if len(req.Files) > defaultLimitFiles {
-		return fmt.Errorf("too many files")
+		return fmt.Errorf("too many file")
 	}
 	for _, f := range req.Files {
 		size, _ := strconv.ParseInt(f.Size, 10, 64)
@@ -531,7 +531,7 @@ func (s *Server) validateSendRequest(req *pb.SendRequest) error {
 	}
 
 	if len(req.Files) > defaultLimitFiles {
-		return fmt.Errorf("too many files")
+		return fmt.Errorf("too many file")
 	}
 	for _, f := range req.Files {
 		size, _ := strconv.ParseInt(f.Size, 10, 64)
@@ -1014,7 +1014,7 @@ func (s *Server) validateDraftRequest(req *pb.SaveDraftRequest) error {
 	}
 
 	if len(req.Files) > defaultLimitFiles {
-		return fmt.Errorf("too many files")
+		return fmt.Errorf("too many file")
 	}
 	for _, f := range req.Files {
 		size, _ := strconv.ParseInt(f.Size, 10, 64)

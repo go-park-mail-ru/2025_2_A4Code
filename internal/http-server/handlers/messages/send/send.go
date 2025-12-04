@@ -41,7 +41,7 @@ type Request struct {
 	Topic     string    `json:"topic"`
 	Text      string    `json:"text"`
 	Receivers Receivers `json:"receivers"`
-	Files     Files     `json:"files"`
+	Files     Files     `json:"file"`
 }
 
 type Response struct {
@@ -177,7 +177,7 @@ func validateRequest(req *Request) error {
 	}
 
 	if len(req.Files) > defaultLimitFiles {
-		return fmt.Errorf("too many files")
+		return fmt.Errorf("too many file")
 	}
 	for _, f := range req.Files {
 		if f.Size < 0 || f.Size > maxFileSize {

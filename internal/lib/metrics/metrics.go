@@ -181,7 +181,7 @@ var (
 	FileSize = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "file_size_bytes",
-			Help:    "Size of uploaded files",
+			Help:    "Size of uploaded file",
 			Buckets: []float64{1024, 10240, 102400, 1048576, 10485760},
 		},
 		[]string{"service", "file_type"},

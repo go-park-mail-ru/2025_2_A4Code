@@ -172,7 +172,7 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 	}
 
 	// Получаем файлы
-	log.Debug("Getting message files...")
+	log.Debug("Getting message file...")
 	rows, err := repo.db.QueryContext(ctx, `
         SELECT id, file_type, size, storage_path, message_id 
         FROM file 

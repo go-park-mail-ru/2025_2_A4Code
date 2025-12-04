@@ -1,4 +1,4 @@
-package files_repository
+package filemessage_repository
 
 import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
@@ -18,12 +18,12 @@ func New(db *sql.DB) *FilesRepository {
 }
 
 func (repo *FilesRepository) InsertFile(ctx context.Context, messageId string, size int64, fileType, storagePath string) error {
-	const op = "files-repository.InsertFile"
+	const op = "filemessage-repository.InsertFile"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	const query = `
 		INSERT INTO file(file_type, size, storage_path, message_id, created_at, updated_at) 
-		VALUES ($1, $2, $3, $4, $5)`
+		VALUES ($1, $2, $3, $4, $5, $6)`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
@@ -43,7 +43,7 @@ func (repo *FilesRepository) InsertFile(ctx context.Context, messageId string, s
 }
 
 func (repo *FilesRepository) DeleteFile(ctx context.Context, fileId int64) error {
-	const op = "files-repository.DeleteFile"
+	const op = "filemessage-repository.DeleteFile"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	stmt, err := repo.db.PrepareContext(ctx, `DELETE FROM file WHERE id = $1`)

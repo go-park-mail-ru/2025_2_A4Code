@@ -2,6 +2,7 @@ package gateway_service
 
 import (
 	"2025_2_a4code/auth-service/pkg/authproto"
+	"2025_2_a4code/file-service/pkg/fileproto"
 	"2025_2_a4code/internal/config"
 	"2025_2_a4code/internal/http-server/middleware/cors"
 	"2025_2_a4code/internal/http-server/middleware/logger"
@@ -31,6 +32,7 @@ type Server struct {
 	authClient    authproto.AuthServiceClient
 	profileClient profileproto.ProfileServiceClient
 	messageClient messagesproto.MessagesServiceClient
+	fileClient    fileproto.FileServiceClient
 }
 
 type apiResponse struct {
@@ -66,12 +68,14 @@ func NewServer(cfg *config.AppConfig) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	fileConn, err := grpc.NewClient(cfg.Host+":"+cfg.FilePort, opts...)
 
 	return &Server{
 		cfg:           cfg,
 		authClient:    authproto.NewAuthServiceClient(authConn),
 		profileClient: profileproto.NewProfileServiceClient(profileConn),
 		messageClient: messagesproto.NewMessagesServiceClient(messagesConn),
+		fileClient:    fileproto.NewFileServiceClient(fileConn),
 	}, nil
 }
 
@@ -117,6 +121,9 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.Handle("POST /messages/save-draft", http.HandlerFunc(s.saveDraftHandler))
 	mux.Handle("DELETE /messages/delete-draft", http.HandlerFunc(s.deleteDraftHandler))
 	mux.Handle("POST /messages/send-draft", http.HandlerFunc(s.sendDraftHandler))
+
+	mux.Handle("POST /file/upload", http.HandlerFunc(s.uploadFileHandler))
+	mux.Handle("POST /file/delete", http.HandlerFunc(s.deleteFileHandler))
 
 	var handler http.Handler = mux
 	handler = logger.New(log)(handler)
@@ -894,4 +901,77 @@ func setAuthCookies(w http.ResponseWriter, access, refresh string) {
 		Path:     "/",
 		SameSite: http.SameSiteNoneMode,
 	})
+}
+
+// file handlers
+
+func (s *Server) uploadFileHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		return
+	}
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	if err := r.ParseMultipartForm(5 << 20); err != nil {
+		writeResponse(w, http.StatusBadRequest, "File too large", nil)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeResponse(w, http.StatusBadRequest, "No file provided", nil)
+		return
+	}
+	defer file.Close()
+
+	read, err := io.ReadAll(file)
+	if err != nil {
+		respondError(w, "Failed to read file")
+		return
+	}
+
+	req := &fileproto.UploadFileRequest{
+		MessageId: r.FormValue("message_id"),
+		File: &fileproto.File{
+			FileData:    read,
+			FileName:    header.Filename,
+			ContentType: header.Header.Get("Content-Type"),
+		},
+	}
+
+	resp, err := s.fileClient.UploadFile(ctx, req)
+	if err != nil {
+		writeGrpcAwareError(w, err, "Failed to upload file")
+		return
+	}
+
+	respondSuccess(w, resp)
+}
+
+func (s *Server) deleteFileHandler(w http.ResponseWriter, r *http.Request) {
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		return
+	}
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	filePath := strings.TrimSpace(r.URL.Query().Get("file_path"))
+	if filePath == "" {
+		writeResponse(w, http.StatusBadRequest, "file_path is required", nil)
+		return
+	}
+
+	req := &fileproto.DeleteFileRequest{
+		FilePath: filePath,
+	}
+
+	resp, err := s.fileClient.DeleteFile(ctx, req)
+	if err != nil {
+		writeGrpcAwareError(w, err, "Failed to delete file")
+		return
+	}
+
+	respondSuccess(w, resp)
 }

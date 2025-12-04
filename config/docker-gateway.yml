@@ -3,8 +3,10 @@ app:
   auth_port: 8001
   messages_port: 8002
   profile_port: 8003
+  file_port: 8017
   gateway_port: 8000
   gateway_metrics_port: 8012
+  file_metrics_port: 8018
   auth_metrics_port: 8013
   messages_metrics_port: 8014
   profile_metrics_port: 8015
@@ -22,6 +24,7 @@ minio:
   user: minio
   password: miniominio
   bucket_name: avatars
+  files_bucket_name: file
   endpoint: minio:9000
   use_ssl: false
   public_endpoint: 127.0.0.1

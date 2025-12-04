@@ -22,7 +22,7 @@ import (
 const maxFileSize = 5 << 20
 
 type Server struct {
-	fb.UnimplementedFilesServiceServer
+	fb.UnimplementedFileServiceServer
 	fileUsecase        FileUsecase
 	fileMessageUsecase FileMessageUsecase
 	JWTSecret          []byte
@@ -50,7 +50,7 @@ func New(fileUsecase FileUsecase, fileMessageUsecase FileMessageUsecase, secret 
 func (s *Server) UploadFile(ctx context.Context, req *fb.UploadFileRequest) (*fb.UploadFileResponse, error) {
 	const op = "profileservice.UploadFile"
 	log := logger.GetLogger(ctx)
-	log.Debug("Handling /upload/file")
+	log.Debug("Handling /file/upload")
 
 	opStatus := "error"
 	defer func() {
@@ -88,6 +88,35 @@ func (s *Server) UploadFile(ctx context.Context, req *fb.UploadFileRequest) (*fb
 		FileData: req.File.FileData,
 		FilePath: presignedURL,
 	}, nil
+}
+
+func (s *Server) DeleteFile(ctx context.Context, req *fb.DeleteFileRequest) (*fb.DeleteFileResponse, error) {
+	const op = "file_service.DeleteFile"
+	log := logger.GetLogger(ctx)
+	log.Debug("Handling /file/delete")
+
+	opStatus := "error"
+	defer func() {
+		metrics.AvatarOperations.WithLabelValues("file-service", op, opStatus).Inc()
+	}()
+
+	_, err := s.getProfileID(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	if req.FilePath == "" {
+		return nil, status.Error(codes.InvalidArgument, "file path is required")
+	}
+
+	err = s.fileUsecase.DeleteFile(ctx, req.FilePath)
+	if err != nil {
+		log.Error(op + ": failed to delete file: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not delete file from storage")
+	}
+
+	opStatus = "success"
+	return &fb.DeleteFileResponse{}, nil
 }
 
 func (s *Server) getProfileID(ctx context.Context) (int64, error) {

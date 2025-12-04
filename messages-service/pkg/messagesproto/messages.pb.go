@@ -112,7 +112,7 @@ type FullMessage struct {
 	Datetime      string                 `protobuf:"bytes,3,opt,name=datetime,proto3" json:"datetime,omitempty"`
 	ThreadId      string                 `protobuf:"bytes,4,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
 	Sender        *Sender                `protobuf:"bytes,5,opt,name=sender,proto3" json:"sender,omitempty"`
-	Files         []*File                `protobuf:"bytes,6,rep,name=files,proto3" json:"files,omitempty"`
+	Files         []*File                `protobuf:"bytes,6,rep,name=file,proto3" json:"file,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -757,7 +757,7 @@ type ReplyRequest struct {
 	Text          string                 `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
 	ThreadRoot    string                 `protobuf:"bytes,4,opt,name=thread_root,json=threadRoot,proto3" json:"thread_root,omitempty"`
 	Receivers     []*Receiver            `protobuf:"bytes,5,rep,name=receivers,proto3" json:"receivers,omitempty"`
-	Files         []*File                `protobuf:"bytes,6,rep,name=files,proto3" json:"files,omitempty"`
+	Files         []*File                `protobuf:"bytes,6,rep,name=file,proto3" json:"file,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -883,7 +883,7 @@ type SendRequest struct {
 	Topic         string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
 	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
 	Receivers     []*Receiver            `protobuf:"bytes,3,rep,name=receivers,proto3" json:"receivers,omitempty"`
-	Files         []*File                `protobuf:"bytes,4,rep,name=files,proto3" json:"files,omitempty"`
+	Files         []*File                `protobuf:"bytes,4,rep,name=file,proto3" json:"file,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1896,7 +1896,7 @@ type SaveDraftRequest struct {
 	Topic         string                 `protobuf:"bytes,3,opt,name=topic,proto3" json:"topic,omitempty"`
 	Text          string                 `protobuf:"bytes,4,opt,name=text,proto3" json:"text,omitempty"`
 	Receivers     []*Receiver            `protobuf:"bytes,5,rep,name=receivers,proto3" json:"receivers,omitempty"`
-	Files         []*File                `protobuf:"bytes,6,rep,name=files,proto3" json:"files,omitempty"`
+	Files         []*File                `protobuf:"bytes,6,rep,name=file,proto3" json:"file,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2438,21 +2438,21 @@ var file_messages_proto_goTypes = []any{
 var file_messages_proto_depIdxs = []int32{
 	2,  // 0: messagesproto.Message.sender:type_name -> messagesproto.Sender
 	2,  // 1: messagesproto.FullMessage.sender:type_name -> messagesproto.Sender
-	4,  // 2: messagesproto.FullMessage.files:type_name -> messagesproto.File
+	4,  // 2: messagesproto.FullMessage.file:type_name -> messagesproto.File
 	0,  // 3: messagesproto.InboxResponse.messages:type_name -> messagesproto.Message
 	5,  // 4: messagesproto.InboxResponse.pagination:type_name -> messagesproto.PaginationInfo
 	1,  // 5: messagesproto.MessagePageResponse.message:type_name -> messagesproto.FullMessage
 	3,  // 6: messagesproto.ReplyRequest.receivers:type_name -> messagesproto.Receiver
-	4,  // 7: messagesproto.ReplyRequest.files:type_name -> messagesproto.File
+	4,  // 7: messagesproto.ReplyRequest.file:type_name -> messagesproto.File
 	3,  // 8: messagesproto.SendRequest.receivers:type_name -> messagesproto.Receiver
-	4,  // 9: messagesproto.SendRequest.files:type_name -> messagesproto.File
+	4,  // 9: messagesproto.SendRequest.file:type_name -> messagesproto.File
 	0,  // 10: messagesproto.SentResponse.messages:type_name -> messagesproto.Message
 	5,  // 11: messagesproto.SentResponse.pagination:type_name -> messagesproto.PaginationInfo
 	0,  // 12: messagesproto.GetFolderResponse.messages:type_name -> messagesproto.Message
 	5,  // 13: messagesproto.GetFolderResponse.pagination:type_name -> messagesproto.PaginationInfo
 	6,  // 14: messagesproto.GetFoldersResponse.folders:type_name -> messagesproto.Folder
 	3,  // 15: messagesproto.SaveDraftRequest.receivers:type_name -> messagesproto.Receiver
-	4,  // 16: messagesproto.SaveDraftRequest.files:type_name -> messagesproto.File
+	4,  // 16: messagesproto.SaveDraftRequest.file:type_name -> messagesproto.File
 	8,  // 17: messagesproto.MessagesService.Inbox:input_type -> messagesproto.InboxRequest
 	10, // 18: messagesproto.MessagesService.MessagePage:input_type -> messagesproto.MessagePageRequest
 	12, // 19: messagesproto.MessagesService.Reply:input_type -> messagesproto.ReplyRequest

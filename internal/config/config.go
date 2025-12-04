@@ -19,8 +19,10 @@ type AppConfig struct {
 	AuthPort            string `yaml:"auth_port"`
 	MessagesPort        string `yaml:"messages_port"`
 	ProfilePort         string `yaml:"profile_port"`
+	FilePort            string `yaml:"file_port"`
 	GatewayPort         string `yaml:"gateway_port"`
 	GatewayMetricsPort  string `yaml:"gateway_metrics_port"`
+	FileMetricsPort     string `yaml:"file_metrics_port"`
 	AuthMetricsPort     string `yaml:"auth_metrics_port"`
 	MessagesMetricsPort string `yaml:"messages_metrics_port"`
 	ProfileMetricsPort  string `yaml:"profile_metrics_port"`
@@ -37,15 +39,16 @@ type DBConfig struct {
 }
 
 type MinioConfig struct {
-	Host           string `yaml:"host"`
-	Port           string `yaml:"port"`
-	User           string `yaml:"user"`
-	Password       string `yaml:"password"`
-	BucketName     string `yaml:"bucket_name"`
-	Endpoint       string `yaml:"endpoint"`
-	UseSSL         bool   `yaml:"use_ssl"`
-	PublicEndpoint string `yaml:"public_endpoint"`
-	PublicUseSSL   bool   `yaml:"public_use_ssl"`
+	Host            string `yaml:"host"`
+	Port            string `yaml:"port"`
+	User            string `yaml:"user"`
+	Password        string `yaml:"password"`
+	BucketName      string `yaml:"bucket_name"`
+	FilesBucketName string `yaml:"files_bucket_name"`
+	Endpoint        string `yaml:"endpoint"`
+	UseSSL          bool   `yaml:"use_ssl"`
+	PublicEndpoint  string `yaml:"public_endpoint"`
+	PublicUseSSL    bool   `yaml:"public_use_ssl"`
 }
 
 func GetConfig() (Config, error) {

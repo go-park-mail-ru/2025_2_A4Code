@@ -1,4 +1,4 @@
-package files
+package file
 
 import (
 	"2025_2_a4code/internal/lib/rand"
@@ -6,8 +6,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -28,15 +30,18 @@ func New(fileRepo FileRepository) *FileUcase {
 }
 
 func (uc *FileUcase) UploadFileMain(ctx context.Context, messageID string, file io.Reader, size int64, originalFilename string) (string, string, error) {
-	const op = "usecase.files.UploadFileMain"
+	const op = "usecase.file.UploadFileMain"
 	ext := filepath.Ext(originalFilename)
 
 	randId, err := rand.GenerateRandID()
 	if err != nil {
 		return "", "", e.Wrap(op, err)
 	}
-	objectName := fmt.Sprintf("file/%s/%s%s", messageID, randId, ext)
+	cleanMessageID := strings.ReplaceAll(messageID, "\\", "")
+	objectName := fmt.Sprintf("file/%s/%s%s", cleanMessageID, randId, ext)
 	contentType := "application/octet-stream"
+
+	slog.Debug(fmt.Sprintf("DEBUG: uploading object with name: %q\n", objectName))
 
 	err = uc.fileRepo.UploadFile(ctx, objectName, file, size, contentType)
 	if err != nil {

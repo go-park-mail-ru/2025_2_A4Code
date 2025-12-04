@@ -94,8 +94,8 @@ services:
 
   auth:
     build:
-      context: ./auth-service
-      dockerfile: Dockerfile.auth
+      context: .
+      dockerfile: auth-service/Dockerfile
     container_name: a4-auth
     environment:
       CONFIG_PATH: config/docker.yml
@@ -109,8 +109,8 @@ services:
 
   messages:
     build:
-      context: ./messages-service
-      dockerfile: Dockerfile.messages
+      context: .
+      dockerfile: messages-service/Dockerfile
     container_name: a4-messages
     environment:
       CONFIG_PATH: config/docker.yml
@@ -124,8 +124,8 @@ services:
 
   profile:
     build:
-      context: ./profile-service
-      dockerfile: Dockerfile.profile
+      context: .
+      dockerfile: profile-service/Dockerfile
     container_name: a4-profile
     environment:
       CONFIG_PATH: config/docker.yml
@@ -138,10 +138,26 @@ services:
       - postgres
       - minio
 
+  file:
+    build:
+      context: .
+      dockerfile: file-service/Dockerfile
+    container_name: a4-file
+    environment:
+      CONFIG_PATH: config/docker.yml
+    volumes:
+      - ./db:/app/db:ro
+    ports:
+      - "8017:8017"
+      - "8018:8018"
+    depends_on:
+      - postgres
+      - minio
+
   gateway:
     build:
-      context: ./gateway-service
-      dockerfile: Dockerfile.gateway
+      context: .
+      dockerfile: gateway-service/Dockerfile
     container_name: a4-gateway
     environment:
       CONFIG_PATH: config/docker-gateway.yml

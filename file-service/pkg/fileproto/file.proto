@@ -28,7 +28,7 @@ message DeleteFileRequest {
 message DeleteFileResponse {}
 
 
-service FilesService {
-  rpc UploadFiles(UploadFileRequest) returns (UploadFileResponse);
-  rpc DeleteFiles(DeleteFileRequest) returns (DeleteFileResponse);
+service FileService {
+  rpc UploadFile(UploadFileRequest) returns (UploadFileResponse);
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
 }

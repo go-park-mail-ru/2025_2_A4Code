@@ -7,6 +7,10 @@ import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	in "2025_2_a4code/internal/lib/init"
 	"2025_2_a4code/internal/lib/metrics"
+	files_repository "2025_2_a4code/internal/storage/minio/file-repository"
+	filemessage_repository "2025_2_a4code/internal/storage/postgres/filemessage-repository"
+	"2025_2_a4code/internal/usecase/file"
+	file_message "2025_2_a4code/internal/usecase/file-message"
 	"context"
 	"fmt"
 	"log/slog"
@@ -43,7 +47,7 @@ func FileInit() {
 	slog.SetDefault(log)
 	log.Debug("profile: debug messages are enabled")
 
-	go metrics.StartMetricsServer(cfg.AppConfig.ProfileMetricsPort, log)
+	go metrics.StartMetricsServer(cfg.AppConfig.FileMetricsPort, log)
 
 	// Установка соединения с бд
 	connection, err := in.NewDbConnection(cfg.DBConfig)
@@ -63,31 +67,38 @@ func FileInit() {
 		log.Error("error connecting to minio")
 	}
 
-	err = bucketExists(client, cfg.MinioConfig.BucketName)
+	err = bucketExists(client, cfg.MinioConfig.FilesBucketName)
 	if err != nil {
 		log.Error("error checking bucket: " + err.Error())
 	}
 
 	// Создание репозиториев
+	filesRepository := files_repository.New(client, cfg.MinioConfig.FilesBucketName, cfg.MinioConfig.PublicEndpoint, cfg.MinioConfig.PublicUseSSL)
+	fileMessageRepository := filemessage_repository.New(connection)
 
 	// Создание юзкейсов
+	fileUsecase := file.New(filesRepository)
+	fileMessageUsecase := file_message.New(fileMessageRepository)
 
 	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.ProfilePort))
 
 	grpcServer := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(logger.GrpcLoggerInterceptor(log), metrics.MetricsInterceptor("profile-service")),
+		grpc.ChainUnaryInterceptor(
+			logger.GrpcLoggerInterceptor(log),
+			metrics.MetricsInterceptor("file-service"),
+		),
 	)
 
-	fileService := grpc_service.New(connection, client)
-	fb.RegisterProfileServiceServer(grpcServer, fileService)
+	fileService := grpc_service.New(fileUsecase, fileMessageUsecase, SECRET)
+	fb.RegisterFileServiceServer(grpcServer, fileService)
 
-	lis, err := net.Listen("tcp", cfg.AppConfig.Host+":"+cfg.AppConfig.ProfilePort)
+	lis, err := net.Listen("tcp", cfg.AppConfig.Host+":"+cfg.AppConfig.FilePort)
 	if err != nil {
 		log.Error("Failed to start server: " + err.Error())
 		os.Exit(1)
 	}
 
-	log.Info("Profile microservice: server has started working...")
+	log.Info("Files microservice: server has started working...")
 
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Error("gRPC server failed: " + err.Error())
