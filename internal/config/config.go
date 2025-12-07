@@ -12,6 +12,7 @@ type Config struct {
 	AppConfig   *AppConfig
 	DBConfig    *DBConfig
 	MinioConfig *MinioConfig
+	RedisConfig *RedisConfig
 }
 
 type AppConfig struct {
@@ -49,6 +50,13 @@ type MinioConfig struct {
 	UseSSL          bool   `yaml:"use_ssl"`
 	PublicEndpoint  string `yaml:"public_endpoint"`
 	PublicUseSSL    bool   `yaml:"public_use_ssl"`
+}
+
+type RedisConfig struct {
+	Host     string `yaml:"host"`
+	Port     string `yaml:"port"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
 }
 
 func GetConfig() (Config, error) {

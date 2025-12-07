@@ -18,19 +18,26 @@ import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	"2025_2_a4code/internal/lib/session"
 	"2025_2_a4code/internal/lib/validation"
+	"2025_2_a4code/internal/lib/notifications"
+	"2025_2_a4code/messages-service/internal/client/profile"
 
 	pb "2025_2_a4code/messages-service/pkg/messagesproto"
+	profilepb "2025_2_a4code/profile-service/pkg/profileproto"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+    "github.com/go-redis/redis/v9"
 )
 
 type Server struct {
 	pb.UnimplementedMessagesServiceServer
 	messageUCase MessageUsecase
 	avatarUCase  AvatarUsecase
+	profileClient   *profileclient.ProfileClient
+	notifier        *notifications.Notifier
+    redisClient     *redis.Client
 	JWTSecret    []byte
 }
 
@@ -93,10 +100,20 @@ var allowedFileTypes = map[string]struct{}{
 	"text/plain":      {},
 }
 
-func New(messageUCase MessageUsecase, avatarUCase AvatarUsecase, secret []byte) *Server {
+func New(
+	messageUCase MessageUsecase,
+	avatarUCase AvatarUsecase, 
+	profileClient *profileclient.ProfileClient,
+    notifier *notifications.Notifier,
+    redisClient *redis.Client,
+	secret []byte
+	) *Server {
 	return &Server{
 		messageUCase: messageUCase,
 		avatarUCase:  avatarUCase,
+		profileClient:   profileClient,
+        notifier:        notifier,
+        redisClient:     redisClient,
 		JWTSecret:    secret,
 	}
 }
@@ -235,6 +252,19 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 
 		metrics.MessagesSentTotal.WithLabelValues("reply").Inc()
 
+		senderEmail, err := s.profileClient.GetUserEmailByID(ctx, profileID)
+        if err != nil {
+            log.Warn("Failed to get sender email for notification", "error", err)
+            senderEmail = ""
+        }
+
+		recipientID, err := s.profileClient.GetUserIDByEmail(ctx, receiver.Email)
+        if err != nil {
+            log.Warn("Failed to get recipient ID for notification", "email", receiver.Email, "error", err)
+        } else {
+            s.sendNewMessageNotification(ctx, recipientID, msgID, senderEmail, profileID, safeTopic, safeText)
+        }
+
 		for _, file := range req.Files {
 			size, _ := strconv.ParseInt(file.Size, 10, 64)
 			_, err = s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size)
@@ -290,6 +320,19 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 		}
 
 		metrics.MessagesSentTotal.WithLabelValues("send").Inc()
+
+		senderEmail, err := s.profileClient.GetUserEmailByID(ctx, profileID)
+        if err != nil {
+            log.Warn("Failed to get sender email for notification", "error", err)
+            senderEmail = ""
+        }
+
+		recipientID, err := s.profileClient.GetUserIDByEmail(ctx, receiver.Email)
+        if err != nil {
+            log.Warn("Failed to get recipient ID for notification", "email", receiver.Email, "error", err)
+        } else {
+            s.sendNewMessageNotification(ctx, recipientID, msgID, senderEmail, profileID, safeTopic, safeText)
+        }
 
 		if messageID == 0 {
 			threadID, err := s.messageUCase.SaveThread(ctx, msgID)
@@ -1126,4 +1169,20 @@ func (s *Server) SendDraft(ctx context.Context, req *pb.SendDraftRequest) (*pb.S
 		Success:   true,
 		MessageId: req.DraftId,
 	}, nil
+}
+
+func (s *Server) sendNewMessageNotification(ctx context.Context, recipientID, messageID int64, fromEmail string, fromID int64, subject, text string) {
+    if s.notifier == nil {
+        return
+    }
+
+    preview := text
+    if len(preview) > 100 {
+        preview = preview[:100] + "..."
+    }
+
+    err := s.notifier.NotifyNewMessage(ctx, recipientID, messageID, fromEmail, fromID, subject, preview)
+    if err != nil {
+        logger.GetLogger(ctx).Warn("Failed to send notification", "error", err, "recipient_id", recipientID)
+    }
 }

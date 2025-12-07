@@ -12,6 +12,15 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  redis: 
+    image: redis:alpine
+    container_name: a4-redis
+    ports:
+      - "8019:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
   minio:
     image: minio/minio
     container_name: a4-minio
@@ -121,6 +130,7 @@ services:
       - "8014:8014"
     depends_on:
       - postgres
+      - redis
 
   profile:
     build:
@@ -161,6 +171,7 @@ services:
     container_name: a4-gateway
     environment:
       CONFIG_PATH: config/docker-gateway.yml
+      REDIS_HOST: redis
     volumes:
       - ./db:/app/db:ro
     ports:
@@ -172,6 +183,7 @@ services:
       - auth
       - messages
       - profile
+      - redis
 
 volumes:
   pgdata:
@@ -179,3 +191,4 @@ volumes:
   pgadmin-data:
   portainer-data:
   grafana_data:
+  redis-data:

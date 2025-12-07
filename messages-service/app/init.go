@@ -5,14 +5,16 @@ import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	in "2025_2_a4code/internal/lib/init"
 	"2025_2_a4code/internal/lib/metrics"
+	"2025_2_a4code/internal/lib/notifications"
 	messagesservice "2025_2_a4code/messages-service/grpc-service"
+	profileclient "2025_2_a4code/messages-service/internal/client/profile"
 	"net"
+
 	// "2025_2_a4code/internal/http-server/handlers/messages/threads"
 	// uploadfile "2025_2_a4code/internal/http-server/handlers/user/upload/upload-file"
 
 	avatarrepository "2025_2_a4code/internal/storage/minio/avatar-repository"
 	messagerepository "2025_2_a4code/internal/storage/postgres/message-repository"
-	profilerepository "2025_2_a4code/internal/storage/postgres/profile-repository"
 	avatarUcase "2025_2_a4code/internal/usecase/avatar"
 	messageUcase "2025_2_a4code/internal/usecase/message"
 	pb "2025_2_a4code/messages-service/pkg/messagesproto"
@@ -20,8 +22,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"github.com/go-redis/redis/v9"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"google.golang.org/grpc"
@@ -64,6 +69,47 @@ func MessagesInit() {
 	connection.SetMaxIdleConns(8)
 	go metrics.MonitorDBConnections(connection)
 
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	// Подключение Redis для уведомлений
+	var redisClient *redis.Client
+	var notifier *notifications.Notifier
+
+	if cfg.RedisConfig.Host != "" {
+		redisClient = redis.NewClient(&redis.Options{
+			Addr:     cfg.RedisConfig.Host + ":" + cfg.RedisConfig.Port,
+			Password: cfg.RedisConfig.Password,
+			DB:       cfg.RedisConfig.DB,
+		})
+
+		// Проверка соединения с Redis
+		redisCtx, redisCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer redisCancel()
+
+		if err := redisClient.Ping(redisCtx).Err(); err != nil {
+			log.Warn("Failed to connect to Redis, notifications disabled", "error", err)
+		} else {
+			log.Info("Redis connected successfully")
+		}
+	}
+
+	// Создаем клиент для profile-service
+	profileServiceAddr := cfg.AppConfig.Host + ":" + cfg.AppConfig.ProfilePort
+	var profileClient *profileclient.ProfileClient
+
+	profileClient, err = profileclient.New(profileServiceAddr)
+	if err != nil {
+		log.Warn("Failed to create profile client, notifications disabled", "error", err)
+	} else {
+		log.Info("Profile client created successfully", "addr", profileServiceAddr)
+	}
+
+	// Создаем notifier
+	if redisClient != nil {
+		notifier = notifications.NewNotifier(redisClient)
+	}
+
 	// Подключение MinIO
 	client, err := newMinioConnection(cfg.MinioConfig.Endpoint, cfg.MinioConfig.User, cfg.MinioConfig.Password, cfg.MinioConfig.UseSSL)
 	if err != nil {
@@ -77,12 +123,12 @@ func MessagesInit() {
 
 	// Создание репозиториев
 	messageRepository := messagerepository.New(connection)
-	profileRepository := profilerepository.New(connection)
+	// profileRepository := profilerepository.New(connection)
 	avatarRepository := avatarrepository.New(client, cfg.MinioConfig.BucketName, cfg.MinioConfig.PublicEndpoint, cfg.MinioConfig.PublicUseSSL)
 
 	// Создание юзкейсов
 	messageUCase := messageUcase.New(messageRepository)
-	avatarUCase := avatarUcase.New(avatarRepository, profileRepository)
+	avatarUCase := avatarUcase.New(avatarRepository, nil)
 
 	slog.Info("Messages microservice: server has started working...")
 
@@ -93,7 +139,14 @@ func MessagesInit() {
 		),
 	)
 
-	messagesService := messagesservice.New(messageUCase, avatarUCase, SECRET)
+	messagesService := messagesservice.New(
+		messageUCase,
+		avatarUCase,
+		profileClient,
+		notifier,
+		redisClient,
+		SECRET)
+
 	pb.RegisterMessagesServiceServer(grpcServer, messagesService)
 
 	lis, err := net.Listen("tcp", cfg.AppConfig.Host+":"+cfg.AppConfig.MessagesPort)
@@ -103,6 +156,23 @@ func MessagesInit() {
 	}
 
 	slog.Info("Messages microservice: server has started working...")
+
+	// Graceful shutdown для закрытия соединений
+	go func() {
+		<-ctx.Done()
+		log.Info("Shutting down server gracefully...")
+
+		grpcServer.GracefulStop()
+
+		if profileClient != nil {
+			profileClient.Close()
+		}
+		if redisClient != nil {
+			redisClient.Close()
+		}
+
+		log.Info("Server stopped")
+	}()
 
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Error("gRPC server failed: " + err.Error())

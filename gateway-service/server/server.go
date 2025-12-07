@@ -18,6 +18,10 @@ import (
 	"strings"
 	"time"
 
+	"2025_2_a4code/gateway-service/internal/websocket"
+
+	"github.com/go-redis/redis/v9"
+	"github.com/gorilla/websocket"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -33,6 +37,8 @@ type Server struct {
 	profileClient profileproto.ProfileServiceClient
 	messageClient messagesproto.MessagesServiceClient
 	fileClient    fileproto.FileServiceClient
+	redisClient   *redis.Client
+	wsManager     *websocket.WebSocketManager
 }
 
 type apiResponse struct {
@@ -53,7 +59,7 @@ type profileDTO struct {
 	Role        string `json:"role,omitempty"`
 }
 
-func NewServer(cfg *config.AppConfig) (*Server, error) {
+func NewServer(cfg *config.AppConfig, redisCfg *config.RedisConfig) (*Server, error) {
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
 	authConn, err := grpc.NewClient(cfg.Host+":"+cfg.AuthPort, opts...)
@@ -70,12 +76,25 @@ func NewServer(cfg *config.AppConfig) (*Server, error) {
 	}
 	fileConn, err := grpc.NewClient(cfg.Host+":"+cfg.FilePort, opts...)
 
+	var redisClient *redis.Client
+	if redisCfg != nil && redisCfg.Host != "" {
+		redisClient = redis.NewClient(&redis.Options{
+			Addr:     redisCfg.Host + ":" + redisCfg.Port,
+			Password: redisCfg.Password,
+			DB:       redisCfg.DB,
+		})
+	}
+
+	wsManager := websocket.NewWebSocketManager(redisClient)
+
 	return &Server{
 		cfg:           cfg,
 		authClient:    authproto.NewAuthServiceClient(authConn),
 		profileClient: profileproto.NewProfileServiceClient(profileConn),
 		messageClient: messagesproto.NewMessagesServiceClient(messagesConn),
 		fileClient:    fileproto.NewFileServiceClient(fileConn),
+		redisClient:   redisClient,
+		wsManager:     wsManager,
 	}, nil
 }
 
@@ -122,6 +141,8 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.Handle("DELETE /messages/delete-draft", http.HandlerFunc(s.deleteDraftHandler))
 	mux.Handle("POST /messages/send-draft", http.HandlerFunc(s.sendDraftHandler))
 
+	mux.Handle("GET /ws/notifications", http.HandlerFunc(s.websocketHandler))
+
 	mux.Handle("POST /file/upload", http.HandlerFunc(s.uploadFileHandler))
 	mux.Handle("POST /file/delete", http.HandlerFunc(s.deleteFileHandler))
 
@@ -139,6 +160,19 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	log.Info("Server is listening port: " + s.cfg.GatewayPort)
+
+	go func() {
+		<-ctx.Done()
+		log.Info("Shutting down gateway server...")
+		s.httpServer.Shutdown(context.Background())
+		if s.redisClient != nil {
+			s.redisClient.Close()
+		}
+		if s.wsManager != nil {
+			s.wsManager.Shutdown()
+		}
+	}()
+
 	if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
 		log.Error("Server stopped: " + err.Error())
 		return err
@@ -974,4 +1008,153 @@ func (s *Server) deleteFileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondSuccess(w, resp)
+}
+
+func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
+	log := logger.GetLogger(r.Context())
+
+	token, err := s.getAccessToken(r)
+	if err != nil {
+		writeResponse(w, http.StatusUnauthorized, "Authentication required", nil)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	resp, err := s.authClient.ValidateToken(ctx, &authproto.ValidateTokenRequest{
+		Token: token,
+	})
+	if err != nil {
+		writeResponse(w, http.StatusUnauthorized, "Invalid or expired token", nil)
+		return
+	}
+
+	userID := strconv.FormatInt(resp.UserId, 10)
+
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true
+			}
+
+			for _, allowed := range s.cfg.AllowedOrigins {
+				if origin == allowed {
+					return true
+				}
+			}
+			return false
+		},
+	}
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Error("Failed to upgrade to WebSocket",
+			"error", err,
+			"user_id", userID,
+			"remote_addr", r.RemoteAddr,
+		)
+		return
+	}
+
+	conn.SetReadLimit(10 * 1024 * 1024) // 10MB
+	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+	sessionID := uuid.New().String()
+	s.wsManager.RegisterClient(userID, sessionID, conn)
+
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
+
+	go func() {
+		defer func() {
+			s.wsManager.UnregisterClient(userID, sessionID)
+			conn.Close()
+
+			log.Info("WebSocket connection closed",
+				"user_id", userID,
+				"session_id", sessionID,
+				"remote_addr", r.RemoteAddr,
+			)
+		}()
+
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		go func() {
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+					if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+						return
+					}
+				}
+			}
+		}()
+
+		for {
+			messageType, message, err := conn.ReadMessage()
+			if err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+					log.Debug("WebSocket closed unexpectedly",
+						"user_id", userID,
+						"error", err,
+					)
+				}
+				break
+			}
+
+			if messageType == websocket.TextMessage {
+				s.handleWebSocketMessage(userID, message)
+			}
+
+			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		}
+	}()
+
+	log.Info("WebSocket connection established",
+		"user_id", userID,
+		"session_id", sessionID,
+		"remote_addr", r.RemoteAddr,
+	)
+}
+
+func (s *Server) getAccessToken(r *http.Request) (string, error) {
+	authHeader := r.Header.Get("Authorization")
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		return authHeader[7:], nil
+	}
+
+	if token := r.URL.Query().Get("access_token"); token != "" {
+		return token, nil
+	}
+
+	if cookie, err := r.Cookie("access_token"); err == nil {
+		return cookie.Value, nil
+	}
+
+	return "", fmt.Errorf("no access token found")
+}
+
+func (s *Server) handleWebSocketMessage(userID string, message []byte) {
+	var msg struct {
+		Type string `json:"type"`
+	}
+
+	if err := json.Unmarshal(message, &msg); err != nil {
+		return
+	}
+
+	switch msg.Type {
+	case "ping":
+	case "subscribe", "message", "typing":
+	}
 }
