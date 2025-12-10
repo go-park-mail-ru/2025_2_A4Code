@@ -55,8 +55,8 @@ func AuthInit() {
 		metrics.DBQueryErrors.WithLabelValues("auth-service", "connection").Inc()
 		os.Exit(1)
 	}
-	connection.SetMaxOpenConns(20)
-	connection.SetMaxIdleConns(8)
+	connection.SetMaxOpenConns(22)
+	connection.SetMaxIdleConns(10)
 
 	go monitorDBConnections(connection)
 

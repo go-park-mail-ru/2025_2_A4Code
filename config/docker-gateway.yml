@@ -16,6 +16,8 @@ db:
   password: postgresql
   name: a4code_db
   sslmode: disable
+  app_user: flintmail_app
+  app_password: fyzvjkjltw396
 minio:
   host: minio
   port: 9000
