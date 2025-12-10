@@ -79,6 +79,7 @@ func GetConfig() (Config, error) {
 		App   AppConfig   `yaml:"app"`
 		DB    DBConfig    `yaml:"db"`
 		Minio MinioConfig `yaml:"minio"`
+		Redis RedisConfig `yaml:"redis"`
 	}
 
 	if err := yaml.Unmarshal(data, &yamlStruct); err != nil {
@@ -89,5 +90,6 @@ func GetConfig() (Config, error) {
 		AppConfig:   &yamlStruct.App,
 		DBConfig:    &yamlStruct.DB,
 		MinioConfig: &yamlStruct.Minio,
+		RedisConfig: &yamlStruct.Redis,
 	}, nil
 }

@@ -17,7 +17,7 @@ services:
     container_name: a4-redis
     ports:
       - "8019:6379"
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass rediska
     volumes:
       - redis-data:/data
 
@@ -171,7 +171,6 @@ services:
     container_name: a4-gateway
     environment:
       CONFIG_PATH: config/docker-gateway.yml
-      REDIS_HOST: redis
     volumes:
       - ./db:/app/db:ro
     ports:

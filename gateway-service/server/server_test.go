@@ -2,6 +2,7 @@ package gateway_service
 
 import (
 	"2025_2_a4code/auth-service/pkg/authproto"
+	"2025_2_a4code/file-service/pkg/fileproto"
 	"2025_2_a4code/internal/config"
 	"2025_2_a4code/messages-service/pkg/messagesproto"
 	"2025_2_a4code/profile-service/pkg/profileproto"
@@ -24,6 +25,18 @@ import (
 )
 
 type MockAuthClient struct {
+	mock.Mock
+}
+
+type MockProfileClient struct {
+	mock.Mock
+}
+
+type MockMessageClient struct {
+	mock.Mock
+}
+
+type MockFileClient struct {
 	mock.Mock
 }
 
@@ -59,8 +72,12 @@ func (m *MockAuthClient) Logout(ctx context.Context, in *authproto.LogoutRequest
 	return args.Get(0).(*authproto.LogoutResponse), args.Error(1)
 }
 
-type MockProfileClient struct {
-	mock.Mock
+func (m *MockAuthClient) ValidateToken(ctx context.Context, in *authproto.ValidateTokenRequest, opts ...grpc.CallOption) (*authproto.ValidateTokenResponse, error) {
+	args := m.Called(ctx, in)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*authproto.ValidateTokenResponse), args.Error(1)
 }
 
 func (m *MockProfileClient) GetProfile(ctx context.Context, in *profileproto.GetProfileRequest, opts ...grpc.CallOption) (*profileproto.GetProfileResponse, error) {
@@ -95,8 +112,20 @@ func (m *MockProfileClient) UploadAvatar(ctx context.Context, in *profileproto.U
 	return args.Get(0).(*profileproto.UploadAvatarResponse), args.Error(1)
 }
 
-type MockMessageClient struct {
-	mock.Mock
+func (m *MockProfileClient) FindByID(ctx context.Context, in *profileproto.FindByIDRequest, opts ...grpc.CallOption) (*profileproto.FindByIDResponse, error) {
+	args := m.Called(ctx, in)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*profileproto.FindByIDResponse), args.Error(1)
+}
+
+func (m *MockProfileClient) FindByUsernameAndDomain(ctx context.Context, in *profileproto.FindByUsernameAndDomainRequest, opts ...grpc.CallOption) (*profileproto.FindByUsernameAndDomainResponse, error) {
+	args := m.Called(ctx, in)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*profileproto.FindByUsernameAndDomainResponse), args.Error(1)
 }
 
 func (m *MockMessageClient) Inbox(ctx context.Context, in *messagesproto.InboxRequest, opts ...grpc.CallOption) (*messagesproto.InboxResponse, error) {
@@ -227,7 +256,23 @@ func (m *MockMessageClient) SendDraft(ctx context.Context, in *messagesproto.Sen
 	return args.Get(0).(*messagesproto.SendDraftResponse), args.Error(1)
 }
 
-func setupTestServer() (*Server, *MockAuthClient, *MockProfileClient, *MockMessageClient) {
+func (m *MockFileClient) UploadFile(ctx context.Context, in *fileproto.UploadFileRequest, opts ...grpc.CallOption) (*fileproto.UploadFileResponse, error) {
+	args := m.Called(ctx, in)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*fileproto.UploadFileResponse), args.Error(1)
+}
+
+func (m *MockFileClient) DeleteFile(ctx context.Context, in *fileproto.DeleteFileRequest, opts ...grpc.CallOption) (*fileproto.DeleteFileResponse, error) {
+	args := m.Called(ctx, in)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*fileproto.DeleteFileResponse), args.Error(1)
+}
+
+func setupTestServer() (*Server, *MockAuthClient, *MockProfileClient, *MockMessageClient, *MockFileClient) {
 	cfg := &config.AppConfig{
 		GatewayPort:        "8080",
 		GatewayMetricsPort: "9090",
@@ -236,15 +281,17 @@ func setupTestServer() (*Server, *MockAuthClient, *MockProfileClient, *MockMessa
 	mockAuth := &MockAuthClient{}
 	mockProfile := &MockProfileClient{}
 	mockMessage := &MockMessageClient{}
+	mockFile := &MockFileClient{}
 
 	server := &Server{
 		cfg:           cfg,
 		authClient:    mockAuth,
 		profileClient: mockProfile,
 		messageClient: mockMessage,
+		fileClient:    mockFile,
 	}
 
-	return server, mockAuth, mockProfile, mockMessage
+	return server, mockAuth, mockProfile, mockMessage, mockFile
 }
 
 func createRequestWithToken(method, url string, body io.Reader) *http.Request {
@@ -257,7 +304,7 @@ func createRequestWithToken(method, url string, body io.Reader) *http.Request {
 }
 
 func TestServer_LoginHandler(t *testing.T) {
-	server, mockAuth, _, _ := setupTestServer()
+	server, mockAuth, _, _, _ := setupTestServer()
 
 	tests := []struct {
 		name           string
@@ -346,7 +393,7 @@ func TestServer_LoginHandler(t *testing.T) {
 }
 
 func TestServer_SignupHandler(t *testing.T) {
-	server, mockAuth, _, _ := setupTestServer()
+	server, mockAuth, _, _, _ := setupTestServer()
 
 	tests := []struct {
 		name           string
@@ -411,7 +458,7 @@ func TestServer_SignupHandler(t *testing.T) {
 }
 
 func TestServer_GetProfileHandler(t *testing.T) {
-	server, _, mockProfile, _ := setupTestServer()
+	server, _, mockProfile, _, _ := setupTestServer()
 
 	tests := []struct {
 		name           string
@@ -478,7 +525,7 @@ func TestServer_GetProfileHandler(t *testing.T) {
 }
 
 func TestServer_UpdateProfileHandler(t *testing.T) {
-	server, _, mockProfile, _ := setupTestServer()
+	server, _, mockProfile, _, _ := setupTestServer()
 
 	updateRequest := map[string]interface{}{
 		"name":       "Updated",
@@ -527,7 +574,7 @@ func TestServer_UpdateProfileHandler(t *testing.T) {
 }
 
 func TestServer_MessagePageHandler(t *testing.T) {
-	server, _, _, mockMessage := setupTestServer()
+	server, _, _, mockMessage, _ := setupTestServer()
 
 	tests := []struct {
 		name           string
@@ -579,7 +626,7 @@ func TestServer_MessagePageHandler(t *testing.T) {
 }
 
 func TestServer_SendHandler(t *testing.T) {
-	server, _, _, mockMessage := setupTestServer()
+	server, _, _, mockMessage, _ := setupTestServer()
 
 	sendRequest := map[string]interface{}{
 		"topic": "Test Topic",
@@ -636,7 +683,7 @@ func TestServer_SendHandler(t *testing.T) {
 }
 
 func TestServer_GetFoldersHandler(t *testing.T) {
-	server, _, _, mockMessage := setupTestServer()
+	server, _, _, mockMessage, _ := setupTestServer()
 
 	t.Run("Success", func(t *testing.T) {
 		mockMessage.On("GetFolders", mock.Anything, mock.AnythingOfType("*messagesproto.GetFoldersRequest")).
@@ -685,7 +732,7 @@ func TestServer_GetFoldersHandler(t *testing.T) {
 }
 
 func TestServer_CreateFolderHandler(t *testing.T) {
-	server, _, _, mockMessage := setupTestServer()
+	server, _, _, mockMessage, _ := setupTestServer()
 
 	createRequest := map[string]interface{}{
 		"folder_name": "New Folder",
@@ -735,7 +782,7 @@ func TestServer_CreateFolderHandler(t *testing.T) {
 }
 
 func TestServer_RenameFolderHandler(t *testing.T) {
-	server, _, _, mockMessage := setupTestServer()
+	server, _, _, mockMessage, _ := setupTestServer()
 
 	renameRequest := map[string]interface{}{
 		"folder_id":       "1",
@@ -767,7 +814,7 @@ func TestServer_RenameFolderHandler(t *testing.T) {
 }
 
 func TestServer_SaveDraftHandler(t *testing.T) {
-	server, _, _, mockMessage := setupTestServer()
+	server, _, _, mockMessage, _ := setupTestServer()
 
 	saveDraftRequest := map[string]interface{}{
 		"draft_id":  "",
@@ -803,7 +850,7 @@ func TestServer_SaveDraftHandler(t *testing.T) {
 }
 
 func TestServer_DeleteDraftHandler(t *testing.T) {
-	server, _, _, mockMessage := setupTestServer()
+	server, _, _, mockMessage, _ := setupTestServer()
 
 	deleteDraftRequest := map[string]interface{}{
 		"draft_id": "123",
@@ -832,7 +879,7 @@ func TestServer_DeleteDraftHandler(t *testing.T) {
 }
 
 func TestServer_MarkAsSpamHandler(t *testing.T) {
-	server, _, _, mockMessage := setupTestServer()
+	server, _, _, mockMessage, _ := setupTestServer()
 
 	spamRequest := map[string]interface{}{
 		"message_id": "123",
@@ -859,7 +906,7 @@ func TestServer_MarkAsSpamHandler(t *testing.T) {
 }
 
 func TestServer_MoveToFolderHandler(t *testing.T) {
-	server, _, _, mockMessage := setupTestServer()
+	server, _, _, mockMessage, _ := setupTestServer()
 
 	moveRequest := map[string]interface{}{
 		"message_id": "123",
@@ -887,7 +934,7 @@ func TestServer_MoveToFolderHandler(t *testing.T) {
 }
 
 func TestServer_UploadAvatarHandler(t *testing.T) {
-	server, _, mockProfile, _ := setupTestServer()
+	server, _, mockProfile, _, _ := setupTestServer()
 
 	t.Run("Success", func(t *testing.T) {
 		mockProfile.On("UploadAvatar", mock.Anything, mock.AnythingOfType("*profileproto.UploadAvatarRequest")).
@@ -1055,7 +1102,7 @@ func TestMapProfile_Nil(t *testing.T) {
 }
 
 func TestServer_RefreshHandler(t *testing.T) {
-	server, mockAuth, _, _ := setupTestServer()
+	server, mockAuth, _, _, _ := setupTestServer()
 
 	t.Run("Success", func(t *testing.T) {
 		mockAuth.On("Refresh", mock.Anything, mock.AnythingOfType("*authproto.RefreshRequest")).
@@ -1093,7 +1140,7 @@ func TestServer_RefreshHandler(t *testing.T) {
 }
 
 func TestServer_LogoutHandler(t *testing.T) {
-	server, mockAuth, _, _ := setupTestServer()
+	server, mockAuth, _, _, _ := setupTestServer()
 
 	t.Run("Success", func(t *testing.T) {
 		mockAuth.On("Logout", mock.Anything, mock.AnythingOfType("*authproto.LogoutRequest")).
@@ -1186,7 +1233,7 @@ func TestWriteGrpcAwareError(t *testing.T) {
 }
 
 func TestServer_ReplyHandler(t *testing.T) {
-	server, _, _, mockMessage := setupTestServer()
+	server, _, _, mockMessage, _ := setupTestServer()
 
 	replyRequest := map[string]interface{}{
 		"root_message_id": "123",
@@ -1234,7 +1281,7 @@ func TestServer_ReplyHandler(t *testing.T) {
 }
 
 func TestServer_SettingsHandler(t *testing.T) {
-	server, _, mockProfile, _ := setupTestServer()
+	server, _, mockProfile, _, _ := setupTestServer()
 
 	t.Run("Success", func(t *testing.T) {
 		mockProfile.On("Settings", mock.Anything, mock.AnythingOfType("*profileproto.SettingsRequest")).
@@ -1258,7 +1305,7 @@ func TestServer_SettingsHandler(t *testing.T) {
 }
 
 func TestServer_SendDraftHandler(t *testing.T) {
-	server, _, _, mockMessage := setupTestServer()
+	server, _, _, mockMessage, _ := setupTestServer()
 
 	sendDraftRequest := map[string]interface{}{
 		"draft_id": "123",
@@ -1288,7 +1335,7 @@ func TestServer_SendDraftHandler(t *testing.T) {
 }
 
 func TestServer_DeleteFolderHandler(t *testing.T) {
-	server, _, _, mockMessage := setupTestServer()
+	server, _, _, mockMessage, _ := setupTestServer()
 
 	t.Run("Success", func(t *testing.T) {
 		mockMessage.On("DeleteFolder", mock.Anything, mock.AnythingOfType("*messagesproto.DeleteFolderRequest")).
@@ -1308,7 +1355,7 @@ func TestServer_DeleteFolderHandler(t *testing.T) {
 }
 
 func TestServer_DeleteMessageFromFolderHandler(t *testing.T) {
-	server, _, _, mockMessage := setupTestServer()
+	server, _, _, mockMessage, _ := setupTestServer()
 
 	deleteRequest := map[string]interface{}{
 		"message_id": "123",

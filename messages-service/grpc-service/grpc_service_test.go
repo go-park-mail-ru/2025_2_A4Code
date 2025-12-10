@@ -189,7 +189,7 @@ func setupTestServer() (*Server, *MockMessageUsecase, *MockAvatarUsecase) {
 	mockMessageUsecase := &MockMessageUsecase{}
 	mockAvatarUsecase := &MockAvatarUsecase{}
 	jwtSecret := []byte("test-secret-key-very-long-for-testing")
-	server := New(mockMessageUsecase, mockAvatarUsecase, jwtSecret)
+	server := New(mockMessageUsecase, mockAvatarUsecase, nil, nil, nil, jwtSecret)
 	return server, mockMessageUsecase, mockAvatarUsecase
 }
 

@@ -35,6 +35,8 @@ type ProfileUsecase interface {
 	UpdateProfileInfo(ctx context.Context, profileID int64, req profile.UpdateProfileRequest) error
 	FindSettingsByProfileId(ctx context.Context, profileID int64) (domain.Settings, error)
 	InsertProfileAvatar(ctx context.Context, profileID int64, avatarURL string) error
+	FindByID(ctx context.Context, id int64) (*domain.Profile, error)
+	FindByUsernameAndDomain(ctx context.Context, username string, domain string) (*domain.Profile, error)
 }
 
 type AvatarUsecase interface {
@@ -267,4 +269,66 @@ func (s *Server) enrichAvatarURL(ctx context.Context, profileInfo *domain.Profil
 	}
 
 	return nil
+}
+
+func (s *Server) FindByID(ctx context.Context, req *pb.FindByIDRequest) (*pb.FindByIDResponse, error) {
+	const op = "profileservice.FindByID"
+	log := logger.GetLogger(ctx)
+	log.Debug("handle profile/find-by-id")
+
+	profileData, err := s.profileUCase.FindByID(ctx, req.ProfileId)
+	if err != nil {
+		log.Error(op + ": failed to find profile: " + err.Error())
+		if errors.Is(err, commonE.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "profile not found")
+		}
+		return nil, status.Error(codes.Internal, "could not find profile")
+	}
+
+	pbProfile := &pb.Profile{
+		Id:         strconv.FormatInt(profileData.ID, 10),
+		Username:   profileData.Username,
+		CreatedAt:  profileData.CreatedAt.Format(time.RFC3339),
+		Name:       profileData.Name,
+		Surname:    profileData.Surname,
+		Patronymic: profileData.Patronymic,
+		Gender:     profileData.Gender,
+		Birthday:   profileData.Birthday.Format("02.01.2006"),
+		AvatarPath: profileData.AvatarPath,
+	}
+
+	return &pb.FindByIDResponse{
+		Profile: pbProfile,
+	}, nil
+}
+
+func (s *Server) FindByUsernameAndDomain(ctx context.Context, req *pb.FindByUsernameAndDomainRequest) (*pb.FindByUsernameAndDomainResponse, error) {
+	const op = "profileservice.FindByUsernameAndDomain"
+	log := logger.GetLogger(ctx)
+	log.Debug("handle profile/find-by-username-and-domain")
+
+	profileData, err := s.profileUCase.FindByUsernameAndDomain(ctx, req.Username, req.Domain)
+	if err != nil {
+		log.Error(op + ": failed to find profile: " + err.Error())
+		if errors.Is(err, commonE.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "profile not found")
+		}
+		return nil, status.Error(codes.Internal, "could not find profile")
+	}
+
+	pbProfile := &pb.Profile{
+		Id:         strconv.FormatInt(profileData.ID, 10),
+		Username:   profileData.Username,
+		CreatedAt:  profileData.CreatedAt.Format(time.RFC3339),
+		Name:       profileData.Name,
+		Surname:    profileData.Surname,
+		Patronymic: profileData.Patronymic,
+		Gender:     profileData.Gender,
+		Birthday:   profileData.Birthday.Format("02.01.2006"),
+		AvatarPath: profileData.AvatarPath,
+	}
+
+	return &pb.FindByUsernameAndDomainResponse{
+		Profile: pbProfile,
+	}, nil
 }

@@ -33,6 +33,10 @@ service ProfileService {
   rpc Settings(SettingsRequest) returns (SettingsResponse);
 
   rpc UploadAvatar(UploadAvatarRequest) returns (UploadAvatarResponse);
+
+  rpc FindByID(FindByIDRequest) returns (FindByIDResponse);
+
+  rpc FindByUsernameAndDomain(FindByUsernameAndDomainRequest) returns (FindByUsernameAndDomainResponse);
 }
 
 message GetProfileRequest {}
@@ -67,4 +71,21 @@ message UploadAvatarRequest {
 
 message UploadAvatarResponse {
   string avatar_path = 1;
+}
+
+message FindByIDRequest {
+  int64 profile_id = 1; 
+}
+
+message FindByIDResponse {
+  Profile profile = 1;
+}
+
+message FindByUsernameAndDomainRequest {
+  string username = 1;
+  string domain = 2;
+}
+
+message FindByUsernameAndDomainResponse {
+  Profile profile = 1;
 }

@@ -11,18 +11,20 @@ import (
 	"2025_2_a4code/profile-service/pkg/profileproto"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"2025_2_a4code/gateway-service/internal/websocket"
 
-	"github.com/go-redis/redis/v9"
-	"github.com/gorilla/websocket"
+	gorillaWs "github.com/gorilla/websocket"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	redis "github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -1013,10 +1015,21 @@ func (s *Server) deleteFileHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	log := logger.GetLogger(r.Context())
 
-	token, err := s.getAccessToken(r)
+	var token string
+	var err error
+
+	token, err = getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Authentication required", nil)
-		return
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token = authHeader[7:]
+		} else {
+			token = r.URL.Query().Get("access_token")
+			if token == "" {
+				writeResponse(w, http.StatusUnauthorized, "Authentication required", nil)
+				return
+			}
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -1025,14 +1038,14 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.authClient.ValidateToken(ctx, &authproto.ValidateTokenRequest{
 		Token: token,
 	})
-	if err != nil {
+	if err != nil || !resp.Valid {
 		writeResponse(w, http.StatusUnauthorized, "Invalid or expired token", nil)
 		return
 	}
 
 	userID := strconv.FormatInt(resp.UserId, 10)
 
-	upgrader := websocket.Upgrader{
+	upgrader := gorillaWs.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
@@ -1041,11 +1054,22 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 				return true
 			}
 
-			for _, allowed := range s.cfg.AllowedOrigins {
+			allowedOrigins := []string{
+				"http://localhost",
+				"http://127.0.0.1",
+				"https://flintmail.ru",
+			}
+
+			for _, allowed := range allowedOrigins {
 				if origin == allowed {
 					return true
 				}
 			}
+
+			log.Warn("WebSocket request from disallowed origin",
+				"origin", origin,
+				"remote_addr", r.RemoteAddr,
+			)
 			return false
 		},
 	}
@@ -1064,8 +1088,7 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 
-	sessionID := uuid.New().String()
-	s.wsManager.RegisterClient(userID, sessionID, conn)
+	s.wsManager.RegisterClient(userID, conn)
 
 	conn.SetPongHandler(func(string) error {
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -1074,12 +1097,11 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		defer func() {
-			s.wsManager.UnregisterClient(userID, sessionID)
+			s.wsManager.UnregisterClient(userID, conn)
 			conn.Close()
 
 			log.Info("WebSocket connection closed",
 				"user_id", userID,
-				"session_id", sessionID,
 				"remote_addr", r.RemoteAddr,
 			)
 		}()
@@ -1088,14 +1110,10 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 		defer ticker.Stop()
 
 		go func() {
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-					if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-						return
-					}
+			for range ticker.C {
+				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				if err := conn.WriteMessage(gorillaWs.PingMessage, nil); err != nil {
+					return
 				}
 			}
 		}()
@@ -1103,7 +1121,7 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 		for {
 			messageType, message, err := conn.ReadMessage()
 			if err != nil {
-				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				if gorillaWs.IsUnexpectedCloseError(err, gorillaWs.CloseGoingAway, gorillaWs.CloseAbnormalClosure) {
 					log.Debug("WebSocket closed unexpectedly",
 						"user_id", userID,
 						"error", err,
@@ -1112,8 +1130,8 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 
-			if messageType == websocket.TextMessage {
-				s.handleWebSocketMessage(userID, message)
+			if messageType == gorillaWs.TextMessage {
+				s.handleWebSocketMessage(userID, message, conn)
 			}
 
 			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -1122,39 +1140,85 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Info("WebSocket connection established",
 		"user_id", userID,
-		"session_id", sessionID,
 		"remote_addr", r.RemoteAddr,
 	)
 }
 
-func (s *Server) getAccessToken(r *http.Request) (string, error) {
-	authHeader := r.Header.Get("Authorization")
-	if strings.HasPrefix(authHeader, "Bearer ") {
-		return authHeader[7:], nil
-	}
-
-	if token := r.URL.Query().Get("access_token"); token != "" {
-		return token, nil
-	}
-
-	if cookie, err := r.Cookie("access_token"); err == nil {
-		return cookie.Value, nil
-	}
-
-	return "", fmt.Errorf("no access token found")
-}
-
-func (s *Server) handleWebSocketMessage(userID string, message []byte) {
+func (s *Server) handleWebSocketMessage(userID string, message []byte, conn *gorillaWs.Conn) {
 	var msg struct {
-		Type string `json:"type"`
+		Type    string          `json:"type"`
+		Payload json.RawMessage `json:"payload,omitempty"`
 	}
 
 	if err := json.Unmarshal(message, &msg); err != nil {
+		log := logger.GetLogger(context.Background())
+		log.Debug("Failed to parse WebSocket message",
+			"user_id", userID,
+			"error", err,
+		)
 		return
 	}
 
 	switch msg.Type {
 	case "ping":
-	case "subscribe", "message", "typing":
+		response := map[string]interface{}{
+			"type": "pong",
+			"payload": map[string]interface{}{
+				"timestamp": time.Now().Unix(),
+			},
+		}
+
+		conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		if err := conn.WriteJSON(response); err != nil {
+			log := logger.GetLogger(context.Background())
+			log.Error("Failed to send pong response",
+				"user_id", userID,
+				"error", err,
+			)
+		}
+
+	case "subscribe":
+		var payload struct {
+			Types []string `json:"types"`
+		}
+
+		if err := json.Unmarshal(msg.Payload, &payload); err == nil {
+			response := map[string]interface{}{
+				"type": "subscribed",
+				"payload": map[string]interface{}{
+					"types": payload.Types,
+				},
+			}
+
+			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := conn.WriteJSON(response); err != nil {
+				log := logger.GetLogger(context.Background())
+				log.Error("Failed to send subscription response",
+					"user_id", userID,
+					"error", err,
+				)
+			}
+		}
+
+	default:
+		log := logger.GetLogger(context.Background())
+		log.Debug("Unknown WebSocket message type",
+			"user_id", userID,
+			"type", msg.Type,
+		)
 	}
+}
+
+func (s *Server) SendNotification(userID string, notification interface{}) error {
+	if s.redisClient == nil {
+		return fmt.Errorf("redis client not configured")
+	}
+
+	data, err := json.Marshal(notification)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	return s.redisClient.Publish(ctx, "notifications", string(data)).Err()
 }

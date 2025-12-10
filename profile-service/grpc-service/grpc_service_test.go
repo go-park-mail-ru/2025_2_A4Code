@@ -28,6 +28,22 @@ type MockAvatarUsecase struct {
 	mock.Mock
 }
 
+func (m *MockProfileUsecase) FindByID(ctx context.Context, id int64) (*domain.Profile, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Profile), args.Error(1)
+}
+
+func (m *MockProfileUsecase) FindByUsernameAndDomain(ctx context.Context, username string, email_domain string) (*domain.Profile, error) {
+	args := m.Called(ctx, username, email_domain)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Profile), args.Error(1)
+}
+
 func (m *MockProfileUsecase) FindInfoByID(ctx context.Context, id int64) (domain.ProfileInfo, error) {
 	args := m.Called(ctx, id)
 	return args.Get(0).(domain.ProfileInfo), args.Error(1)
@@ -130,18 +146,16 @@ func TestServer_GetProfile(t *testing.T) {
 			expectedError: false,
 		},
 		{
-			name: "Unauthorized_NoMetadata",
-			ctx:  createTestContextWithoutAuth(),
-			mockSetup: func() {
-			},
+			name:          "Unauthorized_NoMetadata",
+			ctx:           createTestContextWithoutAuth(),
+			mockSetup:     func() {},
 			expectedError: true,
 			expectedCode:  codes.Unauthenticated,
 		},
 		{
-			name: "Unauthorized_InvalidToken",
-			ctx:  createTestContextWithInvalidToken(),
-			mockSetup: func() {
-			},
+			name:          "Unauthorized_InvalidToken",
+			ctx:           createTestContextWithInvalidToken(),
+			mockSetup:     func() {},
 			expectedError: true,
 			expectedCode:  codes.Unauthenticated,
 		},
@@ -381,7 +395,7 @@ func TestServer_Settings(t *testing.T) {
 func TestServer_UploadAvatar(t *testing.T) {
 	server, mockProfile, mockAvatar := setupTestServer()
 
-	smallAvatarData := make([]byte, 1024) // 1KB
+	smallAvatarData := make([]byte, 1024)
 	largeAvatarData := make([]byte, maxAvatarSize+1)
 
 	tests := []struct {
@@ -882,6 +896,171 @@ func TestServer_getProfileID_EdgeCases(t *testing.T) {
 
 			assert.Error(t, err)
 			assert.Equal(t, int64(0), profileID)
+		})
+	}
+}
+
+func TestServer_FindByID(t *testing.T) {
+	server, mockProfile, _ := setupTestServer()
+
+	tests := []struct {
+		name          string
+		ctx           context.Context
+		request       *pb.FindByIDRequest
+		mockSetup     func()
+		expectedError bool
+		expectedCode  codes.Code
+	}{
+		{
+			name:    "Success",
+			ctx:     context.Background(),
+			request: &pb.FindByIDRequest{ProfileId: 1},
+			mockSetup: func() {
+				mockProfile.On("FindByID", mock.Anything, int64(1)).Return(&domain.Profile{
+					ID:        1,
+					Username:  "testuser",
+					CreatedAt: time.Now(),
+					Name:      "John",
+					Surname:   "Doe",
+					Gender:    "male",
+					Birthday:  time.Date(1990, 1, 1, 0, 0, 0, 0, time.UTC),
+				}, nil)
+			},
+			expectedError: false,
+		},
+		{
+			name:    "ProfileNotFound",
+			ctx:     context.Background(),
+			request: &pb.FindByIDRequest{ProfileId: 999},
+			mockSetup: func() {
+				mockProfile.On("FindByID", mock.Anything, int64(999)).Return((*domain.Profile)(nil), errors.New("not found"))
+			},
+			expectedError: true,
+			expectedCode:  codes.NotFound,
+		},
+		{
+			name:    "InternalError",
+			ctx:     context.Background(),
+			request: &pb.FindByIDRequest{ProfileId: 1},
+			mockSetup: func() {
+				mockProfile.On("FindByID", mock.Anything, int64(1)).Return((*domain.Profile)(nil), errors.New("database error"))
+			},
+			expectedError: true,
+			expectedCode:  codes.Internal,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+
+			resp, err := server.FindByID(tt.ctx, tt.request)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+				if tt.expectedCode != codes.OK {
+					grpcStatus, ok := status.FromError(err)
+					assert.True(t, ok)
+					assert.Equal(t, tt.expectedCode, grpcStatus.Code())
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, resp)
+				assert.NotNil(t, resp.Profile)
+				assert.Equal(t, "1", resp.Profile.Id)
+				assert.Equal(t, "testuser", resp.Profile.Username)
+				assert.Equal(t, "John", resp.Profile.Name)
+				assert.Equal(t, "Doe", resp.Profile.Surname)
+			}
+
+			mockProfile.AssertExpectations(t)
+		})
+	}
+}
+
+func TestServer_FindByUsernameAndDomain(t *testing.T) {
+	server, mockProfile, _ := setupTestServer()
+
+	tests := []struct {
+		name          string
+		ctx           context.Context
+		request       *pb.FindByUsernameAndDomainRequest
+		mockSetup     func()
+		expectedError bool
+		expectedCode  codes.Code
+	}{
+		{
+			name: "Success",
+			ctx:  context.Background(),
+			request: &pb.FindByUsernameAndDomainRequest{
+				Username: "testuser",
+				Domain:   "flintmail.ru",
+			},
+			mockSetup: func() {
+				mockProfile.On("FindByUsernameAndDomain", mock.Anything, "testuser", "flintmail.ru").Return(&domain.Profile{
+					ID:        1,
+					Username:  "testuser",
+					CreatedAt: time.Now(),
+					Name:      "John",
+					Surname:   "Doe",
+					Gender:    "male",
+					Birthday:  time.Date(1990, 1, 1, 0, 0, 0, 0, time.UTC),
+				}, nil)
+			},
+			expectedError: false,
+		},
+		{
+			name: "ProfileNotFound",
+			ctx:  context.Background(),
+			request: &pb.FindByUsernameAndDomainRequest{
+				Username: "nonexistent",
+				Domain:   "flintmail.ru",
+			},
+			mockSetup: func() {
+				mockProfile.On("FindByUsernameAndDomain", mock.Anything, "nonexistent", "flintmail.ru").Return((*domain.Profile)(nil), errors.New("not found"))
+			},
+			expectedError: true,
+			expectedCode:  codes.NotFound,
+		},
+		{
+			name: "InternalError",
+			ctx:  context.Background(),
+			request: &pb.FindByUsernameAndDomainRequest{
+				Username: "testuser",
+				Domain:   "flintmail.ru",
+			},
+			mockSetup: func() {
+				mockProfile.On("FindByUsernameAndDomain", mock.Anything, "testuser", "flintmail.ru").Return((*domain.Profile)(nil), errors.New("database error"))
+			},
+			expectedError: true,
+			expectedCode:  codes.Internal,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+
+			resp, err := server.FindByUsernameAndDomain(tt.ctx, tt.request)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+				if tt.expectedCode != codes.OK {
+					grpcStatus, ok := status.FromError(err)
+					assert.True(t, ok)
+					assert.Equal(t, tt.expectedCode, grpcStatus.Code())
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, resp)
+				assert.NotNil(t, resp.Profile)
+				assert.Equal(t, "1", resp.Profile.Id)
+				assert.Equal(t, "testuser", resp.Profile.Username)
+				assert.Equal(t, "John", resp.Profile.Name)
+				assert.Equal(t, "Doe", resp.Profile.Surname)
+			}
+
+			mockProfile.AssertExpectations(t)
 		})
 	}
 }

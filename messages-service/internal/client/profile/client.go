@@ -3,6 +3,7 @@ package profileclient
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,7 +55,13 @@ func (c *ProfileClient) GetUserIDByEmail(ctx context.Context, email string) (int
 		return 0, err
 	}
 
-	return resp.ProfileId, nil
+	id, err := strconv.ParseInt(resp.Profile.Id, 10, 64)
+	if err != nil {
+		slog.Error("Failed to parse profile ID", "id", resp.Profile.Id, "error", err)
+		return 0, err
+	}
+
+	return id, nil
 }
 
 func (c *ProfileClient) GetUserEmailByID(ctx context.Context, userID int64) (string, error) {
@@ -66,7 +73,7 @@ func (c *ProfileClient) GetUserEmailByID(ctx context.Context, userID int64) (str
 		return "", err
 	}
 
-	return resp.Username + "@" + resp.Domain, nil
+	return resp.Profile.Username + "@" + "flintmail.ru", nil
 }
 
 func (c *ProfileClient) Close() error {

@@ -188,6 +188,29 @@ func (s *Server) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutR
 	return &pb.LogoutResponse{}, nil
 }
 
+func (s *Server) ValidateToken(ctx context.Context, req *pb.ValidateTokenRequest) (*pb.ValidateTokenResponse, error) {
+	const op = "authservice.ValidateToken"
+	log := logger.GetLogger(ctx)
+	log.Debug("handle /auth/validate-token")
+
+	if req.Token == "" {
+		return nil, status.Error(codes.InvalidArgument, "token is required")
+	}
+
+	userID, err := session.GetProfileIDFromTokenString(req.Token, s.JWTSecret, "access")
+	if err != nil {
+		log.Debug(op+": invalid token", slog.String("error", err.Error()))
+		return &pb.ValidateTokenResponse{
+			Valid: false,
+		}, nil
+	}
+
+	return &pb.ValidateTokenResponse{
+		UserId: userID,
+		Valid:  true,
+	}, nil
+}
+
 func (s *Server) generateAccessToken(userID int64) (string, error) {
 	start := time.Now()
 

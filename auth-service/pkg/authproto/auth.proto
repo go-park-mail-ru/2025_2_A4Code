@@ -14,6 +14,8 @@ service AuthService {
   rpc Refresh(RefreshRequest) returns (RefreshResponse);
 
   rpc Logout(LogoutRequest) returns (LogoutResponse);
+
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
 }
 
 message LoginRequest {
@@ -46,3 +48,12 @@ message RefreshResponse {
 
 message LogoutRequest {}
 message LogoutResponse {}
+
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+message ValidateTokenResponse {
+  int64 user_id = 1;
+  bool valid = 2;
+}

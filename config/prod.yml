@@ -18,6 +18,11 @@ db:
   password: postgresql
   name: a4code_db
   sslmode: "disable"
+redis:
+  host: 127.0.0.1 
+  port: 8019        
+  password: rediska         
+  db: 0 
 minio:
   host: 127.0.0.1
   port: 8005
