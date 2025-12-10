@@ -12,8 +12,7 @@ app:
 db:
   host: 127.0.0.1
   port: 8004
-  user: postgres
-  password: postgresql
+  user: flintmail_app
   name: a4code_db
   sslmode: "disable"
 minio:

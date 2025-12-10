@@ -74,6 +74,17 @@ func GetConfig() (Config, error) {
 		return Config{}, e.Wrap("Can not parse config file: ", err)
 	}
 
+	var dbPassword string
+    if dbPassword = os.Getenv("DB_PASSWORD"); dbPassword == "" {
+        dbPassword = os.Getenv("APP_DB_PASSWORD")
+    }
+    
+    if dbPassword != "" {
+        yamlStruct.DB.Password = dbPassword
+    } else {
+        slog.Warn("No database password found in environment variables")
+    }
+
 	return Config{
 		AppConfig:   &yamlStruct.App,
 		DBConfig:    &yamlStruct.DB,

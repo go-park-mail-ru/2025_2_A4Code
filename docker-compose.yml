@@ -7,10 +7,23 @@ services:
       POSTGRES_PASSWORD: postgresql
       POSTGRES_DB: a4code_db
       POSTGRES_HOST_AUTH_METHOD: md5
+      POSTGRES_MAX_CONNECTIONS: "80"
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
     ports:
-      - "8004:5432"
+      - "127.0.0.1:8004:5432"
+    command: 
+      - "postgres"
+      - "-c"
+      - "config_file=/etc/postgresql/postgresql.conf"
+      - "-c"
+      - "hba_file=/etc/postgresql/pg_hba.conf"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./config/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./db/create_service_user.sql:/docker-entrypoint-initdb.d/01_create_service_user.sql:ro
+      - ./db/pg_stat_statements.sql:/docker-entrypoint-initdb.d/02_pg_stat_statements.sql:ro 
+      - ./db/postgres-logs:/var/log/postgresql
 
   minio:
     image: minio/minio
@@ -57,11 +70,12 @@ services:
     ports:
       - "8010:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
     depends_on:
       - node-exporter
+      - postgres-exporter
 
   grafana:
     image: grafana/grafana:latest
@@ -99,8 +113,13 @@ services:
     container_name: a4-auth
     environment:
       CONFIG_PATH: config/docker.yml
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: flintmail_app
+      DB_PASSWORD: ${APP_DB_PASSWORD}
     volumes:
       - ./db:/app/db:ro
+      - ./config:/app/config:ro
     ports:
       - "8001:8001"
       - "8013:8013"
@@ -114,8 +133,13 @@ services:
     container_name: a4-messages
     environment:
       CONFIG_PATH: config/docker.yml
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: flintmail_app
+      DB_PASSWORD: ${APP_DB_PASSWORD}
     volumes:
       - ./db:/app/db:ro
+      - ./config:/app/config:ro
     ports:
       - "8002:8002"
       - "8014:8014"
@@ -129,8 +153,13 @@ services:
     container_name: a4-profile
     environment:
       CONFIG_PATH: config/docker.yml
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: flintmail_app
+      DB_PASSWORD: ${APP_DB_PASSWORD}
     volumes:
       - ./db:/app/db:ro
+      - ./config:/app/config:ro
     ports:
       - "8003:8003"
       - "8015:8015"
@@ -147,6 +176,7 @@ services:
       CONFIG_PATH: config/docker-gateway.yml
     volumes:
       - ./db:/app/db:ro
+      - ./config:/app/config:ro
     ports:
       - "8000:8000"
       - "8012:8012"
@@ -156,6 +186,34 @@ services:
       - auth
       - messages
       - profile
+
+pgbadger:
+    image: darold/pgbadger:latest
+    container_name: a4-pgbadger
+    volumes:
+      - ./db/postgres-logs:/logs:ro
+      - ./db/pgbadger-reports:/reports
+    command: >
+      sh -c "
+      echo 'Ожидаю логи PostgreSQL...'
+      sleep 10
+      pgbadger /logs/*.log -o /reports/report.html
+      echo 'Отчет PGBadger сгенерирован: /reports/report.html'
+      tail -f /dev/null
+      "
+    depends_on:
+      - postgres 
+
+postgres-exporter:
+    image: prometheuscommunity/postgres-exporter
+    container_name: a4-postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgresql@postgres:5432/a4code_db?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      - postgres
+    restart: unless-stopped           
 
 volumes:
   pgdata:
