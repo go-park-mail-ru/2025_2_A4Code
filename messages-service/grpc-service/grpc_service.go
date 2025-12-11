@@ -8,8 +8,11 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"net"
 	"net/mail"
+	"net/smtp"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -32,6 +35,8 @@ type Server struct {
 	messageUCase MessageUsecase
 	avatarUCase  AvatarUsecase
 	JWTSecret    []byte
+	smtpAddr     string
+	localDomain  string
 }
 
 type MessageUsecase interface {
@@ -57,6 +62,7 @@ type MessageUsecase interface {
 	DeleteDraft(ctx context.Context, draftID, profileID int64) error
 	SendDraft(ctx context.Context, draftID, profileID int64) error
 	GetDraft(ctx context.Context, draftID, profileID int64) (domain.FullMessage, error)
+	SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error)
 
 	// методы для папок
 	MoveToFolder(ctx context.Context, profileID, messageID, folderID int64) error
@@ -98,6 +104,8 @@ func New(messageUCase MessageUsecase, avatarUCase AvatarUsecase, secret []byte) 
 		messageUCase: messageUCase,
 		avatarUCase:  avatarUCase,
 		JWTSecret:    secret,
+		smtpAddr:     smtpAddrFromEnv(),
+		localDomain:  localDomainFromEnv(),
 	}
 }
 
@@ -226,29 +234,45 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 
 	var messageID int64
 	for _, receiver := range req.Receivers {
-		msgID, err := s.messageUCase.ReplyToMessage(ctx, receiver.Email, profileID, threadRoot, safeTopic, safeText)
-		if err != nil {
-			log.Error(op + ": failed to reply to message: " + err.Error())
-			metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
-			return nil, status.Error(codes.Internal, "could not reply to message")
-		}
-
-		metrics.MessagesSentTotal.WithLabelValues("reply").Inc()
-
-		for _, file := range req.Files {
-			size, _ := strconv.ParseInt(file.Size, 10, 64)
-			_, err = s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size)
+		email := strings.TrimSpace(receiver.Email)
+		if s.isLocalDomain(email) {
+			msgID, err := s.messageUCase.ReplyToMessage(ctx, email, profileID, threadRoot, safeTopic, safeText)
 			if err != nil {
-				log.Error(op + ": failed to save file: " + err.Error())
+				log.Error(op + ": failed to reply to message: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not save file")
+				return nil, status.Error(codes.Internal, "could not reply to message")
 			}
 
-			metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
-			metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
-		}
+			for _, file := range req.Files {
+				size, _ := strconv.ParseInt(file.Size, 10, 64)
+				_, err = s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size)
+				if err != nil {
+					log.Error(op + ": failed to save file: " + err.Error())
+					metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
+					return nil, status.Error(codes.Internal, "could not save file")
+				}
 
-		messageID = msgID
+				metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
+				metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
+			}
+
+			metrics.MessagesSentTotal.WithLabelValues("reply").Inc()
+			messageID = msgID
+		} else {
+			if err := s.sendExternalMail(email, safeTopic, safeText); err != nil {
+				log.Error(op + ": failed to send external reply: " + err.Error())
+				metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
+				return nil, status.Error(codes.Internal, "could not send external reply")
+			}
+			msgID, err := s.messageUCase.SaveOutgoingExternalMessage(ctx, profileID, safeTopic, safeText)
+			if err != nil {
+				log.Error(op + ": failed to save external outgoing reply: " + err.Error())
+				metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
+				return nil, status.Error(codes.Internal, "could not save external reply")
+			}
+			metrics.MessagesSentTotal.WithLabelValues("reply_external").Inc()
+			messageID = msgID
+		}
 	}
 
 	metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "ok").Inc()
@@ -282,44 +306,61 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 
 	var messageID int64
 	for _, receiver := range req.Receivers {
-		msgID, err := s.messageUCase.SendMessage(ctx, receiver.Email, profileID, safeTopic, safeText)
-		if err != nil {
-			log.Error(op + ": failed to send message: " + err.Error())
-			metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-			return nil, status.Error(codes.Internal, "could not send message")
-		}
-
-		metrics.MessagesSentTotal.WithLabelValues("send").Inc()
-
-		if messageID == 0 {
-			threadID, err := s.messageUCase.SaveThread(ctx, msgID)
+		email := strings.TrimSpace(receiver.Email)
+		if s.isLocalDomain(email) {
+			msgID, err := s.messageUCase.SendMessage(ctx, email, profileID, safeTopic, safeText)
 			if err != nil {
-				log.Error(op + ": failed to save thread: " + err.Error())
+				log.Error(op + ": failed to send message: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not save thread")
+				return nil, status.Error(codes.Internal, "could not send message")
 			}
 
-			if err := s.messageUCase.SaveThreadIdToMessage(ctx, msgID, threadID); err != nil {
-				log.Error(op + ": failed to save thread id: " + err.Error())
-				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not save thread id")
-			}
-		}
+			if messageID == 0 {
+				threadID, err := s.messageUCase.SaveThread(ctx, msgID)
+				if err != nil {
+					log.Error(op + ": failed to save thread: " + err.Error())
+					metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
+					return nil, status.Error(codes.Internal, "could not save thread")
+				}
 
-		for _, file := range req.Files {
-			size, _ := strconv.ParseInt(file.Size, 10, 64)
-			_, err = s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size)
+				if err := s.messageUCase.SaveThreadIdToMessage(ctx, msgID, threadID); err != nil {
+					log.Error(op + ": failed to save thread id: " + err.Error())
+					metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
+					return nil, status.Error(codes.Internal, "could not save thread id")
+				}
+			}
+
+			for _, file := range req.Files {
+				size, _ := strconv.ParseInt(file.Size, 10, 64)
+				_, err = s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size)
+				if err != nil {
+					log.Error(op + ": failed to save file: " + err.Error())
+					metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
+					return nil, status.Error(codes.Internal, "could not save file")
+				}
+
+				metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
+				metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
+			}
+
+			metrics.MessagesSentTotal.WithLabelValues("send").Inc()
+			messageID = msgID
+		} else {
+			if err := s.sendExternalMail(email, safeTopic, safeText); err != nil {
+				log.Error(op + ": failed to send external message: " + err.Error())
+				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
+				return nil, status.Error(codes.Internal, "could not send external message")
+			}
+
+			msgID, err := s.messageUCase.SaveOutgoingExternalMessage(ctx, profileID, safeTopic, safeText)
 			if err != nil {
-				log.Error(op + ": failed to save file: " + err.Error())
+				log.Error(op + ": failed to save external outgoing message: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not save file")
+				return nil, status.Error(codes.Internal, "could not save external message")
 			}
-
-			metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
-			metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
+			metrics.MessagesSentTotal.WithLabelValues("send_external").Inc()
+			messageID = msgID
 		}
-
-		messageID = msgID
 	}
 
 	metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "ok").Inc()
@@ -1126,4 +1167,33 @@ func (s *Server) SendDraft(ctx context.Context, req *pb.SendDraftRequest) (*pb.S
 		Success:   true,
 		MessageId: req.DraftId,
 	}, nil
+}
+
+func localDomainFromEnv() string {
+	if v := strings.TrimSpace(os.Getenv("LOCAL_DOMAIN")); v != "" {
+		return v
+	}
+	return "flintmail.ru"
+}
+
+func smtpAddrFromEnv() string {
+	if v := strings.TrimSpace(os.Getenv("SMTP_ADDR")); v != "" {
+		return v
+	}
+	return "exim:25"
+}
+
+func (s *Server) isLocalDomain(email string) bool {
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(parts[1]), s.localDomain)
+}
+
+func (s *Server) sendExternalMail(to, subject, body string) error {
+	from := fmt.Sprintf("no-reply@%s", s.localDomain)
+	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s", from, to, subject, body)
+
+	return smtp.SendMail(s.smtpAddr, nil, from, []string{to}, []byte(msg))
 }

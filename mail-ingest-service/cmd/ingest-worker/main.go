@@ -4,9 +4,13 @@ import (
 	"bufio"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
+	"mime/multipart"
+	"mime/quotedprintable"
 	"net/mail"
 	"os"
 	"strings"
@@ -160,11 +164,7 @@ func handleMessage(ctx context.Context, cfg config, minioClient *minio.Client, m
 	if subject == "" {
 		subject = m.Subject
 	}
-	bodyBytes, err := io.ReadAll(bufio.NewReader(parsed.Body))
-	if err != nil {
-		bodyBytes = []byte{}
-	}
-	body := strings.TrimSpace(string(bodyBytes))
+	body := extractBody(parsed, log)
 
 	fromHdr := parsed.Header.Get("From")
 	addr, err := mail.ParseAddress(fromHdr)
@@ -228,4 +228,75 @@ func downloadRaw(ctx context.Context, client *minio.Client, bucket, path string)
 		return "", err
 	}
 	return string(data), nil
+}
+
+// extractBody tries to return text/plain part, or text/html as fallback, decoding transfer encodings.
+func extractBody(msg *mail.Message, log *slog.Logger) string {
+	ctHeader := msg.Header.Get("Content-Type")
+	mediaType, params, err := mime.ParseMediaType(ctHeader)
+	if err == nil && strings.HasPrefix(mediaType, "multipart/") {
+		boundary := params["boundary"]
+		mr := multipart.NewReader(msg.Body, boundary)
+		var plain, html string
+		for {
+			part, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Warn("failed to read multipart", "err", err)
+				break
+			}
+			pt := part.Header.Get("Content-Type")
+			body := decodePartBody(part)
+			if strings.HasPrefix(strings.ToLower(pt), "text/plain") && plain == "" {
+				plain = body
+			}
+			if strings.HasPrefix(strings.ToLower(pt), "text/html") && html == "" {
+				html = body
+			}
+		}
+		if strings.TrimSpace(plain) != "" {
+			return strings.TrimSpace(plain)
+		}
+		if strings.TrimSpace(html) != "" {
+			return strings.TrimSpace(html)
+		}
+	}
+
+	// singlepart
+	body := decodeSingleBody(msg.Body, msg.Header.Get("Content-Transfer-Encoding"))
+	return strings.TrimSpace(body)
+}
+
+func decodeSingleBody(r io.Reader, cte string) string {
+	cte = strings.ToLower(strings.TrimSpace(cte))
+	var reader io.Reader = r
+	switch cte {
+	case "quoted-printable":
+		reader = quotedprintable.NewReader(r)
+	case "base64":
+		reader = base64.NewDecoder(base64.StdEncoding, r)
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+func decodePartBody(part *multipart.Part) string {
+	cte := strings.ToLower(strings.TrimSpace(part.Header.Get("Content-Transfer-Encoding")))
+	var reader io.Reader = part
+	switch cte {
+	case "quoted-printable":
+		reader = quotedprintable.NewReader(part)
+	case "base64":
+		reader = base64.NewDecoder(base64.StdEncoding, part)
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }

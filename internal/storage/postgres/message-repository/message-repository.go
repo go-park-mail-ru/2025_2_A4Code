@@ -38,6 +38,73 @@ func (repo *MessageRepository) EnsureBaseProfile(ctx context.Context, username, 
 	return id, nil
 }
 
+// SaveOutgoingExternalMessage stores a message from senderProfileID into sender's sent folder without resolving receiver.
+func (repo *MessageRepository) SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error) {
+	const op = "storage.postgresql.message.SaveOutgoingExternalMessage"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to begin transaction: ", err)
+	}
+	defer tx.Rollback()
+
+	var senderBaseProfileID int64
+	log.Debug("Getting sender base profile ID for external outgoing...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT base_profile_id FROM profile WHERE id = $1`,
+		senderProfileID).Scan(&senderBaseProfileID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to get sender base profile id: ", err)
+	}
+
+	var messageID int64
+	log.Debug("Inserting outgoing external message...")
+	err = tx.QueryRowContext(ctx, `
+        INSERT INTO message (topic, text, date_of_dispatch, sender_base_profile_id)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id`,
+		topic, text, time.Now(), senderBaseProfileID).Scan(&messageID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert message: ", err)
+	}
+
+	var sentFolderID int64
+	log.Debug("Getting sender sent folder ID...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT id FROM folder 
+        WHERE profile_id = $1 AND folder_type = 'sent'`,
+		senderProfileID).Scan(&sentFolderID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to get sent folder: ", err)
+	}
+
+	log.Debug("Linking message to sent folder...")
+	_, err = tx.ExecContext(ctx, `
+        INSERT INTO folder_profile_message (message_id, folder_id)
+        VALUES ($1, $2)`,
+		messageID, sentFolderID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to link to sent folder: ", err)
+	}
+
+	log.Debug("Creating profile_message bond for sender...")
+	_, err = tx.ExecContext(ctx, `
+        INSERT INTO profile_message (profile_id, message_id, read_status)
+        VALUES ($1, $2, false)
+        ON CONFLICT (profile_id, message_id) DO NOTHING`,
+		senderProfileID, messageID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert profile_message for sender: ", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, e.Wrap(op+": failed to commit transaction: ", err)
+	}
+
+	return messageID, nil
+}
+
 func New(db *sql.DB) *MessageRepository {
 	return &MessageRepository{db: db}
 }
