@@ -217,8 +217,8 @@ services:
       dockerfile: Dockerfile
     container_name: a4-exim
     volumes:
-      - /etc/letsencrypt/archive/flintmail.ru/fullchain1.pem:/etc/exim4/fullchain.pem:ro
-      - /etc/letsencrypt/archive/flintmail.ru/privkey1.pem:/etc/exim4/privkey.pem:ro
+      - /etc/letsencrypt/archive/flintmail.ru-0001/fullchain2.pem:/etc/exim4/fullchain.pem:ro
+      - /etc/letsencrypt/archive/flintmail.ru-0001/privkey2.pem:/etc/exim4/privkey.pem:ro
       - ~/.dkim_private.key:/etc/exim4/dkim_private.key:ro
     ports:
       - "25:25"
