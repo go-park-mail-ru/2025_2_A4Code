@@ -2,7 +2,6 @@ FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# use Yandex mirror
 RUN echo "deb http://mirror.yandex.ru/debian bookworm main" > /etc/apt/sources.list && \
     echo "deb http://mirror.yandex.ru/debian bookworm-updates main" >> /etc/apt/sources.list && \
     echo "deb http://mirror.yandex.ru/debian-security bookworm-security main" >> /etc/apt/sources.list
