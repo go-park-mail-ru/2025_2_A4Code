@@ -212,12 +212,13 @@ services:
       - postgres
       - minio
   exim:
-    image: instantlinux/exim:latest
+    build:
+      context: ./deploy/exim
+      dockerfile: Dockerfile
     container_name: a4-exim
     volumes:
-      - ./deploy/exim/exim.conf:/etc/exim/exim.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
-      - ~/.dkim_private.key:/etc/exim/dkim_private.key:ro
+      - ~/.dkim_private.key:/etc/exim4/dkim_private.key:ro
     ports:
       - "25:25"
     depends_on:
