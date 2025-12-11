@@ -114,6 +114,9 @@ services:
     container_name: a4-messages
     environment:
       CONFIG_PATH: config/docker.yml
+      SMTP_ADDR: exim:25
+      SMTP_SKIP_TLS: "1"
+      LOCAL_DOMAIN: flintmail.ru
     volumes:
       - ./db:/app/db:ro
     ports:
