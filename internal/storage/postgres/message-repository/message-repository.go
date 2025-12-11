@@ -6,8 +6,8 @@ import (
 	e "2025_2_a4code/internal/lib/wrapper"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
-	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -42,7 +42,6 @@ func (repo *MessageRepository) EnsureBaseProfile(ctx context.Context, username, 
 // Used for external senders to display their name.
 func (repo *MessageRepository) EnsureProfileForBase(ctx context.Context, baseProfileID int64, displayName string) error {
 	const op = "storage.postgresql.message.EnsureProfileForBase"
-	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
 	var existingName sql.NullString
 	err := repo.db.QueryRowContext(ctx, `SELECT name FROM profile WHERE base_profile_id = $1`, baseProfileID).Scan(&existingName)
