@@ -17,6 +17,27 @@ type MessageRepository struct {
 	db *sql.DB
 }
 
+// EnsureBaseProfile returns id of base_profile, creating it if needed by username+domain.
+func (repo *MessageRepository) EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error) {
+	const op = "storage.postgresql.message.EnsureBaseProfile"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+		INSERT INTO base_profile (username, domain)
+		VALUES ($1, $2)
+		ON CONFLICT (username, domain) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+		RETURNING id`
+
+	var id int64
+	log.Debug("Ensuring base profile for external sender...")
+	err := repo.db.QueryRowContext(ctx, query, username, domain).Scan(&id)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to ensure base_profile: ", err)
+	}
+
+	return id, nil
+}
+
 func New(db *sql.DB) *MessageRepository {
 	return &MessageRepository{db: db}
 }

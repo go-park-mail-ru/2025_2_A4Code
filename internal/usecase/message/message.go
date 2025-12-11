@@ -11,6 +11,7 @@ type MessageRepository interface {
 	FindByMessageID(ctx context.Context, messageID int64) (*domain.Message, error)
 	FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
 	SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
+	EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error)
 	SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
 
 	// методы для тредов
@@ -66,6 +67,10 @@ func (uc *MessageUcase) FindFullByMessageID(ctx context.Context, messageID int64
 
 func (uc *MessageUcase) SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (messageID int64, err error) {
 	return uc.repo.SaveMessage(ctx, receiverProfileEmail, senderBaseProfileID, topic, text)
+}
+
+func (uc *MessageUcase) EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error) {
+	return uc.repo.EnsureBaseProfile(ctx, username, domain)
 }
 
 func (uc *MessageUcase) SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error) {
