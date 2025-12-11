@@ -38,6 +38,26 @@ func (repo *MessageRepository) EnsureBaseProfile(ctx context.Context, username, 
 	return id, nil
 }
 
+// GetProfileEmail returns email (username@domain) for given profile id.
+func (repo *MessageRepository) GetProfileEmail(ctx context.Context, profileID int64) (string, error) {
+	const op = "storage.postgresql.message.GetProfileEmail"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+        SELECT bp.username, bp.domain
+        FROM profile p
+        JOIN base_profile bp ON p.base_profile_id = bp.id
+        WHERE p.id = $1`
+
+	var username, domain string
+	log.Debug("Fetching profile email by profile id...")
+	if err := repo.db.QueryRowContext(ctx, query, profileID).Scan(&username, &domain); err != nil {
+		return "", e.Wrap(op+": failed to fetch profile email: ", err)
+	}
+
+	return fmt.Sprintf("%s@%s", username, domain), nil
+}
+
 // SaveOutgoingExternalMessage stores a message from senderProfileID into sender's sent folder without resolving receiver.
 func (repo *MessageRepository) SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error) {
 	const op = "storage.postgresql.message.SaveOutgoingExternalMessage"

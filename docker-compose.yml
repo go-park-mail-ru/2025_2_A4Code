@@ -215,6 +215,9 @@ services:
     build:
       context: ./deploy/exim
     container_name: a4-exim
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ~/.dkim_private.key:/etc/exim4/dkim_private.key:ro
     ports:
       - "25:25"
     depends_on:

@@ -65,6 +65,7 @@ type MessageUsecase interface {
 	SendDraft(ctx context.Context, draftID, profileID int64) error
 	GetDraft(ctx context.Context, draftID, profileID int64) (domain.FullMessage, error)
 	SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error)
+	GetProfileEmail(ctx context.Context, profileID int64) (string, error)
 
 	// методы для папок
 	MoveToFolder(ctx context.Context, profileID, messageID, folderID int64) error
@@ -236,6 +237,13 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 	safeTopic, safeText := sanitizeContent(req.Topic, req.Text)
 
 	var messageID int64
+	senderEmail, err := s.messageUCase.GetProfileEmail(ctx, profileID)
+	if err != nil {
+		log.Error(op + ": failed to resolve sender email: " + err.Error())
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
+		return nil, status.Error(codes.Internal, "could not resolve sender")
+	}
+
 	for _, receiver := range req.Receivers {
 		email := strings.TrimSpace(receiver.Email)
 		if s.isLocalDomain(email) {
@@ -262,7 +270,7 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 			metrics.MessagesSentTotal.WithLabelValues("reply").Inc()
 			messageID = msgID
 		} else {
-			if err := s.sendExternalMail(email, safeTopic, safeText); err != nil {
+			if err := s.sendExternalMail(senderEmail, email, safeTopic, safeText); err != nil {
 				log.Error(op + ": failed to send external reply: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
 				return nil, status.Error(codes.Internal, "could not send external reply")
@@ -308,6 +316,13 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	safeTopic, safeText := sanitizeContent(req.Topic, req.Text)
 
 	var messageID int64
+	senderEmail, err := s.messageUCase.GetProfileEmail(ctx, profileID)
+	if err != nil {
+		log.Error(op + ": failed to resolve sender email: " + err.Error())
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
+		return nil, status.Error(codes.Internal, "could not resolve sender")
+	}
+
 	for _, receiver := range req.Receivers {
 		email := strings.TrimSpace(receiver.Email)
 		if s.isLocalDomain(email) {
@@ -349,7 +364,7 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 			metrics.MessagesSentTotal.WithLabelValues("send").Inc()
 			messageID = msgID
 		} else {
-			if err := s.sendExternalMail(email, safeTopic, safeText); err != nil {
+			if err := s.sendExternalMail(senderEmail, email, safeTopic, safeText); err != nil {
 				log.Error(op + ": failed to send external message: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
 				return nil, status.Error(codes.Internal, "could not send external message")
@@ -1199,9 +1214,11 @@ func (s *Server) isLocalDomain(email string) bool {
 	return strings.EqualFold(strings.TrimSpace(parts[1]), s.localDomain)
 }
 
-func (s *Server) sendExternalMail(to, subject, body string) error {
-	from := fmt.Sprintf("no-reply@%s", s.localDomain)
-	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s", from, to, subject, body)
+func (s *Server) sendExternalMail(from, to, subject, body string) error {
+	if strings.TrimSpace(from) == "" {
+		from = fmt.Sprintf("no-reply@%s", s.localDomain)
+	}
+	msg := fmt.Sprintf("From: %s\r\nReply-To: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s", from, from, to, subject, body)
 
 	host, _, err := net.SplitHostPort(s.smtpAddr)
 	if err != nil {

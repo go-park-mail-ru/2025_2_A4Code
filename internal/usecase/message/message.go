@@ -11,6 +11,7 @@ type MessageRepository interface {
 	FindByMessageID(ctx context.Context, messageID int64) (*domain.Message, error)
 	FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
 	SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
+	GetProfileEmail(ctx context.Context, profileID int64) (string, error)
 	EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error)
 	SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
 
@@ -123,6 +124,10 @@ func (uc *MessageUcase) GetDraft(ctx context.Context, draftID, profileID int64) 
 
 func (uc *MessageUcase) SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error) {
 	return uc.repo.SaveOutgoingExternalMessage(ctx, senderProfileID, topic, text)
+}
+
+func (uc *MessageUcase) GetProfileEmail(ctx context.Context, profileID int64) (string, error) {
+	return uc.repo.GetProfileEmail(ctx, profileID)
 }
 
 // методы для папок
