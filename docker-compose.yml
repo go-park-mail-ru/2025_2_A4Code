@@ -217,13 +217,14 @@ services:
       dockerfile: Dockerfile
     container_name: a4-exim
     volumes:
-      - /etc/letsencrypt/archive/flintmail.ru-0001/fullchain2.pem:/etc/exim4/fullchain.pem:ro
-      - /etc/letsencrypt/archive/flintmail.ru-0001/privkey2.pem:/etc/exim4/privkey.pem:ro
+      - /etc/letsencrypt/archive/flintmail.ru-0001/fullchain2.pem:/etc/exim4/fullchain.pem
+      - /etc/letsencrypt/archive/flintmail.ru-0001/privkey2.pem:/etc/exim4/privkey.pem
       - ~/.dkim_private.key:/etc/exim4/dkim_private.key:ro
     ports:
       - "25:25"
     depends_on:
       - mail-ingest
+    command: ["sh", "-c", "chmod 644 /etc/exim4/fullchain.pem /etc/exim4/privkey.pem && exec exim -bdf -q30m"]
 
 volumes:
   pgdata:
