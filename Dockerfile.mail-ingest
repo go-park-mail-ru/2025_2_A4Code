@@ -5,7 +5,9 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build go mod download
 COPY . .
 
-RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /app/bin && CGO_ENABLED=0 GOOS=linux go build -o /app/bin/mail-ingest-service ./mail-ingest-service/cmd
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /app/bin && \
+    CGO_ENABLED=0 GOOS=linux go build -o /app/bin/mail-ingest-service ./mail-ingest-service/cmd && \
+    CGO_ENABLED=0 GOOS=linux go build -o /app/bin/mail-ingest-worker ./mail-ingest-service/cmd/ingest-worker
 
 FROM alpine:latest
 RUN echo "http://mirror.yandex.ru/mirrors/alpine/latest-stable/main" > /etc/apk/repositories && \
@@ -16,6 +18,7 @@ RUN echo "http://mirror.yandex.ru/mirrors/alpine/latest-stable/main" > /etc/apk/
 WORKDIR /app
 
 COPY --from=builder --chown=app:app /app/bin/mail-ingest-service .
+COPY --from=builder --chown=app:app /app/bin/mail-ingest-worker .
 
 USER app
 CMD ["./mail-ingest-service"]

@@ -44,10 +44,11 @@ func envOr(key, def string) string {
 
 func loadConfig() config {
 	return config{
-		MailDBDSN: envOr("MAIL_DB_DSN", "postgres://postgres:postgresql@mail-postgres:5432/maildb?sslmode=disable"),
-		MainDBDSN: envOr("MAIN_DB_DSN", "postgres://postgres:postgresql@postgres:5432/a4code_db?sslmode=disable"),
+		// Локальный запуск по умолчанию смотрит на проброшенные порты docker-compose.
+		MailDBDSN: envOr("MAIL_DB_DSN", "postgres://postgres:postgresql@localhost:8017/maildb?sslmode=disable"),
+		MainDBDSN: envOr("MAIN_DB_DSN", "postgres://postgres:postgresql@localhost:8004/a4code_db?sslmode=disable"),
 		Minio: minioConfig{
-			Endpoint:  envOr("MAIL_MINIO_ENDPOINT", "minio:9000"),
+			Endpoint:  envOr("MAIL_MINIO_ENDPOINT", "localhost:8005"),
 			AccessKey: envOr("MAIL_MINIO_USER", "minio"),
 			SecretKey: envOr("MAIL_MINIO_PASSWORD", "miniominio"),
 			UseSSL:    envOr("MAIL_MINIO_USE_SSL", "") == "true",

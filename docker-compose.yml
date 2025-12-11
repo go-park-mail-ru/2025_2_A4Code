@@ -190,6 +190,24 @@ services:
     ports:
       - "8085:8085"
 
+  ingest-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.mail-ingest
+    container_name: a4-ingest-worker
+    command: ["/app/mail-ingest-worker"]
+    environment:
+      MAIL_DB_DSN: postgres://postgres:postgresql@mail-postgres:5432/maildb?sslmode=disable
+      MAIN_DB_DSN: postgres://postgres:postgresql@postgres:5432/a4code_db?sslmode=disable
+      MAIL_MINIO_ENDPOINT: minio:9000
+      MAIL_MINIO_USER: minio
+      MAIL_MINIO_PASSWORD: miniominio
+      MAIL_MINIO_BUCKET: mail-ingest
+      INGEST_DOMAIN: flintmail.ru
+    depends_on:
+      - mail-postgres
+      - postgres
+      - minio
   exim:
     build:
       context: ./deploy/exim
