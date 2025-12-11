@@ -4,6 +4,7 @@ import (
 	"2025_2_a4code/internal/domain"
 	"2025_2_a4code/internal/lib/metrics"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"html"
@@ -36,6 +37,7 @@ type Server struct {
 	JWTSecret    []byte
 	smtpAddr     string
 	localDomain  string
+	smtpSkipTLS  bool
 }
 
 type MessageUsecase interface {
@@ -105,6 +107,7 @@ func New(messageUCase MessageUsecase, avatarUCase AvatarUsecase, secret []byte) 
 		JWTSecret:    secret,
 		smtpAddr:     smtpAddrFromEnv(),
 		localDomain:  localDomainFromEnv(),
+		smtpSkipTLS:  smtpSkipTLSFromEnv(),
 	}
 }
 
@@ -1182,6 +1185,11 @@ func smtpAddrFromEnv() string {
 	return "exim:25"
 }
 
+func smtpSkipTLSFromEnv() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_SKIP_TLS")))
+	return v == "1" || v == "true" || v == "yes"
+}
+
 func (s *Server) isLocalDomain(email string) bool {
 	parts := strings.Split(email, "@")
 	if len(parts) != 2 {
@@ -1194,5 +1202,42 @@ func (s *Server) sendExternalMail(to, subject, body string) error {
 	from := fmt.Sprintf("no-reply@%s", s.localDomain)
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s", from, to, subject, body)
 
-	return smtp.SendMail(s.smtpAddr, nil, from, []string{to}, []byte(msg))
+	host, _, err := net.SplitHostPort(s.smtpAddr)
+	if err != nil {
+		host = s.smtpAddr
+	}
+
+	c, err := smtp.Dial(s.smtpAddr)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	if !s.smtpSkipTLS {
+		if ok, _ := c.Extension("STARTTLS"); ok {
+			cfg := &tls.Config{ServerName: host, InsecureSkipVerify: s.smtpSkipTLS}
+			if err := c.StartTLS(cfg); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := c.Mail(from); err != nil {
+		return err
+	}
+	if err := c.Rcpt(to); err != nil {
+		return err
+	}
+
+	w, err := c.Data()
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write([]byte(msg)); err != nil {
+		return err
+	}
+	if err := w.Close(); err != nil {
+		return err
+	}
+	return c.Quit()
 }
