@@ -2,11 +2,11 @@ FROM tianon/exim4
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# install exim4-daemon-heavy to get DKIM support
+# install exim4-daemon-heavy to get DKIM support (используем одно зеркало + ретраи)
 RUN set -e; \
-    echo "deb http://deb.debian.org/debian trixie main" > /etc/apt/sources.list && \
-    echo "deb http://deb.debian.org/debian trixie-updates main" >> /etc/apt/sources.list && \
-    echo "deb http://deb.debian.org/debian-security trixie-security main" >> /etc/apt/sources.list && \
+    echo 'deb http://mirror.yandex.ru/debian trixie main' > /etc/apt/sources.list && \
+    echo 'deb http://mirror.yandex.ru/debian trixie-updates main' >> /etc/apt/sources.list && \
+    echo 'Acquire::Retries "5"; Acquire::http::Timeout "20"; Acquire::https::Timeout "20";' > /etc/apt/apt.conf.d/99retries && \
     apt-get update && \
     apt-get install -y --no-install-recommends exim4-daemon-heavy && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
