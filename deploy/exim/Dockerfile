@@ -2,7 +2,8 @@ FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN echo "deb http://mirror.yandex.ru/debian bookworm main" > /etc/apt/sources.list && \
+RUN rm -f /etc/apt/sources.list.d/debian.sources && \
+    echo "deb http://mirror.yandex.ru/debian bookworm main" > /etc/apt/sources.list && \
     echo "deb http://mirror.yandex.ru/debian bookworm-updates main" >> /etc/apt/sources.list && \
     echo "deb http://mirror.yandex.ru/debian-security bookworm-security main" >> /etc/apt/sources.list
 
