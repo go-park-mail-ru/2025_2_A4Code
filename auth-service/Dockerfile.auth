@@ -7,7 +7,8 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build mkdir -p /app/bin && CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/bin/auth-service ./auth-service/cmd
 
 FROM alpine:latest
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.edge.kernel.org/g' /etc/apk/repositories && \
+RUN echo "http://mirror.yandex.ru/mirrors/alpine/latest-stable/main" > /etc/apk/repositories && \
+    echo "http://mirror.yandex.ru/mirrors/alpine/latest-stable/community" >> /etc/apk/repositories && \
     apk update && \
     apk add --no-cache ca-certificates tzdata && \
     addgroup -S app && adduser -S app -G app
