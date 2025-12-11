@@ -219,6 +219,8 @@ services:
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - ~/.dkim_private.key:/etc/exim4/dkim_private.key:ro
+      - ./deploy/exim/fullchain.pem:/etc/exim4/fullchain.pem:ro
+      - ./deploy/exim/privkey.pem:/etc/exim4/privkey.pem:ro
     ports:
       - "25:25"
     depends_on:
