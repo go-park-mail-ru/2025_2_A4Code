@@ -13,6 +13,7 @@ type MessageRepository interface {
 	SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
 	GetProfileEmail(ctx context.Context, profileID int64) (string, error)
 	EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error)
+	EnsureProfileForBase(ctx context.Context, baseProfileID int64, displayName string) error
 	SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
 
 	// методы для тредов
@@ -73,6 +74,10 @@ func (uc *MessageUcase) SaveMessage(ctx context.Context, receiverProfileEmail st
 
 func (uc *MessageUcase) EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error) {
 	return uc.repo.EnsureBaseProfile(ctx, username, domain)
+}
+
+func (uc *MessageUcase) EnsureProfileForBase(ctx context.Context, baseProfileID int64, displayName string) error {
+	return uc.repo.EnsureProfileForBase(ctx, baseProfileID, displayName)
 }
 
 func (uc *MessageUcase) SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error) {

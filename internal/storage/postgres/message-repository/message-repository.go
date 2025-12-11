@@ -38,6 +38,41 @@ func (repo *MessageRepository) EnsureBaseProfile(ctx context.Context, username, 
 	return id, nil
 }
 
+// EnsureProfileForBase creates profile for given base_profile if missing, and fills name if empty.
+// Used for external senders to display their name.
+func (repo *MessageRepository) EnsureProfileForBase(ctx context.Context, baseProfileID int64, displayName string) error {
+	const op = "storage.postgresql.message.EnsureProfileForBase"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	var existingName sql.NullString
+	err := repo.db.QueryRowContext(ctx, `SELECT name FROM profile WHERE base_profile_id = $1`, baseProfileID).Scan(&existingName)
+	switch {
+	case err == nil:
+		// profile exists; optionally update name if empty and we have displayName
+		if strings.TrimSpace(existingName.String) == "" && strings.TrimSpace(displayName) != "" {
+			_, updErr := repo.db.ExecContext(ctx, `
+                UPDATE profile SET name = $1 WHERE base_profile_id = $2`,
+				strings.TrimSpace(displayName), baseProfileID)
+			if updErr != nil {
+				return e.Wrap(op+": failed to update sender name: ", updErr)
+			}
+		}
+		return nil
+	case errors.Is(err, sql.ErrNoRows):
+		// create minimal profile with display name; password_hash is empty for external senders
+		_, insErr := repo.db.ExecContext(ctx, `
+                INSERT INTO profile (base_profile_id, password_hash, name)
+                VALUES ($1, '', $2)`,
+			baseProfileID, strings.TrimSpace(displayName))
+		if insErr != nil {
+			return e.Wrap(op+": failed to insert sender profile: ", insErr)
+		}
+		return nil
+	default:
+		return e.Wrap(op+": failed to fetch sender profile: ", err)
+	}
+}
+
 // GetProfileEmail returns email (username@domain) for given profile id.
 func (repo *MessageRepository) GetProfileEmail(ctx context.Context, profileID int64) (string, error) {
 	const op = "storage.postgresql.message.GetProfileEmail"

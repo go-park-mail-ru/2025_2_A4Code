@@ -159,9 +159,9 @@ func handleMessage(ctx context.Context, cfg config, minioClient *minio.Client, m
 		return fmt.Errorf("parse raw: %w", err)
 	}
 
-	subject := parsed.Header.Get("Subject")
+	subject := decodeHeader(parsed.Header.Get("Subject"))
 	if subject == "" {
-		subject = m.Subject
+		subject = decodeHeader(m.Subject)
 	}
 	body := extractBody(parsed, log)
 
@@ -174,10 +174,14 @@ func handleMessage(ctx context.Context, cfg config, minioClient *minio.Client, m
 		return fmt.Errorf("cannot parse from address")
 	}
 
+	senderDisplayName := strings.TrimSpace(addr.Name)
 	senderLocal, senderDomain := splitEmail(addr.Address)
 	senderBaseID, err := msgUcase.EnsureBaseProfile(ctx, senderLocal, senderDomain)
 	if err != nil {
 		return fmt.Errorf("ensure sender base profile: %w", err)
+	}
+	if err := msgUcase.EnsureProfileForBase(ctx, senderBaseID, senderDisplayName); err != nil {
+		log.Warn("failed to ensure sender profile name", "err", err)
 	}
 
 	rcpts := splitRcpts(m.RcptTo)
@@ -298,4 +302,17 @@ func decodePartBody(part *multipart.Part) string {
 		return ""
 	}
 	return string(data)
+}
+
+// decodeHeader tries to decode MIME encoded-words (e.g. =?UTF-8?B?...?=) and falls back to the raw value.
+func decodeHeader(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return ""
+	}
+	dec := new(mime.WordDecoder)
+	if decoded, err := dec.DecodeHeader(v); err == nil {
+		return decoded
+	}
+	return v
 }

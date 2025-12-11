@@ -154,20 +154,6 @@ func ensureBucket(ctx context.Context, client *minio.Client, bucket string, logg
 	return nil
 }
 
-func ensureSchema(ctx context.Context, db *sql.DB) error {
-	const ddl = `
-	CREATE TABLE IF NOT EXISTS ingest_messages (
-		id BIGSERIAL PRIMARY KEY,				
-		mail_from TEXT,
-		rcpt_to TEXT,
-		subject TEXT,
-		raw_path TEXT NOT NULL,
-		received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-	);`
-	_, err := db.ExecContext(ctx, ddl) // TODO: id to int
-	return err
-}
-
 type messageDTO struct {
 	ID         int64     `json:"id"`
 	From       string    `json:"from"`
@@ -225,13 +211,6 @@ func main() {
 	}
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := ensureSchema(ctx, db); err != nil {
-		log.Error("failed to ensure ingest schema", "err", err)
-		os.Exit(1)
-	}
 
 	minioClient, err := minio.New(cfg.Minio.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.Minio.AccessKey, cfg.Minio.SecretKey, ""),
