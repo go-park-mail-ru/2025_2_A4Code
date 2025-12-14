@@ -100,8 +100,8 @@ type AvatarUsecase interface {
 const (
 	maxTopicLen       = 255
 	maxTextLen        = 10000
-	maxFileSize       = 10 * 1024 * 1024 // 10 MB
-	maxTotalFilesSize = 10 * 1024 * 1024 // 10 MB
+	maxFileSize       = 40 * 1024 * 1024 // 40 MB
+	maxTotalFilesSize = 40 * 1024 * 1024 // 40 MB
 	defaultLimitFiles = 20
 )
 
