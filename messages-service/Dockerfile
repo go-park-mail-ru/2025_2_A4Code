@@ -14,7 +14,7 @@ WORKDIR /app
 
 COPY --from=builder --chown=app:app /app/bin/messages-service .
 COPY --from=builder --chown=app:app /app/config ./config
-COPY --from=builder --chown=app:app /app/.env ./
+COPY --from=builder --chown=app:app /app/db ./db
 
 USER app
 CMD ["./messages-service"]

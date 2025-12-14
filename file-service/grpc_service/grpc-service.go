@@ -48,7 +48,7 @@ func New(fileUsecase FileUsecase, fileMessageUsecase FileMessageUsecase, secret 
 }
 
 func (s *Server) UploadFile(ctx context.Context, req *fb.UploadFileRequest) (*fb.UploadFileResponse, error) {
-	const op = "profileservice.UploadFile"
+	const op = "fileservice.UploadFile"
 	log := logger.GetLogger(ctx)
 	log.Debug("Handling /file/upload")
 
@@ -71,16 +71,20 @@ func (s *Server) UploadFile(ctx context.Context, req *fb.UploadFileRequest) (*fb
 	// Создаем reader из байтов
 	fileReader := bytes.NewReader(req.File.FileData)
 
-	_, presignedURL, err := s.fileUsecase.UploadFileMain(ctx, req.MessageId, fileReader, int64(len(req.File.FileData)), req.File.FileName)
+	log.Debug("Uploading file for message ID: " + req.MessageId)
+	log.Debug("File size: %d bytes", len(req.File.FileData))
+	log.Debug("File name: " + req.File.FileName)
+
+	objectName, presignedURL, err := s.fileUsecase.UploadFileMain(ctx, req.MessageId, fileReader, int64(len(req.File.FileData)), req.File.FileName)
 	if err != nil {
-		log.Error(op + ": failed to upload avatar: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not upload avatar")
+		log.Error(op + ": failed to upload file: " + err.Error())
+		return nil, status.Error(codes.Internal, "could not upload file")
 	}
 
-	err = s.fileMessageUsecase.InsertFile(ctx, req.MessageId, int64(len(req.File.FileData)), filepath.Ext(presignedURL), presignedURL)
+	err = s.fileMessageUsecase.InsertFile(ctx, req.MessageId, int64(len(req.File.FileData)), filepath.Ext(req.File.FileName), objectName)
 	if err != nil {
 		log.Error(op + ": failed to insert file: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not save avatar")
+		return nil, status.Error(codes.Internal, "could not save file")
 	}
 
 	opStatus = "success"
@@ -109,7 +113,10 @@ func (s *Server) DeleteFile(ctx context.Context, req *fb.DeleteFileRequest) (*fb
 		return nil, status.Error(codes.InvalidArgument, "file path is required")
 	}
 
-	err = s.fileUsecase.DeleteFile(ctx, req.FilePath)
+	objectName := extractObjectNameFromPresignedURL(req.FilePath)
+	log.Debug("Extracted object name: " + objectName)
+
+	err = s.fileUsecase.DeleteFile(ctx, objectName)
 	if err != nil {
 		log.Error(op + ": failed to delete file: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not delete file from storage")
@@ -117,6 +124,22 @@ func (s *Server) DeleteFile(ctx context.Context, req *fb.DeleteFileRequest) (*fb
 
 	opStatus = "success"
 	return &fb.DeleteFileResponse{}, nil
+}
+
+func extractObjectNameFromPresignedURL(presignedURL string) string {
+	u, err := url.Parse(presignedURL)
+	if err != nil {return presignedURL}
+
+	
+	path := strings.TrimPrefix(u.Path, "/")
+
+	
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) > 1 {
+		return parts[1] 
+	}
+
+	return path
 }
 
 func (s *Server) getProfileID(ctx context.Context) (int64, error) {

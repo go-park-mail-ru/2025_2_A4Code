@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -37,11 +38,13 @@ func (uc *FileUcase) UploadFileMain(ctx context.Context, messageID string, file 
 	if err != nil {
 		return "", "", e.Wrap(op, err)
 	}
-	cleanMessageID := strings.ReplaceAll(messageID, "\\", "")
+
+	cleanMessageID := sanitizeObjectName(messageID)
+
 	objectName := fmt.Sprintf("file/%s/%s%s", cleanMessageID, randId, ext)
 	contentType := "application/octet-stream"
 
-	slog.Debug(fmt.Sprintf("DEBUG: uploading object with name: %q\n", objectName))
+	slog.Debug(fmt.Sprintf("DEBUG: uploading object with name: %q from messageID: %q\n", objectName, messageID))
 
 	err = uc.fileRepo.UploadFile(ctx, objectName, file, size, contentType)
 	if err != nil {
@@ -56,8 +59,20 @@ func (uc *FileUcase) UploadFileMain(ctx context.Context, messageID string, file 
 	return objectName, url.String(), nil
 }
 
+func sanitizeObjectName(s string) string {
+	
+	re := regexp.MustCompile(`[^a-zA-Z0-9._/-]`)
+	sanitized := re.ReplaceAllString(s, "_")
+	
+	sanitized = strings.Trim(sanitized, "/")
+	sanitized = regexp.MustCompile(`/+`).ReplaceAllString(sanitized, "/")
+	return sanitized
+}
+
 func (uc *FileUcase) DeleteFile(ctx context.Context, objectName string) error {
-	return uc.fileRepo.DeleteFile(ctx, objectName)
+	cleanObjectName := sanitizeObjectName(objectName)
+	slog.Debug(fmt.Sprintf("DEBUG: deleting object with name: %q from input: %q\n", cleanObjectName, objectName))
+	return uc.fileRepo.DeleteFile(ctx, cleanObjectName)
 }
 
 func (uc *FileUcase) GetFilePresignedURL(ctx context.Context, objectName string, duration time.Duration) (*url.URL, error) {

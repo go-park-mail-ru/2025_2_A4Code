@@ -10,9 +10,6 @@ import (
 	profileclient "2025_2_a4code/messages-service/internal/client/profile"
 	"net"
 
-	// "2025_2_a4code/internal/http-server/handlers/messages/threads"
-	// uploadfile "2025_2_a4code/internal/http-server/handlers/user/upload/upload-file"
-
 	avatarrepository "2025_2_a4code/internal/storage/minio/avatar-repository"
 	messagerepository "2025_2_a4code/internal/storage/postgres/message-repository"
 	avatarUcase "2025_2_a4code/internal/usecase/avatar"
@@ -26,9 +23,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-redis/redis/v9"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v4/stdlib"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 
 	"github.com/minio/minio-go/v7"

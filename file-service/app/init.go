@@ -45,7 +45,7 @@ func FileInit() {
 	// Создание логгера
 	log := in.SetupLogger(envLocal)
 	slog.SetDefault(log)
-	log.Debug("profile: debug messages are enabled")
+	log.Debug("file: debug messages are enabled")
 
 	go metrics.StartMetricsServer(cfg.AppConfig.FileMetricsPort, log)
 
@@ -80,7 +80,7 @@ func FileInit() {
 	fileUsecase := file.New(filesRepository)
 	fileMessageUsecase := file_message.New(fileMessageRepository)
 
-	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.ProfilePort))
+	slog.Info("Starting server...", slog.String("address", cfg.AppConfig.Host+":"+cfg.AppConfig.FilePort))
 
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(

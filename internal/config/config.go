@@ -60,10 +60,8 @@ type RedisConfig struct {
 }
 
 func GetConfig() (Config, error) {
-	err := godotenv.Load(".env")
-	if err != nil {
-		panic("Message loading .env file")
-	}
+	// Try to load .env file if it exists, but don't fail if it doesn't
+	godotenv.Load(".env")
 
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {

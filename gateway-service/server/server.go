@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -954,9 +955,24 @@ func (s *Server) uploadFileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		writeResponse(w, http.StatusBadRequest, "No file provided", nil)
+	// Try to get file from different possible field names
+	var file multipart.File
+	var header *multipart.FileHeader
+	var getErr error
+
+	// Try common field names in order
+	fieldNames := []string{"file", "document", "attachment", "data", "upload", "files"}
+	for _, fieldName := range fieldNames {
+		file, header, getErr = r.FormFile(fieldName)
+		if getErr == nil {
+			break
+		}
+	}
+
+	if getErr != nil {
+		// Log all available form fields for debugging
+		slog.Debug("No file found in multipart form", "available_fields", r.MultipartForm.File)
+		writeResponse(w, http.StatusBadRequest, "No file provided. Use one of these field names: file, document, attachment, data, upload, files", nil)
 		return
 	}
 	defer file.Close()
@@ -993,9 +1009,29 @@ func (s *Server) deleteFileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := s.addTokenToContext(r.Context(), accessToken)
 
+	// Try to get file_path from query params first
 	filePath := strings.TrimSpace(r.URL.Query().Get("file_path"))
+
+	// If not in query params, try to get from request body (JSON or form)
 	if filePath == "" {
-		writeResponse(w, http.StatusBadRequest, "file_path is required", nil)
+		// Try JSON body
+		var jsonBody struct {
+			FilePath string `json:"file_path"`
+		}
+		if err := r.ParseForm(); err == nil {
+			// Try form data
+			filePath = strings.TrimSpace(r.FormValue("file_path"))
+		}
+		// If still empty, try JSON
+		if filePath == "" && r.Header.Get("Content-Type") == "application/json" {
+			if err := json.NewDecoder(r.Body).Decode(&jsonBody); err == nil {
+				filePath = strings.TrimSpace(jsonBody.FilePath)
+			}
+		}
+	}
+
+	if filePath == "" {
+		writeResponse(w, http.StatusBadRequest, "file_path is required. Send as query param (?file_path=...) or in JSON body {\"file_path\": \"...\"}", nil)
 		return
 	}
 
