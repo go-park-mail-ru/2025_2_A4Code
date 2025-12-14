@@ -37,15 +37,16 @@ type DBConfig struct {
 }
 
 type MinioConfig struct {
-	Host           string `yaml:"host"`
-	Port           string `yaml:"port"`
-	User           string `yaml:"user"`
-	Password       string `yaml:"password"`
-	BucketName     string `yaml:"bucket_name"`
-	Endpoint       string `yaml:"endpoint"`
-	UseSSL         bool   `yaml:"use_ssl"`
-	PublicEndpoint string `yaml:"public_endpoint"`
-	PublicUseSSL   bool   `yaml:"public_use_ssl"`
+	Host                  string `yaml:"host"`
+	Port                  string `yaml:"port"`
+	User                  string `yaml:"user"`
+	Password              string `yaml:"password"`
+	BucketName            string `yaml:"bucket_name"`
+	AttachmentsBucketName string `yaml:"attachments_bucket_name"`
+	Endpoint              string `yaml:"endpoint"`
+	UseSSL                bool   `yaml:"use_ssl"`
+	PublicEndpoint        string `yaml:"public_endpoint"`
+	PublicUseSSL          bool   `yaml:"public_use_ssl"`
 }
 
 func GetConfig() (Config, error) {

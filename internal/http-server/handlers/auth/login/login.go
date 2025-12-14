@@ -58,13 +58,13 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	if r.Method != http.MethodPost {
-		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		resp.SendErrorResponse(w, "invalid request format", http.StatusBadRequest)
+		resp.SendErrorResponse(w, "Некорректный формат запроса", http.StatusBadRequest)
 		return
 	}
 
@@ -89,7 +89,7 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Warn("login failed",
 			slog.String("username", username))
-		resp.SendErrorResponse(w, "invalid login or password", http.StatusBadRequest)
+		resp.SendErrorResponse(w, "Неверный логин или пароль", http.StatusBadRequest)
 		return
 	}
 
@@ -152,14 +152,14 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Error("failed to encode response")
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 }
 
 func (h *HandlerLogin) validateRequest(login, password string) (string, error) {
 	if login == "" || password == "" {
-		return "", fmt.Errorf("all fields are required")
+		return "", fmt.Errorf("все поля обязательны")
 	}
 
 	username := login
@@ -168,30 +168,30 @@ func (h *HandlerLogin) validateRequest(login, password string) (string, error) {
 		if len(parts) > 0 && parts[0] != "" {
 			username = strings.TrimSpace(parts[0])
 		} else {
-			return "", fmt.Errorf("invalid login or email format")
+			return "", fmt.Errorf("некорректный формат логина или email")
 		}
 	}
 
 	if len(username) < 3 || len(username) > 50 {
-		return "", fmt.Errorf("username must be between 3 and 50 characters")
+		return "", fmt.Errorf("логин должен быть от 3 до 50 символов")
 	}
 
 	for _, char := range username {
 		if !unicode.IsLetter(char) && !unicode.IsDigit(char) && char != '_' {
-			return "", fmt.Errorf("username can only contain letters, numbers and underscores")
+			return "", fmt.Errorf("логин может содержать только буквы, цифры и подчёркивания")
 		}
 	}
 
 	if valid.HasDangerousCharacters(username) {
-		return "", fmt.Errorf("username contains invalid characters")
+		return "", fmt.Errorf("логин содержит некорректные символы")
 	}
 
 	if len(password) < 6 {
-		return "", fmt.Errorf("password must be at least 6 characters")
+		return "", fmt.Errorf("пароль должен быть не короче 6 символов")
 	}
 
 	if valid.HasDangerousCharacters(password) {
-		return "", fmt.Errorf("password contains invalid characters")
+		return "", fmt.Errorf("пароль содержит некорректные символы")
 	}
 
 	return username, nil

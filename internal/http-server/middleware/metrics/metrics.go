@@ -2,6 +2,9 @@ package metrics
 
 import (
 	"2025_2_a4code/internal/lib/metrics"
+	"bufio"
+	"errors"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,6 +23,14 @@ func NewStatusResponseWriter(w http.ResponseWriter) *statusResponseWriter {
 func (srw *statusResponseWriter) WriteHeader(code int) {
 	srw.statusCode = code
 	srw.ResponseWriter.WriteHeader(code)
+}
+
+func (srw *statusResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := srw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("hijacker not supported")
+	}
+	return h.Hijack()
 }
 
 func Middleware(next http.Handler) http.Handler {

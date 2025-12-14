@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -97,6 +98,10 @@ func (repo *MessageRepository) GetProfileEmail(ctx context.Context, profileID in
 func (repo *MessageRepository) SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error) {
 	const op = "storage.postgresql.message.SaveOutgoingExternalMessage"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	if strings.TrimSpace(topic) == "" {
+		topic = "(без темы)"
+	}
 
 	tx, err := repo.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -194,7 +199,7 @@ func (repo *MessageRepository) FindByMessageID(ctx context.Context, messageID in
         LEFT JOIN
             profile p ON bp.id = p.base_profile_id
         LEFT JOIN
-            profile_message pm ON m.id = pm.message_id
+            profile_message pm ON m.id = pm.message_id AND pm.profile_id = f.profile_id
         WHERE
             m.id = $1`
 
@@ -332,6 +337,9 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 		if err != nil {
 			return domain.FullMessage{}, e.Wrap(op, err)
 		}
+		if strings.TrimSpace(file.Name) == "" && strings.TrimSpace(file.StoragePath) != "" {
+			file.Name = path.Base(strings.TrimSpace(file.StoragePath))
+		}
 		files = append(files, file)
 	}
 
@@ -347,6 +355,10 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (messageID int64, err error) {
 	const op = "storage.postgresql.message.SaveMessage"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	if strings.TrimSpace(topic) == "" {
+		topic = "(без темы)"
+	}
 
 	tx, err := repo.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -560,9 +572,7 @@ func (repo *MessageRepository) MarkMessageAsRead(ctx context.Context, messageID 
 
 	const query = `
 		INSERT INTO profile_message (profile_id, message_id, read_status)
-		SELECT p.id, $2, TRUE
-		FROM profile p
-		WHERE p.base_profile_id = $1
+		VALUES ($1, $2, TRUE)
 		ON CONFLICT (profile_id, message_id)
 		DO UPDATE SET read_status = TRUE
 	`
@@ -1245,6 +1255,7 @@ func (repo *MessageRepository) GetFolderMessagesWithKeysetPagination(
 	defer rows.Close()
 
 	var messages []domain.Message
+	seen := make(map[string]struct{})
 	log.Debug("Scanning messages...")
 	for rows.Next() {
 		var message domain.Message
@@ -1263,6 +1274,11 @@ func (repo *MessageRepository) GetFolderMessagesWithKeysetPagination(
 			return nil, e.Wrap(op, err)
 		}
 		message.ID = strconv.FormatInt(messageIdInt, 10)
+		if _, exists := seen[message.ID]; exists {
+			continue
+		}
+		seen[message.ID] = struct{}{}
+
 		message.Snippet = buildSnippet(text, 40)
 		message.Sender = domain.Sender{
 			Id:    senderId,
@@ -1312,6 +1328,10 @@ func (repo *MessageRepository) SaveMessageWithFolderDistribution(
 ) (messageID int64, err error) {
 	const op = "storage.postgresql.message.SaveMessageWithFolderDistribution"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	if strings.TrimSpace(topic) == "" {
+		topic = "(без темы)"
+	}
 
 	tx, err := repo.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1513,7 +1533,7 @@ func (repo *MessageRepository) IsUsersMessage(ctx context.Context, messageID int
 			SELECT 1
 			FROM profile_message pm
 			JOIN profile p ON pm.profile_id = p.id
-			WHERE pm.message_id = $1 AND p.base_profile_id = $2
+			WHERE pm.message_id = $1 AND p.id = $2
 		)`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)

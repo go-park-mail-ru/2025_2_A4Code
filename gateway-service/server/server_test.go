@@ -228,9 +228,11 @@ func (m *MockMessageClient) SendDraft(ctx context.Context, in *messagesproto.Sen
 }
 
 func setupTestServer() (*Server, *MockAuthClient, *MockProfileClient, *MockMessageClient) {
-	cfg := &config.AppConfig{
-		GatewayPort:        "8080",
-		GatewayMetricsPort: "9090",
+	cfg := &config.Config{
+		AppConfig: &config.AppConfig{
+			GatewayPort:        "8080",
+			GatewayMetricsPort: "9090",
+		},
 	}
 
 	mockAuth := &MockAuthClient{}

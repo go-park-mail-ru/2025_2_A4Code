@@ -110,9 +110,10 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	filesResponse := make([]File, len(fullMessage.Files))
 	for i, file := range fullMessage.Files {
 		filesResponse[i] = File{
-			Name:     file.Name,
-			FileType: file.FileType,
-			Size:     file.Size,
+			Name:        file.Name,
+			FileType:    file.FileType,
+			Size:        file.Size,
+			StoragePath: file.StoragePath,
 		}
 	}
 

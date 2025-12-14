@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -12,6 +13,7 @@ import (
 	"mime/quotedprintable"
 	"net/mail"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -24,11 +26,12 @@ import (
 )
 
 type config struct {
-	MailDBDSN    string
-	MainDBDSN    string
-	Minio        minioConfig
-	BucketName   string
-	DomainFilter string
+	MailDBDSN         string
+	MainDBDSN         string
+	Minio             minioConfig
+	BucketName        string
+	AttachmentsBucket string
+	DomainFilter      string
 }
 
 type minioConfig struct {
@@ -56,8 +59,9 @@ func loadConfig() config {
 			SecretKey: envOr("MAIL_MINIO_PASSWORD", "miniominio"),
 			UseSSL:    envOr("MAIL_MINIO_USE_SSL", "") == "true",
 		},
-		BucketName:   envOr("MAIL_MINIO_BUCKET", "mail-ingest"),
-		DomainFilter: envOr("INGEST_DOMAIN", "flintmail.ru"),
+		BucketName:        envOr("MAIL_MINIO_BUCKET", "mail-ingest"),
+		AttachmentsBucket: envOr("MAIL_MINIO_ATTACHMENTS_BUCKET", "attachments"),
+		DomainFilter:      envOr("INGEST_DOMAIN", "flintmail.ru"),
 	}
 }
 
@@ -96,6 +100,10 @@ func main() {
 	})
 	if err != nil {
 		log.Error("failed to init minio", "err", err)
+		os.Exit(1)
+	}
+	if err := ensureBucket(ctx, minioClient, cfg.AttachmentsBucket); err != nil {
+		log.Error("failed to ensure attachments bucket", "err", err)
 		os.Exit(1)
 	}
 
@@ -154,16 +162,26 @@ func handleMessage(ctx context.Context, cfg config, minioClient *minio.Client, m
 		return fmt.Errorf("download raw: %w", err)
 	}
 
-	parsed, err := mail.ReadMessage(strings.NewReader(raw))
+	rawBytes := []byte(raw)
+	parsed, err := mail.ReadMessage(bytes.NewReader(rawBytes))
 	if err != nil {
 		return fmt.Errorf("parse raw: %w", err)
+	}
+
+	bodyBytes, err := io.ReadAll(parsed.Body)
+	if err != nil {
+		return fmt.Errorf("read body: %w", err)
 	}
 
 	subject := decodeHeader(parsed.Header.Get("Subject"))
 	if subject == "" {
 		subject = decodeHeader(m.Subject)
 	}
-	body := extractBody(parsed, log)
+
+	textBody, attachments := parseMime(parsed.Header.Get("Content-Type"), bodyBytes, log)
+	if textBody == "" {
+		textBody = extractBodyFromSingle(bodyBytes, parsed.Header.Get("Content-Transfer-Encoding"))
+	}
 
 	fromHdr := parsed.Header.Get("From")
 	addr, err := mail.ParseAddress(fromHdr)
@@ -185,14 +203,40 @@ func handleMessage(ctx context.Context, cfg config, minioClient *minio.Client, m
 	}
 
 	rcpts := splitRcpts(m.RcptTo)
+	seen := make(map[string]struct{})
 	for _, rcpt := range rcpts {
 		rcptLocal, rcptDomain := splitEmail(rcpt)
 		if strings.ToLower(rcptDomain) != strings.ToLower(cfg.DomainFilter) {
 			continue
 		}
+		if rcptLocal == "" {
+			continue
+		}
+
 		receiverEmail := fmt.Sprintf("%s@%s", rcptLocal, rcptDomain)
-		if _, err := msgUcase.SaveMessage(ctx, receiverEmail, senderBaseID, subject, body); err != nil {
+		key := strings.ToLower(strings.TrimSpace(receiverEmail))
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		msgID, err := msgUcase.SaveMessage(ctx, receiverEmail, senderBaseID, subject, textBody)
+		if err != nil {
 			return fmt.Errorf("save message for %s: %w", receiverEmail, err)
+		}
+
+		for _, att := range attachments {
+			storagePath, size, ct, err := storeAttachment(ctx, minioClient, cfg.AttachmentsBucket, att)
+			if err != nil {
+				log.Warn("failed to store attachment", "err", err)
+				continue
+			}
+			if _, err := msgUcase.SaveFile(ctx, msgID, att.Name, ct, storagePath, size); err != nil {
+				log.Warn("failed to save attachment record", "err", err)
+			}
 		}
 	}
 
@@ -231,6 +275,108 @@ func downloadRaw(ctx context.Context, client *minio.Client, bucket, path string)
 		return "", err
 	}
 	return string(data), nil
+}
+
+type inboundAttachment struct {
+	Name        string
+	ContentType string
+	Data        []byte
+}
+
+func parseMime(ctHeader string, body []byte, log *slog.Logger) (string, []inboundAttachment) {
+	plain, html, atts := walkMime(ctHeader, body, log)
+	if plain == "" {
+		plain = html
+	}
+	return plain, atts
+}
+
+func walkMime(ctHeader string, body []byte, log *slog.Logger) (plain string, html string, attachments []inboundAttachment) {
+	mediaType, params, err := mime.ParseMediaType(ctHeader)
+	if err != nil {
+		mediaType = ""
+	}
+	if strings.HasPrefix(strings.ToLower(mediaType), "multipart/") {
+		boundary := params["boundary"]
+		mr := multipart.NewReader(bytes.NewReader(body), boundary)
+		for {
+			part, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Warn("failed to read multipart part", "err", err)
+				break
+			}
+			partCT := part.Header.Get("Content-Type")
+			ctLower := strings.ToLower(strings.TrimSpace(strings.Split(partCT, ";")[0]))
+
+			if strings.HasPrefix(ctLower, "multipart/") {
+				partBytes, _ := io.ReadAll(part)
+				p, h, at := walkMime(partCT, partBytes, log)
+				if plain == "" {
+					plain = p
+				}
+				if html == "" {
+					html = h
+				}
+				attachments = append(attachments, at...)
+				continue
+			}
+
+			data, err := readPartBytes(part)
+			if err != nil {
+				log.Warn("failed to read part body", "err", err)
+				continue
+			}
+
+			filename := decodeHeader(part.FileName())
+			if filename == "" {
+				if _, params, err := mime.ParseMediaType(part.Header.Get("Content-Disposition")); err == nil {
+					filename = decodeHeader(params["filename"])
+				}
+			}
+
+			if strings.HasPrefix(ctLower, "text/plain") && plain == "" {
+				plain = strings.TrimSpace(string(data))
+				continue
+			}
+			if strings.HasPrefix(ctLower, "text/html") && html == "" {
+				html = strings.TrimSpace(string(data))
+				continue
+			}
+			if len(data) > 0 && filename != "" {
+				ct := partCT
+				if strings.TrimSpace(ct) == "" {
+					ct = "application/octet-stream"
+				}
+				attachments = append(attachments, inboundAttachment{
+					Name:        filename,
+					ContentType: ct,
+					Data:        data,
+				})
+			}
+		}
+		return
+	}
+
+	ctLower := strings.ToLower(strings.Split(ctHeader, ";")[0])
+	if strings.HasPrefix(ctLower, "text/plain") {
+		plain = strings.TrimSpace(extractBodyFromSingle(body, ""))
+		return
+	}
+	if strings.HasPrefix(ctLower, "text/html") {
+		html = strings.TrimSpace(string(body))
+		return
+	}
+	if len(body) > 0 {
+		attachments = append(attachments, inboundAttachment{
+			Name:        "",
+			ContentType: ctHeader,
+			Data:        body,
+		})
+	}
+	return
 }
 
 // extractBody tries to return text/plain part, or text/html as fallback, decoding transfer encodings.
@@ -288,6 +434,10 @@ func decodeSingleBody(r io.Reader, cte string) string {
 	return string(data)
 }
 
+func extractBodyFromSingle(body []byte, cte string) string {
+	return strings.TrimSpace(decodeSingleBody(bytes.NewReader(body), cte))
+}
+
 func decodePartBody(part *multipart.Part) string {
 	cte := strings.ToLower(strings.TrimSpace(part.Header.Get("Content-Transfer-Encoding")))
 	var reader io.Reader = part
@@ -304,6 +454,18 @@ func decodePartBody(part *multipart.Part) string {
 	return string(data)
 }
 
+func readPartBytes(part *multipart.Part) ([]byte, error) {
+	cte := strings.ToLower(strings.TrimSpace(part.Header.Get("Content-Transfer-Encoding")))
+	var reader io.Reader = part
+	switch cte {
+	case "quoted-printable":
+		reader = quotedprintable.NewReader(part)
+	case "base64":
+		reader = base64.NewDecoder(base64.StdEncoding, part)
+	}
+	return io.ReadAll(reader)
+}
+
 // decodeHeader tries to decode MIME encoded-words (e.g. =?UTF-8?B?...?=) and falls back to the raw value.
 func decodeHeader(v string) string {
 	v = strings.TrimSpace(v)
@@ -315,4 +477,46 @@ func decodeHeader(v string) string {
 		return decoded
 	}
 	return v
+}
+
+func storeAttachment(ctx context.Context, client *minio.Client, bucket string, att inboundAttachment) (string, int64, string, error) {
+	name := strings.TrimSpace(att.Name)
+	if name == "" {
+		name = "file.bin"
+	}
+	safeName := sanitizeFileName(name)
+	objectName := path.Join("attachments", fmt.Sprintf("%d", time.Now().UnixNano()), safeName)
+	ct := att.ContentType
+	if strings.TrimSpace(ct) == "" {
+		ct = "application/octet-stream"
+	}
+	reader := bytes.NewReader(att.Data)
+	info, err := client.PutObject(ctx, bucket, objectName, reader, int64(len(att.Data)), minio.PutObjectOptions{
+		ContentType: ct,
+	})
+	if err != nil {
+		return "", 0, ct, err
+	}
+	return objectName, info.Size, ct, nil
+}
+
+func sanitizeFileName(name string) string {
+	name = path.Base(name)
+	name = strings.ReplaceAll(name, "\\", "-")
+	name = strings.ReplaceAll(name, "/", "-")
+	if strings.TrimSpace(name) == "" {
+		return "file.bin"
+	}
+	return name
+}
+
+func ensureBucket(ctx context.Context, client *minio.Client, bucket string) error {
+	exists, err := client.BucketExists(ctx, bucket)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{})
 }

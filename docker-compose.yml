@@ -11,6 +11,11 @@ services:
       - "8004:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d a4code_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   minio:
     image: minio/minio
@@ -24,6 +29,11 @@ services:
       - "8006:9001"
     volumes:
       - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/ready || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   pgadmin:
     image: dpage/pgadmin4
@@ -105,7 +115,8 @@ services:
       - "8001:8001"
       - "8013:8013"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   messages:
     build:
@@ -123,7 +134,10 @@ services:
       - "8002:8002"
       - "8014:8014"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
 
   profile:
     build:
@@ -138,8 +152,10 @@ services:
       - "8003:8003"
       - "8015:8015"
     depends_on:
-      - postgres
-      - minio
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
 
   gateway:
     build:
@@ -156,9 +172,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - auth
-      - messages
-      - profile
+      auth:
+        condition: service_started
+      messages:
+        condition: service_started
+      profile:
+        condition: service_started
 
   mail-postgres:
     image: postgres:15
@@ -172,6 +191,11 @@ services:
       - "8017:5432"
     volumes:
       - mail-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d maildb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   mail-ingest:
     build:
@@ -184,12 +208,15 @@ services:
       MAIL_MINIO_USER: minio
       MAIL_MINIO_PASSWORD: miniominio
       MAIL_MINIO_BUCKET: mail-ingest
+      MAIL_MINIO_ATTACHMENTS_BUCKET: attachments
       MAIL_LMTP_ADDR: "0.0.0.0:2525"
       MAIL_HTTP_ADDR: ":8085"
       MAIL_DOMAIN: flintmail.ru
     depends_on:
-      - mail-postgres
-      - minio
+      mail-postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     ports:
       - "8085:8085"
 
@@ -206,20 +233,28 @@ services:
       MAIL_MINIO_USER: minio
       MAIL_MINIO_PASSWORD: miniominio
       MAIL_MINIO_BUCKET: mail-ingest
+      MAIL_MINIO_ATTACHMENTS_BUCKET: attachments
       INGEST_DOMAIN: flintmail.ru
     depends_on:
-      - mail-postgres
-      - postgres
-      - minio
+      mail-postgres:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
   exim:
     build:
       context: ./deploy/exim
       dockerfile: Dockerfile
     container_name: a4-exim
+    environment:
+      - TZ=Europe/Moscow
     volumes:
       - /etc/letsencrypt/archive/flintmail.ru-0001/fullchain2.pem:/etc/exim4/fullchain.pem
       - /etc/letsencrypt/archive/flintmail.ru-0001/privkey2.pem:/etc/exim4/privkey.pem
       - /root/dkim_private.key:/etc/exim4/dkim_private.key:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     ports:
       - "25:25"
     depends_on:

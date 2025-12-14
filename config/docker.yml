@@ -22,6 +22,7 @@ minio:
   user: minio
   password: miniominio
   bucket_name: avatars
+  attachments_bucket_name: attachments
   endpoint: minio:9000
   use_ssl: false
   public_endpoint: minio:9000
