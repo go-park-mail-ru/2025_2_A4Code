@@ -13,6 +13,7 @@ import (
 	"io"
 	"log/slog"
 	"mime/multipart"
+	"mime/quotedprintable"
 	"net"
 	"net/mail"
 	"net/smtp"
@@ -99,8 +100,8 @@ type AvatarUsecase interface {
 const (
 	maxTopicLen       = 255
 	maxTextLen        = 10000
-	maxFileSize       = 25 * 1024 * 1024 // 25 MB
-	maxTotalFilesSize = 25 * 1024 * 1024 // 25 MB
+	maxFileSize       = 10 * 1024 * 1024 // 10 MB
+	maxTotalFilesSize = 10 * 1024 * 1024 // 10 MB
 	defaultLimitFiles = 20
 )
 
@@ -1274,8 +1275,11 @@ func (s *Server) sendExternalMail(from, to, subject, body string, files []*pb.Fi
 
 		textHeader := textproto.MIMEHeader{}
 		textHeader.Set("Content-Type", "text/plain; charset=UTF-8")
+		textHeader.Set("Content-Transfer-Encoding", "quoted-printable")
 		textPart, _ := writer.CreatePart(textHeader)
-		_, _ = textPart.Write([]byte(body))
+		qp := quotedprintable.NewWriter(textPart)
+		_, _ = qp.Write([]byte(body))
+		_ = qp.Close()
 
 		for _, file := range files {
 			data, ct, name, err := s.getAttachmentData(file)
@@ -1290,9 +1294,7 @@ func (s *Server) sendExternalMail(from, to, subject, body string, files []*pb.Fi
 			h.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, name))
 			h.Set("Content-Transfer-Encoding", "base64")
 			part, _ := writer.CreatePart(h)
-			enc := base64.NewEncoder(base64.StdEncoding, part)
-			_, _ = enc.Write(data)
-			enc.Close()
+			writeBase64WithCRLF(part, data)
 		}
 		writer.Close()
 		msgBytes = buf.Bytes()
@@ -1358,4 +1360,21 @@ func (s *Server) getAttachmentData(file *pb.File) ([]byte, string, string, error
 		name = filepath.Base(objectName)
 	}
 	return data, file.GetFileType(), name, nil
+}
+
+// writeBase64WithCRLF writes base64-encoded data with CRLF line wrapping at 76 chars to satisfy SMTP line length limits.
+func writeBase64WithCRLF(w io.Writer, data []byte) {
+	const lineLen = 76
+	enc := base64.StdEncoding
+	encoded := enc.EncodeToString(data)
+	for len(encoded) > 0 {
+		chunk := encoded
+		if len(chunk) > lineLen {
+			chunk = encoded[:lineLen]
+			encoded = encoded[lineLen:]
+		} else {
+			encoded = ""
+		}
+		_, _ = fmt.Fprintf(w, "%s\r\n", chunk)
+	}
 }

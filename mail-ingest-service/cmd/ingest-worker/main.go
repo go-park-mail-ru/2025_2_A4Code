@@ -86,6 +86,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer mailDB.Close()
+	if err := ensureIngestTable(mailDB); err != nil {
+		log.Error("failed to ensure ingest table", "err", err)
+		os.Exit(1)
+	}
 
 	mainDB, err := sql.Open("pgx", cfg.MainDBDSN)
 	if err != nil {
@@ -519,4 +523,18 @@ func ensureBucket(ctx context.Context, client *minio.Client, bucket string) erro
 		return nil
 	}
 	return client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{})
+}
+
+func ensureIngestTable(db *sql.DB) error {
+	const query = `
+CREATE TABLE IF NOT EXISTS ingest_messages (
+    id BIGSERIAL PRIMARY KEY,
+    mail_from   TEXT,
+    rcpt_to     TEXT,
+    subject     TEXT,
+    raw_path    TEXT NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);`
+	_, err := db.Exec(query)
+	return err
 }

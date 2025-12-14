@@ -66,6 +66,20 @@ type store struct {
 	log    *slog.Logger
 }
 
+func ensureIngestTable(db *sql.DB) error {
+	const query = `
+CREATE TABLE IF NOT EXISTS ingest_messages (
+    id BIGSERIAL PRIMARY KEY,
+    mail_from   TEXT,
+    rcpt_to     TEXT,
+    subject     TEXT,
+    raw_path    TEXT NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);`
+	_, err := db.Exec(query)
+	return err
+}
+
 func (s *store) saveMessage(ctx context.Context, from string, rcpts []string, raw []byte) error {
 	subject := extractSubject(raw)
 	objectName := fmt.Sprintf("incoming/%d.eml", time.Now().UnixNano())
@@ -211,6 +225,10 @@ func main() {
 	}
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
+	if err := ensureIngestTable(db); err != nil {
+		log.Error("failed to ensure ingest table", "err", err)
+		os.Exit(1)
+	}
 
 	minioClient, err := minio.New(cfg.Minio.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.Minio.AccessKey, cfg.Minio.SecretKey, ""),
