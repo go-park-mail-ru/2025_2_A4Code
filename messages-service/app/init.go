@@ -26,9 +26,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-redis/redis/v9"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v4/stdlib"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 
 	"github.com/minio/minio-go/v7"
@@ -95,7 +95,7 @@ func MessagesInit() {
 	}
 
 	// Создаем клиент для profile-service
-	profileServiceAddr := cfg.AppConfig.Host + ":" + cfg.AppConfig.ProfilePort
+	profileServiceAddr := "profile" + ":" + cfg.AppConfig.ProfilePort
 	var profileClient *profileclient.ProfileClient
 
 	profileClient, err = profileclient.New(profileServiceAddr)

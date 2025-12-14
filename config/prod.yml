@@ -11,7 +11,7 @@ app:
   messages_metrics_port: 8014
   profile_metrics_port: 8015
   secret: secret
-db:.
+db:
   host: 127.0.0.1
   port: 8004
   user: postgres
