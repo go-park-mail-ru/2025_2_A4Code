@@ -8,3 +8,4 @@ run:
 linters:
   enable:
     - typecheck    # Проверка типов
+    
