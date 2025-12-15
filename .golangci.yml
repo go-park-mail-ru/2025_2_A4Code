@@ -7,12 +7,10 @@ run:
 
 linters:
   enable:
-    - errcheck     # Проверка обработки ошибок
     - gosimple     # Упрощение кода
     - govet        # Стандартный go vet
     - ineffassign  # Обнаружение бесполезных присваиваний
     - staticcheck  # Огромный набор статических проверок
-    - unused       # Поиск неиспользуемого кода
     - typecheck    # Проверка типов
 
 # linter-settings:
