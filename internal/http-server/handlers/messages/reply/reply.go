@@ -57,7 +57,8 @@ type HandlerReply struct {
 const (
 	maxTopicLen       = 255
 	maxTextLen        = 10000
-	maxFileSize       = 10 * 1024 * 1024 // 10 MB
+	maxFileSize       = 40_000_000 // 40 MB (decimal)
+	maxTotalFilesSize = 40_000_000 // 40 MB (decimal)
 	defaultLimitFiles = 20
 )
 
@@ -179,10 +180,12 @@ func validateRequest(req *Request) error {
 	if len(req.Files) > defaultLimitFiles {
 		return fmt.Errorf("too many files")
 	}
+	var totalSize int64
 	for _, f := range req.Files {
 		if f.Size < 0 || f.Size > maxFileSize {
 			return fmt.Errorf("file size invalid or too large: %s", f.Name)
 		}
+		totalSize += f.Size
 		if _, ok := allowedFileTypes[f.FileType]; !ok {
 			return fmt.Errorf("unsupported file type: %s", f.FileType)
 		}
@@ -196,6 +199,10 @@ func validateRequest(req *Request) error {
 		if validation.HasDangerousCharacters(f.Name) {
 			return fmt.Errorf("invalid file name: %s", f.Name)
 		}
+	}
+
+	if totalSize > maxTotalFilesSize {
+		return fmt.Errorf("total attachments size exceeds %d MB", maxTotalFilesSize/(1024*1024))
 	}
 
 	return nil
