@@ -149,7 +149,7 @@ func processBatch(ctx context.Context, cfg config, mailDB *sql.DB, minioClient *
 	}
 
 	for _, m := range msgs {
-		if err := handleMessage(ctx, cfg, minioClient, msgUcase, m, log); err != nil {
+		if err := handleMessage(ctx, cfg, mailDB, minioClient, msgUcase, m, log); err != nil {
 			log.Error("failed to handle message", "id", m.ID, "err", err)
 			continue
 		}
@@ -160,7 +160,7 @@ func processBatch(ctx context.Context, cfg config, mailDB *sql.DB, minioClient *
 	return nil
 }
 
-func handleMessage(ctx context.Context, cfg config, minioClient *minio.Client, msgUcase *message.MessageUcase, m ingestMessage, log *slog.Logger) error {
+func handleMessage(ctx context.Context, cfg config, mailDB *sql.DB, minioClient *minio.Client, msgUcase *message.MessageUcase, m ingestMessage, log *slog.Logger) error {
 	raw, err := downloadRaw(ctx, minioClient, cfg.BucketName, m.Path)
 	if err != nil {
 		return fmt.Errorf("download raw: %w", err)
@@ -205,6 +205,10 @@ func handleMessage(ctx context.Context, cfg config, minioClient *minio.Client, m
 	if err := msgUcase.EnsureProfileForBase(ctx, senderBaseID, senderDisplayName); err != nil {
 		log.Warn("failed to ensure sender profile name", "err", err)
 	}
+	senderProfileID, err := getProfileIDByBase(ctx, mailDB, senderBaseID)
+	if err != nil {
+		return fmt.Errorf("resolve sender profile id: %w", err)
+	}
 
 	rcpts := splitRcpts(m.RcptTo)
 	seen := make(map[string]struct{})
@@ -227,7 +231,18 @@ func handleMessage(ctx context.Context, cfg config, minioClient *minio.Client, m
 		}
 		seen[key] = struct{}{}
 
-		msgID, err := msgUcase.SaveMessage(ctx, receiverEmail, senderBaseID, subject, textBody)
+		// Пропускаем, если у нас нет такого пользователя.
+		exists, err := profileExists(ctx, mailDB, rcptLocal, rcptDomain)
+		if err != nil {
+			log.Warn("failed to check receiver existence", "email", receiverEmail, "err", err)
+			continue
+		}
+		if !exists {
+			log.Warn("receiver not found, skipping", "email", receiverEmail)
+			continue
+		}
+
+		msgID, err := msgUcase.SaveMessage(ctx, receiverEmail, senderProfileID, subject, textBody)
 		if err != nil {
 			return fmt.Errorf("save message for %s: %w", receiverEmail, err)
 		}
@@ -257,6 +272,37 @@ func splitRcpts(rcpt string) []string {
 		}
 	}
 	return res
+}
+
+func getProfileIDByBase(ctx context.Context, db *sql.DB, baseID int64) (int64, error) {
+	var id int64
+	err := db.QueryRowContext(ctx, `
+		SELECT id FROM profile
+		WHERE base_profile_id = $1
+		ORDER BY id
+		LIMIT 1`, baseID).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func profileExists(ctx context.Context, db *sql.DB, username, domain string) (bool, error) {
+	var dummy int
+	err := db.QueryRowContext(ctx, `
+		SELECT 1
+		FROM profile p
+		JOIN base_profile bp ON p.base_profile_id = bp.id
+		WHERE bp.username = $1 AND bp.domain = $2
+		LIMIT 1`, strings.ToLower(strings.TrimSpace(username)), strings.ToLower(strings.TrimSpace(domain))).Scan(&dummy)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, sql.ErrNoRows):
+		return false, nil
+	default:
+		return false, err
+	}
 }
 
 func splitEmail(email string) (string, string) {
