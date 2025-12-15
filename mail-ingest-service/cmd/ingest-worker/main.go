@@ -123,7 +123,7 @@ func main() {
 	}
 }
 
-func processBatch(ctx context.Context, cfg config, mailDB *sql.DB, minioClient *minio.Client, msgUcase *message.MessageUcase, log *slog.Logger) error {
+func processBatch(ctx context.Context, cfg config, mailDB, mainDB *sql.DB, minioClient *minio.Client, msgUcase *message.MessageUcase, log *slog.Logger) error {
 	rows, err := mailDB.QueryContext(ctx, `
 		SELECT id, mail_from, rcpt_to, subject, raw_path
 		FROM ingest_messages
@@ -150,7 +150,7 @@ func processBatch(ctx context.Context, cfg config, mailDB *sql.DB, minioClient *
 	}
 
 	for _, m := range msgs {
-		if err := handleMessage(ctx, cfg, mailDB, minioClient, msgUcase, m, log); err != nil {
+		if err := handleMessage(ctx, cfg, mainDB, minioClient, msgUcase, m, log); err != nil {
 			log.Error("failed to handle message", "id", m.ID, "err", err)
 			continue
 		}
@@ -161,7 +161,7 @@ func processBatch(ctx context.Context, cfg config, mailDB *sql.DB, minioClient *
 	return nil
 }
 
-func handleMessage(ctx context.Context, cfg config, mailDB *sql.DB, minioClient *minio.Client, msgUcase *message.MessageUcase, m ingestMessage, log *slog.Logger) error {
+func handleMessage(ctx context.Context, cfg config, mainDB *sql.DB, minioClient *minio.Client, msgUcase *message.MessageUcase, m ingestMessage, log *slog.Logger) error {
 	raw, err := downloadRaw(ctx, minioClient, cfg.BucketName, m.Path)
 	if err != nil {
 		return fmt.Errorf("download raw: %w", err)
@@ -206,7 +206,7 @@ func handleMessage(ctx context.Context, cfg config, mailDB *sql.DB, minioClient 
 	if err := msgUcase.EnsureProfileForBase(ctx, senderBaseID, senderDisplayName); err != nil {
 		log.Warn("failed to ensure sender profile name", "err", err)
 	}
-	senderProfileID, err := getProfileIDByBase(ctx, mailDB, senderBaseID)
+	senderProfileID, err := getProfileIDByBase(ctx, mainDB, senderBaseID)
 	if err != nil {
 		return fmt.Errorf("resolve sender profile id: %w", err)
 	}
@@ -233,7 +233,7 @@ func handleMessage(ctx context.Context, cfg config, mailDB *sql.DB, minioClient 
 		seen[key] = struct{}{}
 
 		// Пропускаем, если у нас нет такого пользователя.
-		exists, err := profileExists(ctx, mailDB, rcptLocal, rcptDomain)
+		exists, err := profileExists(ctx, mainDB, rcptLocal, rcptDomain)
 		if err != nil {
 			log.Warn("failed to check receiver existence", "email", receiverEmail, "err", err)
 			continue
