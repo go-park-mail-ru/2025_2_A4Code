@@ -791,7 +791,16 @@ func (s *Server) wsNotificationsHandler(w http.ResponseWriter, r *http.Request) 
 	defer conn.Close()
 	log.Info("ws connected")
 
-	ctx := s.addTokenToContext(r.Context(), accessToken)
+	ctx, cancel := context.WithCancel(s.addTokenToContext(r.Context(), accessToken))
+	defer cancel()
+
+	// Закрываем зависшие соединения без пингов/понов.
+	conn.SetReadLimit(1024)
+	_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	})
+
 	var lastTotal, lastUnread int64
 
 	type payload struct {
@@ -800,11 +809,16 @@ func (s *Server) wsNotificationsHandler(w http.ResponseWriter, r *http.Request) 
 		Unread int64  `json:"unread"`
 	}
 
-	send := func(total, unread int64) error {
-		return conn.WriteJSON(payload{Type: "mail_update", Total: total, Unread: unread})
+	writeJSON := func(v interface{}) error {
+		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		return conn.WriteJSON(v)
 	}
 
-	fetch := func() (int64, int64, error) {
+	send := func(total, unread int64) error {
+		return writeJSON(payload{Type: "mail_update", Total: total, Unread: unread})
+	}
+
+	fetch := func(ctx context.Context) (int64, int64, error) {
 		foldersResp, err := s.messageClient.GetFolders(ctx, &messagesproto.GetFoldersRequest{})
 		if err != nil {
 			log.Warn("get folders failed", slog.String("error", err.Error()))
@@ -824,22 +838,25 @@ func (s *Server) wsNotificationsHandler(w http.ResponseWriter, r *http.Request) 
 		return total, unread, nil
 	}
 
-	if total, unread, err := fetch(); err == nil {
+	if total, unread, err := fetch(ctx); err == nil {
 		lastTotal, lastUnread = total, unread
 		_ = send(total, unread)
 	} else {
 		log.Warn("initial fetch failed", slog.String("error", err.Error()))
 	}
 
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
+	fetchTicker := time.NewTicker(5 * time.Second)
+	defer fetchTicker.Stop()
+
+	pingTicker := time.NewTicker(15 * time.Second)
+	defer pingTicker.Stop()
 
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case <-ticker.C:
-			total, unread, err := fetch()
+		case <-fetchTicker.C:
+			total, unread, err := fetch(ctx)
 			if err != nil {
 				log.Warn("periodic fetch failed", slog.String("error", err.Error()))
 				_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "fetch failed"))
@@ -851,6 +868,11 @@ func (s *Server) wsNotificationsHandler(w http.ResponseWriter, r *http.Request) 
 					log.Warn("send failed", slog.String("error", err.Error()))
 					return
 				}
+			}
+		case <-pingTicker.C:
+			if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(5*time.Second)); err != nil {
+				log.Warn("ws ping failed", slog.String("error", err.Error()))
+				return
 			}
 		}
 	}
