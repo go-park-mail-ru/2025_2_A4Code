@@ -12,7 +12,3 @@ linters:
     - ineffassign  # Обнаружение бесполезных присваиваний
     - staticcheck  # Огромный набор статических проверок
     - typecheck    # Проверка типов
-
-# linter-settings:
-#   errcheck:
-#     check-type-assertions: true
