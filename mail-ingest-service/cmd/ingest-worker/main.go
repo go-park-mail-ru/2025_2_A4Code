@@ -490,9 +490,15 @@ func storeAttachment(ctx context.Context, client *minio.Client, bucket string, a
 	}
 	safeName := sanitizeFileName(name)
 	objectName := path.Join("attachments", fmt.Sprintf("%d", time.Now().UnixNano()), safeName)
-	ct := att.ContentType
-	if strings.TrimSpace(ct) == "" {
+	ct := strings.TrimSpace(att.ContentType)
+	if parsed, _, err := mime.ParseMediaType(ct); err == nil && strings.TrimSpace(parsed) != "" {
+		ct = strings.TrimSpace(parsed)
+	}
+	if ct == "" {
 		ct = "application/octet-stream"
+	}
+	if len(ct) > 100 {
+		ct = ct[:100]
 	}
 	reader := bytes.NewReader(att.Data)
 	info, err := client.PutObject(ctx, bucket, objectName, reader, int64(len(att.Data)), minio.PutObjectOptions{
