@@ -113,6 +113,7 @@ type FullMessage struct {
 	ThreadId      string                 `protobuf:"bytes,4,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
 	Sender        *Sender                `protobuf:"bytes,5,opt,name=sender,proto3" json:"sender,omitempty"`
 	Files         []*File                `protobuf:"bytes,6,rep,name=files,proto3" json:"files,omitempty"`
+	Receivers     []*Receiver            `protobuf:"bytes,7,rep,name=receivers,proto3" json:"receivers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -185,6 +186,13 @@ func (x *FullMessage) GetSender() *Sender {
 func (x *FullMessage) GetFiles() []*File {
 	if x != nil {
 		return x.Files
+	}
+	return nil
+}
+
+func (x *FullMessage) GetReceivers() []*Receiver {
+	if x != nil {
+		return x.Receivers
 	}
 	return nil
 }

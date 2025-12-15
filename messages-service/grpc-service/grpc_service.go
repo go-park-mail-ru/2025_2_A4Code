@@ -100,8 +100,8 @@ type AvatarUsecase interface {
 const (
 	maxTopicLen       = 255
 	maxTextLen        = 10000
-	maxFileSize       = 40 * 1024 * 1024 // 40 MB
-	maxTotalFilesSize = 40 * 1024 * 1024 // 40 MB
+	maxFileSize       = 40_000_000 // 40 MB (decimal)
+	maxTotalFilesSize = 40_000_000 // 40 MB (decimal)
 	defaultLimitFiles = 20
 )
 
@@ -201,17 +201,22 @@ func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*
 			StoragePath: file.StoragePath,
 		}
 	}
+	var pbReceivers []*pb.Receiver
+	for _, r := range fullMessage.Receivers {
+		pbReceivers = append(pbReceivers, &pb.Receiver{Email: r})
+	}
 
 	metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "ok").Inc()
 
 	return &pb.MessagePageResponse{
 		Message: &pb.FullMessage{
-			Topic:    fullMessage.Topic,
-			Text:     fullMessage.Text,
-			Datetime: fullMessage.Datetime.Format(time.RFC3339),
-			ThreadId: fullMessage.ThreadRoot,
-			Sender:   s.domainSenderToProto(&fullMessage.Sender),
-			Files:    pbFiles,
+			Topic:     fullMessage.Topic,
+			Text:      fullMessage.Text,
+			Datetime:  fullMessage.Datetime.Format(time.RFC3339),
+			ThreadId:  fullMessage.ThreadRoot,
+			Sender:    s.domainSenderToProto(&fullMessage.Sender),
+			Files:     pbFiles,
+			Receivers: pbReceivers,
 		},
 	}, nil
 }

@@ -344,6 +344,32 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 	}
 
 	msg.Files = files
+
+	// Получаем получателей (другие владельцы папок этого письма)
+	receiversRows, err := repo.db.QueryContext(ctx, `
+        SELECT bp.username, bp.domain
+        FROM folder_profile_message fpm
+        JOIN folder f ON fpm.folder_id = f.id
+        JOIN profile p ON f.profile_id = p.id
+        JOIN base_profile bp ON p.base_profile_id = bp.id
+        WHERE fpm.message_id = $1 AND f.profile_id <> $2`, messageID, profileID)
+	if err != nil {
+		return domain.FullMessage{}, e.Wrap(op, err)
+	}
+	defer receiversRows.Close()
+
+	for receiversRows.Next() {
+		var username, domainStr string
+		if err := receiversRows.Scan(&username, &domainStr); err != nil {
+			return domain.FullMessage{}, e.Wrap(op, err)
+		}
+		username = strings.TrimSpace(username)
+		domainStr = strings.TrimSpace(domainStr)
+		if username != "" && domainStr != "" {
+			msg.Receivers = append(msg.Receivers, fmt.Sprintf("%s@%s", username, domainStr))
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return domain.FullMessage{}, e.Wrap(op+": failed to commit transaction: ", err)
 	}

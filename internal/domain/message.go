@@ -19,6 +19,7 @@ type FullMessage struct {
 	ThreadRoot string    `json:"thread_root"`
 	Folder
 	Sender
+	Receivers []string `json:"receivers,omitempty"`
 	Files
 }
 

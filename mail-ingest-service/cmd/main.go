@@ -253,7 +253,7 @@ func main() {
 	s.LMTP = true
 	s.ReadTimeout = 10 * time.Second
 	s.WriteTimeout = 10 * time.Second
-	s.MaxMessageBytes = 64 << 20 // allow up to 64MB to handle overhead over 40MB limit
+	s.MaxMessageBytes = 80_000_000 // allow ~80MB to handle overhead over 40MB decimal limit
 
 	go func() {
 		log.Info("LMTP server listening", "addr", s.Addr)

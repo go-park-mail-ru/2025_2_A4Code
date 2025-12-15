@@ -716,8 +716,8 @@ func (s *Server) uploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := s.addTokenToContext(r.Context(), accessToken)
 
-	// allow uploads up to 64MB to accommodate 40MB attachment limit plus overhead
-	if err := r.ParseMultipartForm(64 << 20); err != nil {
+	// allow uploads up to ~80MB to accommodate 40MB decimal limit plus overhead
+	if err := r.ParseMultipartForm(80_000_000); err != nil {
 		writeResponse(w, http.StatusBadRequest, "failed to parse form", nil)
 		return
 	}
@@ -729,7 +729,7 @@ func (s *Server) uploadFileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	const maxSize = 40 * 1024 * 1024
+	const maxSize = 40_000_000
 	if header.Size > maxSize {
 		writeResponse(w, http.StatusBadRequest, "Не удалось загрузить вложение, размер файла превышает 40 МБ", nil)
 		return
