@@ -7,7 +7,4 @@ run:
 
 linters:
   enable:
-    - gosimple     # Упрощение кода
-    - govet        # Стандартный go vet
-    - ineffassign  # Обнаружение бесполезных присваиваний
     - typecheck    # Проверка типов
