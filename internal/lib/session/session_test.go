@@ -455,3 +455,182 @@ func TestGetProfileIDFromRefresh(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckSessionString(t *testing.T) {
+	const expectedType = "access"
+	testUserID := int64(123)
+
+	validTime := time.Now().Add(time.Hour)
+	expiredTime := time.Now().Add(-time.Hour)
+
+	validClaims := createClaims(testUserID, expectedType, validTime)
+	wrongTypeClaims := createClaims(testUserID, "refresh", validTime)
+	noTypeClaims := createClaims(testUserID, "", validTime)
+	delete(noTypeClaims, "type")
+	expiredClaims := createClaims(testUserID, expectedType, expiredTime)
+
+	validToken, _ := generateToken(validClaims, testSecret)
+	wrongTypeToken, _ := generateToken(wrongTypeClaims, testSecret)
+	noTypeToken, _ := generateToken(noTypeClaims, testSecret)
+	expiredToken, _ := generateToken(expiredClaims, testSecret)
+	wrongSecretToken, _ := generateToken(validClaims, wrongSecret)
+	invalidToken := "invalid.jwt.token"
+
+	tests := []struct {
+		name         string
+		tokenString  string
+		secret       []byte
+		expectedType string
+		wantErr      error
+	}{
+		{
+			name:         "Success: Valid Token",
+			tokenString:  validToken,
+			secret:       testSecret,
+			expectedType: expectedType,
+			wantErr:      nil,
+		},
+		{
+			name:         "Success: No Expected Type",
+			tokenString:  validToken,
+			secret:       testSecret,
+			expectedType: "",
+			wantErr:      nil,
+		},
+		{
+			name:         "Failure: Invalid Token Format",
+			tokenString:  invalidToken,
+			secret:       testSecret,
+			expectedType: expectedType,
+			wantErr:      ErrorInvalidToken,
+		},
+		{
+			name:         "Failure: Wrong Secret",
+			tokenString:  wrongSecretToken,
+			secret:       testSecret,
+			expectedType: expectedType,
+			wantErr:      ErrorInvalidToken,
+		},
+		{
+			name:         "Failure: Wrong Token Type",
+			tokenString:  wrongTypeToken,
+			secret:       testSecret,
+			expectedType: expectedType,
+			wantErr:      ErrorWrongTokenType,
+		},
+		{
+			name:         "Failure: Missing Type When Expected",
+			tokenString:  noTypeToken,
+			secret:       testSecret,
+			expectedType: expectedType,
+			wantErr:      ErrorWrongTokenType,
+		},
+		{
+			name:         "Failure: Token Expired",
+			tokenString:  expiredToken,
+			secret:       testSecret,
+			expectedType: expectedType,
+			wantErr:      ErrorTokenExpired,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			claims, err := CheckSessionString(tt.tokenString, tt.secret, tt.expectedType)
+
+			if (err != nil && tt.wantErr == nil) || (err == nil && tt.wantErr != nil) || (err != nil && tt.wantErr != nil && err.Error() != tt.wantErr.Error()) {
+				t.Errorf("CheckSessionString() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			// Проверяем, что при успехе возвращаются правильные claims
+			if tt.wantErr == nil {
+				if claims == nil {
+					t.Error("CheckSessionString() claims should not be nil on success")
+					return
+				}
+
+				// Проверяем user_id
+				gotID, ok := claims["user_id"].(float64)
+				if !ok {
+					t.Error("CheckSessionString() claims should contain user_id")
+					return
+				}
+				if int64(gotID) != testUserID {
+					t.Errorf("CheckSessionString() user_id = %v, want %v", int64(gotID), testUserID)
+				}
+
+				// Проверяем тип, если он есть в claims
+				if tt.expectedType != "" {
+					gotType, ok := claims["type"].(string)
+					if !ok || gotType != tt.expectedType {
+						t.Errorf("CheckSessionString() type = %v, want %v", gotType, tt.expectedType)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestGetProfileIDFromTokenString(t *testing.T) {
+	const expectedType = "access"
+	testUserID := int64(123)
+
+	validTime := time.Now().Add(time.Hour)
+
+	validClaims := createClaims(testUserID, expectedType, validTime)
+	noIDClaims := createClaims(testUserID, expectedType, validTime)
+	delete(noIDClaims, "user_id")
+
+	validToken, _ := generateToken(validClaims, testSecret)
+	noIDToken, _ := generateToken(noIDClaims, testSecret)
+
+	tests := []struct {
+		name         string
+		tokenString  string
+		secret       []byte
+		expectedType string
+		wantID       int64
+		wantErr      error
+	}{
+		{
+			name:         "Success: Valid Token with ID",
+			tokenString:  validToken,
+			secret:       testSecret,
+			expectedType: expectedType,
+			wantID:       testUserID,
+			wantErr:      nil,
+		},
+		{
+			name:         "Failure: Token without ID",
+			tokenString:  noIDToken,
+			secret:       testSecret,
+			expectedType: expectedType,
+			wantID:       -1,
+			wantErr:      ErrorIdNotFound,
+		},
+		{
+			name:         "Failure: Invalid Token",
+			tokenString:  "invalid.token",
+			secret:       testSecret,
+			expectedType: expectedType,
+			wantID:       -1,
+			wantErr:      ErrorInvalidToken,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotID, err := GetProfileIDFromTokenString(tt.tokenString, tt.secret, tt.expectedType)
+
+			if (err != nil && tt.wantErr == nil) || (err == nil && tt.wantErr != nil) || (err != nil && tt.wantErr != nil && err.Error() != tt.wantErr.Error()) {
+				t.Errorf("GetProfileIDFromTokenString() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if gotID != tt.wantID {
+				t.Errorf("GetProfileIDFromTokenString() gotID = %v, want %v", gotID, tt.wantID)
+			}
+		})
+	}
+}

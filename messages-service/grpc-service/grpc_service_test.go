@@ -166,6 +166,16 @@ func (m *MockMessageUsecase) ReplyToMessage(ctx context.Context, receiverEmail s
 	return args.Get(0).(int64), args.Error(1)
 }
 
+func (m *MockMessageUsecase) SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error) {
+	args := m.Called(ctx, senderProfileID, topic, text)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockMessageUsecase) GetProfileEmail(ctx context.Context, profileID int64) (string, error) {
+	args := m.Called(ctx, profileID)
+	return args.String(0), args.Error(1)
+}
+
 type MockAvatarUsecase struct {
 	mock.Mock
 }
@@ -189,7 +199,7 @@ func setupTestServer() (*Server, *MockMessageUsecase, *MockAvatarUsecase) {
 	mockMessageUsecase := &MockMessageUsecase{}
 	mockAvatarUsecase := &MockAvatarUsecase{}
 	jwtSecret := []byte("test-secret-key-very-long-for-testing")
-	server := New(mockMessageUsecase, mockAvatarUsecase, jwtSecret)
+	server := New(mockMessageUsecase, mockAvatarUsecase, jwtSecret, nil, "attachments")
 	return server, mockMessageUsecase, mockAvatarUsecase
 }
 
@@ -252,7 +262,6 @@ func TestServer_MessagePage(t *testing.T) {
 					},
 					Files: []domain.File{},
 				}, nil)
-				mockMessage.On("ShouldMarkAsRead", mock.Anything, int64(123), int64(1)).Return(true, nil)
 				mockMessage.On("MarkMessageAsRead", mock.Anything, int64(123), int64(1)).Return(nil)
 				mockAvatar.On("GetAvatarPresignedURL", mock.Anything, "avatar.jpg", mock.Anything).Return(&url.URL{
 					Scheme: "https",
@@ -370,6 +379,7 @@ func TestServer_Send(t *testing.T) {
 			ctx:     createTestContextWithToken(1, server.JWTSecret),
 			request: validRequest,
 			mockSetup: func() {
+				mockMessage.On("GetProfileEmail", mock.Anything, int64(1)).Return("sender@example.com", nil)
 				mockMessage.On("SendMessage", mock.Anything, "test@example.com", int64(1), "Test Topic", "Test Message").Return(int64(123), nil)
 				mockMessage.On("SaveThread", mock.Anything, int64(123)).Return(int64(456), nil)
 				mockMessage.On("SaveThreadIdToMessage", mock.Anything, int64(123), int64(456)).Return(nil)
@@ -420,6 +430,7 @@ func TestServer_Send(t *testing.T) {
 				},
 			},
 			mockSetup: func() {
+				mockMessage.On("GetProfileEmail", mock.Anything, int64(1)).Return("sender@example.com", nil)
 				mockMessage.On("SendMessage", mock.Anything, "test@example.com", int64(1), "Test Topic", "Test Message").Return(int64(0), errors.New("send failed"))
 			},
 			expectedError: true,
@@ -1080,7 +1091,7 @@ func BenchmarkServer_MessagePage(b *testing.B) {
 		},
 		Files: []domain.File{},
 	}, nil)
-	mockMessage.On("ShouldMarkAsRead", mock.Anything, int64(123), int64(1)).Return(false, nil)
+	mockMessage.On("MarkMessageAsRead", mock.Anything, int64(123), int64(1)).Return(nil)
 	mockAvatar.On("GetAvatarPresignedURL", mock.Anything, "avatar.jpg", mock.Anything).Return(&url.URL{
 		Scheme: "https",
 		Host:   "example.com",
@@ -1104,6 +1115,7 @@ func BenchmarkServer_Send(b *testing.B) {
 	md := metadata.New(map[string]string{"authorization": "Bearer " + token})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
+	mockMessage.On("GetProfileEmail", mock.Anything, int64(1)).Return("sender@example.com", nil)
 	mockMessage.On("SendMessage", mock.Anything, "test@example.com", int64(1), "Test Topic", "Test Message").Return(int64(123), nil)
 	mockMessage.On("SaveThread", mock.Anything, int64(123)).Return(int64(456), nil)
 	mockMessage.On("SaveThreadIdToMessage", mock.Anything, int64(123), int64(456)).Return(nil)
