@@ -385,7 +385,6 @@ func TestServer_UploadAvatar(t *testing.T) {
 			expectedError: true,
 			expectedCode:  codes.InvalidArgument,
 		},
-
 	}
 
 	for _, tt := range tests {
@@ -446,7 +445,6 @@ func TestServer_getProfileID(t *testing.T) {
 			expectedError: true,
 			expectedCode:  codes.Unauthenticated,
 		},
-
 	}
 
 	for _, tt := range tests {
@@ -723,4 +721,3 @@ func TestServer_UploadAvatar_FileReader(t *testing.T) {
 	mockProfile.AssertExpectations(t)
 	mockAvatar.AssertExpectations(t)
 }
-

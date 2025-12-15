@@ -32,7 +32,6 @@ func quote(query string) string {
 	return regexp.QuoteMeta(query)
 }
 
-
 func TestMessageRepository_SaveFile(t *testing.T) {
 	ctx, repo, mock := setupTest(t)
 	expectedFileID := int64(1)
@@ -680,4 +679,3 @@ func TestMessageRepository_FindThreadsByProfileID(t *testing.T) {
 	assert.Equal(t, int64(100), threads[0].RootMessage)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
-
