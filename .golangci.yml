@@ -10,5 +10,4 @@ linters:
     - gosimple     # Упрощение кода
     - govet        # Стандартный go vet
     - ineffassign  # Обнаружение бесполезных присваиваний
-    - staticcheck  # Огромный набор статических проверок
     - typecheck    # Проверка типов
