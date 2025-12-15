@@ -140,69 +140,77 @@ func (h *HandlerReply) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func validateRequest(req *Request) error {
 	if req.Text == "" || req.Receivers == nil || len(req.Receivers) == 0 {
-		return fmt.Errorf("empty request body")
+		return fmt.Errorf("Пустое тело запроса")
 	}
 
 	if len(req.Topic) > maxTopicLen {
-		return fmt.Errorf("topic too long")
+		return fmt.Errorf("Тема слишком длинная")
 	}
 	if len(req.Text) > maxTextLen {
-		return fmt.Errorf("text too long")
+		return fmt.Errorf("Текст слишком длинный")
 	}
 
 	if validation.HasDangerousCharacters(req.Topic) {
-		return fmt.Errorf("topic contains forbidden characters")
+		return fmt.Errorf("Тема содержит недопустимые символы")
 	}
 	if validation.HasDangerousCharacters(req.Text) {
-		return fmt.Errorf("text contains forbidden characters")
+		return fmt.Errorf("Текст содержит недопустимые символы")
 	}
 
 	seen := make(map[string]struct{})
 	for _, r := range req.Receivers {
 		email := strings.TrimSpace(r.Email)
 		if email == "" {
-			return fmt.Errorf("empty receiver email")
+			return fmt.Errorf("Не указан email получателя")
 		}
 		if _, err := mail.ParseAddress(email); err != nil {
-			return fmt.Errorf("invalid receiver email: %s", email)
+			return fmt.Errorf("Некорректный email получателя: %s", email)
 		}
 		lower := strings.ToLower(email)
 		if _, ok := seen[lower]; ok {
-			return fmt.Errorf("duplicate receiver: %s", email)
+			return fmt.Errorf("Дубликат получателя: %s", email)
 		}
 		seen[lower] = struct{}{}
 
 		if validation.HasDangerousCharacters(email) {
-			return fmt.Errorf("receiver email contains forbidden characters: %s", email)
+			return fmt.Errorf("Email получателя содержит недопустимые символы: %s", email)
 		}
 	}
 
 	if len(req.Files) > defaultLimitFiles {
-		return fmt.Errorf("too many files")
+		return fmt.Errorf("Слишком много вложений")
 	}
 	var totalSize int64
+	seenPaths := make(map[string]struct{})
 	for _, f := range req.Files {
 		if f.Size < 0 || f.Size > maxFileSize {
-			return fmt.Errorf("file size invalid or too large: %s", f.Name)
+			return fmt.Errorf("Недопустимый размер файла: %s", f.Name)
 		}
 		totalSize += f.Size
 		if _, ok := allowedFileTypes[f.FileType]; !ok {
-			return fmt.Errorf("unsupported file type: %s", f.FileType)
+			return fmt.Errorf("Неподдерживаемый тип файла: %s", f.FileType)
 		}
 		base := filepath.Base(f.Name)
 		if base != f.Name || strings.Contains(f.Name, "..") {
-			return fmt.Errorf("invalid file name: %s", f.Name)
+			return fmt.Errorf("Недопустимое имя файла: %s", f.Name)
 		}
 		if validation.HasDangerousCharacters(f.StoragePath) {
-			return fmt.Errorf("invalid storage path for file: %s", f.Name)
+			return fmt.Errorf("Недопустимый путь хранения файла: %s", f.Name)
 		}
 		if validation.HasDangerousCharacters(f.Name) {
-			return fmt.Errorf("invalid file name: %s", f.Name)
+			return fmt.Errorf("Недопустимое имя файла: %s", f.Name)
+		}
+		path := strings.TrimSpace(f.StoragePath)
+		if path != "" {
+			if _, exists := seenPaths[path]; exists {
+				return fmt.Errorf("Дубликат вложения: %s", f.Name)
+			}
+			seenPaths[path] = struct{}{}
 		}
 	}
 
 	if totalSize > maxTotalFilesSize {
-		return fmt.Errorf("total attachments size exceeds %d MB", maxTotalFilesSize/(1024*1024))
+		return fmt.Errorf("Суммарный размер вложений превышает %d МБ", maxTotalFilesSize/(1024*1024))
 	}
 
 	return nil
