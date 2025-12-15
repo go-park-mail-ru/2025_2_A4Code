@@ -27,10 +27,11 @@ go.work.sum
 # Editor/IDE
 .idea/
 .vscode/
-.github/
 
 # files
 cookies.txt
 
 # linter
 .golangci.yml
+
+.github/copilot-instructions.md
