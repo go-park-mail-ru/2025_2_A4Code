@@ -5,10 +5,9 @@ package signup
 import (
 	"2025_2_a4code/internal/http-server/middleware/logger"
 	resp "2025_2_a4code/internal/lib/api/response"
-	"context"
-
 	valid "2025_2_a4code/internal/lib/validation"
 	"2025_2_a4code/internal/usecase/profile"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +32,7 @@ type Request struct {
 type ProfileUsecase interface {
 	Signup(ctx context.Context, SignupReq profile.SignupRequest) (int64, error)
 }
+
 type Response struct {
 	resp.Response
 }
@@ -54,13 +54,13 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Debug("handle /auth/signup")
 
 	if r.Method != http.MethodPost {
-		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		resp.SendErrorResponse(w, "invalid request format", http.StatusBadRequest)
+		resp.SendErrorResponse(w, "Некорректный формат запроса", http.StatusBadRequest)
 		return
 	}
 
@@ -75,8 +75,7 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Преобразуем в UseCase запрос
-	SignupReq := profile.SignupRequest{
+	signupReq := profile.SignupRequest{
 		Name:     req.Name,
 		Username: req.Username,
 		Birthday: req.Birthday,
@@ -84,7 +83,7 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Password: req.Password,
 	}
 
-	userID, err := h.profileUCase.Signup(r.Context(), SignupReq)
+	userID, err := h.profileUCase.Signup(r.Context(), signupReq)
 	if err != nil {
 		log.Warn("signup failed",
 			slog.String("username", req.Username),
@@ -92,46 +91,46 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		switch {
 		case errors.Is(err, profile.ErrUserAlreadyExists):
-			resp.SendErrorResponse(w, "user with this username already exists", http.StatusBadRequest)
+			resp.SendErrorResponse(w, "Пользователь с таким логином уже существует", http.StatusBadRequest)
 		default:
 			log.Error("unexpected signup error",
 				slog.String("error", err.Error()),
 				slog.String("username", req.Username))
-			resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+			resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		}
 		return
 	}
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID,
-		"exp":     time.Now().Add(15 * time.Minute).Unix(), // 15 минут
+		"exp":     time.Now().Add(15 * time.Minute).Unix(),
 		"type":    "access",
 	})
 
 	accessTokenString, err := accessToken.SignedString(h.JWTSecret)
 	if err != nil {
 		log.Error("failed to sign access token")
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID,
-		"exp":     time.Now().Add(7 * 24 * time.Hour).Unix(), // 7 дней
+		"exp":     time.Now().Add(7 * 24 * time.Hour).Unix(),
 		"type":    "refresh",
 	})
 
 	refreshTokenString, err := refreshToken.SignedString(h.JWTSecret)
 	if err != nil {
 		log.Error("failed to sign resfresh token")
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
 	accessCookie := &http.Cookie{
 		Name:     "access_token",
 		Value:    accessTokenString,
-		MaxAge:   15 * 60, // 15 минут
+		MaxAge:   15 * 60,
 		HttpOnly: true,
 		Path:     "/",
 		Secure:   true,
@@ -142,7 +141,7 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	refreshCookie := &http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshTokenString,
-		MaxAge:   7 * 24 * 3600, // 7  дней
+		MaxAge:   7 * 24 * 3600,
 		HttpOnly: true,
 		Path:     "/",
 		Secure:   true,
@@ -154,61 +153,58 @@ func (h *HandlerSignup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	response := Response{
 		Response: resp.Response{
 			Status:  http.StatusOK,
-			Message: "success",
+			Message: "успешно",
 			Body:    struct{}{},
 		},
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Error("failed to encode response")
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Не удалось сформировать ответ", http.StatusInternalServerError)
 		return
 	}
 }
 
 func (h *HandlerSignup) validateRequest(req *Request) error {
 	if req.Username == "" || req.Password == "" || req.Name == "" || req.Gender == "" || req.Birthday == "" {
-		return fmt.Errorf("all fields are required")
+		return fmt.Errorf("Все поля обязательны")
 	}
 
-	// Валидация имени
 	if len(req.Name) < 2 || len(req.Name) > 100 {
-		return fmt.Errorf("name must be between 2 and 100 characters")
+		return fmt.Errorf("Имя должно быть от 2 до 100 символов")
 	}
 	for _, char := range req.Name {
 		if !unicode.IsLetter(char) && char != ' ' && char != '-' {
-			return fmt.Errorf("name can only contain letters, spaces and hyphens")
+			return fmt.Errorf("Имя может содержать только буквы, пробелы и дефисы")
 		}
 	}
 
 	if valid.HasDangerousCharacters(req.Name) {
-		return fmt.Errorf("name contains invalid characters")
+		return fmt.Errorf("Имя содержит недопустимые символы")
 	}
 
-	// Валидация username
 	if len(req.Username) < 3 || len(req.Username) > 50 {
-		return fmt.Errorf("username must be between 3 and 50 characters")
+		return fmt.Errorf("Логин должен быть от 3 до 50 символов")
 	}
 	for _, char := range req.Username {
 		if !unicode.IsLetter(char) && !unicode.IsDigit(char) && char != '_' {
-			return fmt.Errorf("username can only contain letters, numbers and underscores")
+			return fmt.Errorf("Логин может содержать только буквы, цифры и символ подчеркивания")
 		}
 	}
 
 	if valid.HasDangerousCharacters(req.Username) {
-		return fmt.Errorf("username contains invalid characters")
+		return fmt.Errorf("Логин содержит недопустимые символы")
 	}
 
-	// Валдация даты
 	if len(req.Birthday) != 10 {
-		return fmt.Errorf("birthday must be in DD.MM.YYYY format")
+		return fmt.Errorf("Дата рождения должна быть в формате ДД.ММ.ГГГГ")
 	}
 	if req.Birthday[2] != '.' || req.Birthday[5] != '.' {
-		return fmt.Errorf("birthday must be in DD.MM.YYYY format")
+		return fmt.Errorf("Дата рождения должна быть в формате ДД.ММ.ГГГГ")
 	}
 	for i, char := range req.Birthday {
 		if i != 2 && i != 5 {
 			if char < '0' || char > '9' {
-				return fmt.Errorf("birthday must contain only numbers and dots")
+				return fmt.Errorf("Дата рождения должна содержать только цифры и точки")
 			}
 		}
 	}
@@ -222,11 +218,11 @@ func (h *HandlerSignup) validateRequest(req *Request) error {
 	year, err3 := strconv.Atoi(yearStr)
 
 	if err1 != nil || err2 != nil || err3 != nil {
-		return fmt.Errorf("invalid birthday format")
+		return fmt.Errorf("Некорректная дата рождения")
 	}
 
 	if month < 1 || month > 12 {
-		return fmt.Errorf("birthday month must be between 01 and 12")
+		return fmt.Errorf("Месяц рождения должен быть от 01 до 12")
 	}
 
 	daysInMonth := 31
@@ -242,24 +238,22 @@ func (h *HandlerSignup) validateRequest(req *Request) error {
 	}
 
 	if day < 1 || day > daysInMonth {
-		return fmt.Errorf("birthday day is out of range for the month")
+		return fmt.Errorf("День рождения вне диапазона для выбранного месяца")
 	}
 
 	now := time.Now()
 	inputDate := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
 	if inputDate.After(now) {
-		return fmt.Errorf("birthday must not be in the future")
+		return fmt.Errorf("Дата рождения не может быть в будущем")
 	}
 
-	// Валидация пола
 	gender := strings.ToLower(req.Gender)
 	if gender != "male" && gender != "female" {
-		return fmt.Errorf("gender must be male or female")
+		return fmt.Errorf("Пол должен быть \"male\" или \"female\"")
 	}
 
-	// Валидация пароля
 	if len(req.Password) < 6 {
-		return fmt.Errorf("password must be at least 6 characters")
+		return fmt.Errorf("Пароль должен быть не короче 6 символов")
 	}
 	hasLetter, hasDigit := false, false
 	for _, char := range req.Password {
@@ -271,15 +265,15 @@ func (h *HandlerSignup) validateRequest(req *Request) error {
 		}
 	}
 	if !hasLetter || !hasDigit {
-		return fmt.Errorf("password must contain both letters and numbers")
+		return fmt.Errorf("Пароль должен содержать буквы и цифры")
 	}
 
 	if strings.ContainsAny(req.Password, " \t\n\r") {
-		return fmt.Errorf("password must not contain spaces")
+		return fmt.Errorf("Пароль не должен содержать пробелы")
 	}
 
 	if valid.HasDangerousCharacters(req.Password) {
-		return fmt.Errorf("password contains invalid characters")
+		return fmt.Errorf("Пароль содержит недопустимые символы")
 	}
 
 	return nil

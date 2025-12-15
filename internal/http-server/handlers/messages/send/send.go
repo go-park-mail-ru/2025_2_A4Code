@@ -80,13 +80,13 @@ func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Debug("handle messages/send")
 
 	if r.Method != http.MethodPost {
-		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		resp.SendErrorResponse(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		resp.SendErrorResponse(w, "Некорректный формат запроса", http.StatusBadRequest)
 		return
 	}
 
@@ -97,7 +97,7 @@ func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
-		resp.SendErrorResponse(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		resp.SendErrorResponse(w, "Необходима авторизация", http.StatusUnauthorized)
 		return
 	}
 
@@ -106,23 +106,28 @@ func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		messageID, err := h.messageUCase.SaveMessage(r.Context(), email, id, req.Topic, req.Text)
 		if err != nil {
 			log.Error(err.Error())
-			resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+			resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 			return
 		}
 		threadID, err := h.messageUCase.SaveThread(r.Context(), messageID)
 		if err != nil {
 			log.Error(err.Error())
-			resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+			resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 			return
 		}
 
 		err = h.messageUCase.SaveThreadIdToMessage(r.Context(), messageID, threadID)
+		if err != nil {
+			log.Error(err.Error())
+			resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
+			return
+		}
 
 		for _, file := range req.Files {
 			_, err = h.messageUCase.SaveFile(r.Context(), messageID, file.Name, file.FileType, file.StoragePath, file.Size)
 			if err != nil {
 				log.Error(err.Error())
-				resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+				resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 				return
 			}
 		}
@@ -131,24 +136,27 @@ func (h *HandlerSend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	response := Response{
 		Response: resp.Response{
 			Status:  http.StatusOK,
-			Message: "success",
+			Message: "успешно",
 			Body:    struct{}{},
 		},
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Error(err.Error())
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
+	}
 }
 
 func validateRequest(req *Request) error {
 	if req.Text == "" || req.Receivers == nil || len(req.Receivers) == 0 {
-		return fmt.Errorf("Пустое тело запроса")
+		return fmt.Errorf("Текст письма и список получателей не должны быть пустыми")
 	}
 
 	if len(req.Topic) > maxTopicLen {
-		return fmt.Errorf("Тема слишком длинная")
+		return fmt.Errorf("Тема слишком длинная (максимум %d символов)", maxTopicLen)
 	}
 	if len(req.Text) > maxTextLen {
-		return fmt.Errorf("Текст слишком длинный")
+		return fmt.Errorf("Текст слишком длинный (максимум %d символов)", maxTextLen)
 	}
 
 	if validation.HasDangerousCharacters(req.Topic) {
@@ -162,14 +170,14 @@ func validateRequest(req *Request) error {
 	for _, r := range req.Receivers {
 		email := strings.TrimSpace(r.Email)
 		if email == "" {
-			return fmt.Errorf("Не указан email получателя")
+			return fmt.Errorf("Email получателя обязателен")
 		}
 		if _, err := mail.ParseAddress(email); err != nil {
 			return fmt.Errorf("Некорректный email получателя: %s", email)
 		}
 		lower := strings.ToLower(email)
 		if _, ok := seen[lower]; ok {
-			return fmt.Errorf("Дубликат получателя: %s", email)
+			return fmt.Errorf("Дублирующийся email получателя: %s", email)
 		}
 		seen[lower] = struct{}{}
 
@@ -179,7 +187,7 @@ func validateRequest(req *Request) error {
 	}
 
 	if len(req.Files) > defaultLimitFiles {
-		return fmt.Errorf("Слишком много вложений")
+		return fmt.Errorf("Превышено количество файлов")
 	}
 	var totalSize int64
 	seenPaths := make(map[string]struct{})
@@ -189,14 +197,14 @@ func validateRequest(req *Request) error {
 		}
 		totalSize += f.Size
 		if _, ok := allowedFileTypes[f.FileType]; !ok {
-			return fmt.Errorf("Неподдерживаемый тип файла: %s", f.FileType)
+			return fmt.Errorf("Недопустимый тип файла: %s", f.FileType)
 		}
 		base := filepath.Base(f.Name)
 		if base != f.Name || strings.Contains(f.Name, "..") {
-			return fmt.Errorf("Недопустимое имя файла: %s", f.Name)
+			return fmt.Errorf("Некорректное имя файла: %s", f.Name)
 		}
 		if validation.HasDangerousCharacters(f.StoragePath) {
-			return fmt.Errorf("Недопустимый путь хранения файла: %s", f.Name)
+			return fmt.Errorf("Недопустимый путь к файлу: %s", f.Name)
 		}
 		if validation.HasDangerousCharacters(f.Name) {
 			return fmt.Errorf("Недопустимое имя файла: %s", f.Name)
@@ -204,14 +212,14 @@ func validateRequest(req *Request) error {
 		path := strings.TrimSpace(f.StoragePath)
 		if path != "" {
 			if _, exists := seenPaths[path]; exists {
-				return fmt.Errorf("Дубликат вложения: %s", f.Name)
+				return fmt.Errorf("Дублирующийся путь для файла: %s", f.Name)
 			}
 			seenPaths[path] = struct{}{}
 		}
 	}
 
 	if totalSize > maxTotalFilesSize {
-		return fmt.Errorf("Суммарный размер вложений превышает %d МБ", maxTotalFilesSize/(1024*1024))
+		return fmt.Errorf("Суммарный размер файлов превышает %d МБ", maxTotalFilesSize/(1024*1024))
 	}
 
 	return nil

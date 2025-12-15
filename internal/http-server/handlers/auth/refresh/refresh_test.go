@@ -47,7 +47,7 @@ func TestHandlerRefresh_ServeHTTP(t *testing.T) {
 				return req
 			},
 			expectedStatus:    http.StatusOK,
-			expectedMessage:   "success",
+			expectedMessage:   "успешно",
 			checkAccessCookie: true,
 		},
 		{
@@ -60,7 +60,7 @@ func TestHandlerRefresh_ServeHTTP(t *testing.T) {
 				return req
 			},
 			expectedStatus:    http.StatusMethodNotAllowed,
-			expectedMessage:   "method not allowed",
+			expectedMessage:   "Метод не поддерживается",
 			checkAccessCookie: false,
 		},
 		{
@@ -73,7 +73,7 @@ func TestHandlerRefresh_ServeHTTP(t *testing.T) {
 				return req
 			},
 			expectedStatus:    http.StatusUnauthorized,
-			expectedMessage:   "unauthorized",
+			expectedMessage:   "Необходима авторизация",
 			checkAccessCookie: false,
 		},
 		{
@@ -91,7 +91,7 @@ func TestHandlerRefresh_ServeHTTP(t *testing.T) {
 				return req
 			},
 			expectedStatus:    http.StatusUnauthorized,
-			expectedMessage:   "unauthorized",
+			expectedMessage:   "Необходима авторизация",
 			checkAccessCookie: false,
 		},
 		{
@@ -116,7 +116,7 @@ func TestHandlerRefresh_ServeHTTP(t *testing.T) {
 				return req
 			},
 			expectedStatus:    http.StatusUnauthorized,
-			expectedMessage:   "unauthorized",
+			expectedMessage:   "Необходима авторизация",
 			checkAccessCookie: false,
 		},
 	}

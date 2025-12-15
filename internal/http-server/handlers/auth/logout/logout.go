@@ -23,7 +23,7 @@ func (h *HandlerLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Debug("handle /auth/logout")
 
 	if r.Method != http.MethodPost {
-		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -50,7 +50,7 @@ func (h *HandlerLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	response := Response{
 		Response: resp.Response{
 			Status:  http.StatusOK,
-			Message: "success",
+			Message: "успешно",
 			Body:    struct{}{},
 		},
 	}
@@ -58,7 +58,7 @@ func (h *HandlerLogout) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 }

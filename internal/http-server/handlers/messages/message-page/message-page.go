@@ -78,13 +78,13 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Debug("handle messages/{message_id}")
 
 	if r.Method != http.MethodGet {
-		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 		return
 	}
 
 	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
-		resp.SendErrorResponse(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		resp.SendErrorResponse(w, "Необходима авторизация", http.StatusUnauthorized)
 		return
 	}
 
@@ -95,14 +95,14 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	messageID, err := strconv.Atoi(messageIDStr)
 	if err != nil {
 		log.Error(err.Error())
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
 	fullMessage, err := h.messageUCase.FindFullByMessageID(r.Context(), int64(messageID), id)
 	if err != nil {
 		log.Error(err.Error())
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
@@ -141,7 +141,7 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	response := Response{
 		Response: resp.Response{
 			Status:  http.StatusOK,
-			Message: "success",
+			Message: "успешно",
 			Body:    messageResponse,
 		},
 	}

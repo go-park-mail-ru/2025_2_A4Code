@@ -112,8 +112,8 @@ func TestHandlerUploadAvatar_ServeHTTP(t *testing.T) {
 					t.Errorf("Response status = %d, want %d", response.Status, http.StatusOK)
 				}
 
-				if response.Message != "success" {
-					t.Errorf("Response message = %s, want 'success'", response.Message)
+				if response.Message != "успешно" {
+					t.Errorf("Response message = %s, want 'успешно'", response.Message)
 				}
 
 				if response.Body.AvatarPath != "https://storage.example.com/avatar123.jpg" {
@@ -420,7 +420,7 @@ func TestHandlerUploadAvatar_JSONEncoding(t *testing.T) {
 			t.Errorf("Invalid status in response: %v", response["status"])
 		}
 
-		if message, ok := response["message"].(string); !ok || message != "success" {
+		if message, ok := response["message"].(string); !ok || message != "успешно" {
 			t.Errorf("Invalid message in response: %v", response["message"])
 		}
 

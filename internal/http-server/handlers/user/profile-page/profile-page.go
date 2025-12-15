@@ -69,7 +69,7 @@ func (h *HandlerProfile) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPut:
 		h.handleUpdate(w, r)
 	default:
-		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -79,14 +79,14 @@ func (h *HandlerProfile) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
-		resp.SendErrorResponse(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		resp.SendErrorResponse(w, "Необходима авторизация", http.StatusUnauthorized)
 		return
 	}
 
 	profileInfo, err := h.profileUCase.FindInfoByID(r.Context(), id)
 	if err != nil {
 		log.Error(err.Error())
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
@@ -103,14 +103,14 @@ func (h *HandlerProfile) handleUpdate(w http.ResponseWriter, r *http.Request) {
 
 	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
-		resp.SendErrorResponse(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		resp.SendErrorResponse(w, "Необходима авторизация", http.StatusUnauthorized)
 		return
 	}
 
 	var req UpdateProfileRequest
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&req); err != nil {
-		resp.SendErrorResponse(w, "invalid request body", http.StatusBadRequest)
+		resp.SendErrorResponse(w, "Некорректное тело запроса", http.StatusBadRequest)
 		return
 	}
 
@@ -124,14 +124,14 @@ func (h *HandlerProfile) handleUpdate(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.profileUCase.UpdateProfileInfo(r.Context(), id, updateReq); err != nil {
 		log.Error(err.Error())
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
 	profileInfo, err := h.profileUCase.FindInfoByID(r.Context(), id)
 	if err != nil {
 		log.Error(err.Error())
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
@@ -201,14 +201,14 @@ func (h *HandlerProfile) writeProfileResponse(w http.ResponseWriter, profileInfo
 	response := Response{
 		Response: resp.Response{
 			Status:  http.StatusOK,
-			Message: "success",
+			Message: "успешно",
 			Body:    profileInfoResponse,
 		},
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 }

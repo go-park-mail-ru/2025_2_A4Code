@@ -47,7 +47,7 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 					Return(int64(1), nil)
 			},
 			expectedStatus:  http.StatusOK,
-			expectedMessage: "success",
+			expectedMessage: "успешно",
 			checkCookies:    true,
 		},
 		{
@@ -65,7 +65,7 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 					Return(int64(1), nil)
 			},
 			expectedStatus:  http.StatusOK,
-			expectedMessage: "success",
+			expectedMessage: "успешно",
 			checkCookies:    true,
 		},
 		{
@@ -83,7 +83,7 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 					Return(int64(0), errors.New("user not found"))
 			},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "invalid login or password",
+			expectedMessage: "Неверный логин или пароль",
 			checkCookies:    false,
 		},
 		{
@@ -91,7 +91,7 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 			requestBody:     login.Request{},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusMethodNotAllowed,
-			expectedMessage: "method not allowed",
+			expectedMessage: "Метод не поддерживается",
 			checkCookies:    false,
 		},
 		{
@@ -99,7 +99,7 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 			requestBody:     "invalid json {",
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "invalid request format",
+			expectedMessage: "Некорректный формат запроса",
 			checkCookies:    false,
 		},
 		{
@@ -110,7 +110,7 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "all fields are required",
+			expectedMessage: "Логин и пароль обязательны",
 			checkCookies:    false,
 		},
 		{
@@ -121,7 +121,7 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "all fields are required",
+			expectedMessage: "Логин и пароль обязательны",
 			checkCookies:    false,
 		},
 		{
@@ -139,7 +139,7 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 					Return(int64(0), errors.New("invalid credentials"))
 			},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "invalid login or password",
+			expectedMessage: "Неверный логин или пароль",
 			checkCookies:    false,
 		},
 		{
@@ -150,7 +150,7 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "username must be between 3 and 50 characters",
+			expectedMessage: "Логин должен быть от 3 до 50 символов",
 			checkCookies:    false,
 		},
 		{
@@ -161,7 +161,7 @@ func TestHandlerLogin_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "password must be at least 6 characters",
+			expectedMessage: "Пароль должен быть не короче 6 символов",
 			checkCookies:    false,
 		},
 	}

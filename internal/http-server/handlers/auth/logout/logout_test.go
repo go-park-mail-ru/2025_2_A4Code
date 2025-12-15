@@ -24,14 +24,14 @@ func TestHandlerLogout_ServeHTTP(t *testing.T) {
 			name:            "Success logout",
 			method:          http.MethodPost,
 			expectedStatus:  http.StatusOK,
-			expectedMessage: "success",
+			expectedMessage: "успешно",
 			checkCookies:    true,
 		},
 		{
 			name:            "Invalid HTTP method",
 			method:          http.MethodGet,
 			expectedStatus:  http.StatusMethodNotAllowed,
-			expectedMessage: "method not allowed",
+			expectedMessage: "Метод не поддерживается",
 			checkCookies:    false,
 		},
 	}

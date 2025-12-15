@@ -7,15 +7,15 @@ import (
 	resp "2025_2_a4code/internal/lib/api/response"
 	valid "2025_2_a4code/internal/lib/validation"
 	"context"
-	"log/slog"
-	"strings"
-
-	"2025_2_a4code/internal/usecase/profile"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 	"unicode"
+
+	"2025_2_a4code/internal/usecase/profile"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -51,9 +51,8 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error("panic recovered",
-				slog.String("recover", fmt.Sprintf("%v", r)))
-			resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+			log.Error("panic recovered", slog.String("recover", fmt.Sprintf("%v", r)))
+			resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		}
 	}()
 
@@ -67,7 +66,6 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp.SendErrorResponse(w, "Некорректный формат запроса", http.StatusBadRequest)
 		return
 	}
-
 	defer r.Body.Close()
 
 	req.Login = strings.TrimSpace(req.Login)
@@ -79,50 +77,48 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Преобразуем в UseCase запрос
-	LoginReq := profile.LoginRequest{
+	loginReq := profile.LoginRequest{
 		Username: username,
 		Password: req.Password,
 	}
 
-	userID, err := h.profileUCase.Login(r.Context(), LoginReq)
+	userID, err := h.profileUCase.Login(r.Context(), loginReq)
 	if err != nil {
-		log.Warn("login failed",
-			slog.String("username", username))
+		log.Warn("login failed", slog.String("username", username))
 		resp.SendErrorResponse(w, "Неверный логин или пароль", http.StatusBadRequest)
 		return
 	}
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID,
-		"exp":     time.Now().Add(15 * time.Minute).Unix(), // 15 минут
+		"exp":     time.Now().Add(15 * time.Minute).Unix(),
 		"type":    "access",
 	})
 
 	accessTokenString, err := accessToken.SignedString(h.JWTSecret)
 	if err != nil {
 		log.Error("failed to sign access token")
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID,
-		"exp":     time.Now().Add(7 * 24 * time.Hour).Unix(), // 7 дней
+		"exp":     time.Now().Add(7 * 24 * time.Hour).Unix(),
 		"type":    "refresh",
 	})
 
 	refreshTokenString, err := refreshToken.SignedString(h.JWTSecret)
 	if err != nil {
 		log.Error("failed to sign refresh token")
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
 	accessCookie := &http.Cookie{
 		Name:     "access_token",
 		Value:    accessTokenString,
-		MaxAge:   15 * 60, // 15 минут
+		MaxAge:   15 * 60,
 		HttpOnly: true,
 		Path:     "/",
 		Secure:   true,
@@ -133,7 +129,7 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	refreshCookie := &http.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshTokenString,
-		MaxAge:   7 * 24 * 3600, // 7  дней
+		MaxAge:   7 * 24 * 3600,
 		HttpOnly: true,
 		Path:     "/",
 		Secure:   true,
@@ -145,21 +141,21 @@ func (h *HandlerLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	response := Response{
 		Response: resp.Response{
 			Status:  http.StatusOK,
-			Message: "success",
+			Message: "успешно",
 			Body:    struct{}{},
 		},
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Error("failed to encode response")
-		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Не удалось сформировать ответ", http.StatusInternalServerError)
 		return
 	}
 }
 
 func (h *HandlerLogin) validateRequest(login, password string) (string, error) {
 	if login == "" || password == "" {
-		return "", fmt.Errorf("все поля обязательны")
+		return "", fmt.Errorf("Логин и пароль обязательны")
 	}
 
 	username := login
@@ -168,30 +164,30 @@ func (h *HandlerLogin) validateRequest(login, password string) (string, error) {
 		if len(parts) > 0 && parts[0] != "" {
 			username = strings.TrimSpace(parts[0])
 		} else {
-			return "", fmt.Errorf("некорректный формат логина или email")
+			return "", fmt.Errorf("Некорректный логин или email")
 		}
 	}
 
 	if len(username) < 3 || len(username) > 50 {
-		return "", fmt.Errorf("логин должен быть от 3 до 50 символов")
+		return "", fmt.Errorf("Логин должен быть от 3 до 50 символов")
 	}
 
 	for _, char := range username {
 		if !unicode.IsLetter(char) && !unicode.IsDigit(char) && char != '_' {
-			return "", fmt.Errorf("логин может содержать только буквы, цифры и подчёркивания")
+			return "", fmt.Errorf("Логин может содержать только буквы, цифры и символ подчеркивания")
 		}
 	}
 
 	if valid.HasDangerousCharacters(username) {
-		return "", fmt.Errorf("логин содержит некорректные символы")
+		return "", fmt.Errorf("Логин содержит недопустимые символы")
 	}
 
 	if len(password) < 6 {
-		return "", fmt.Errorf("пароль должен быть не короче 6 символов")
+		return "", fmt.Errorf("Пароль должен быть не короче 6 символов")
 	}
 
 	if valid.HasDangerousCharacters(password) {
-		return "", fmt.Errorf("пароль содержит некорректные символы")
+		return "", fmt.Errorf("Пароль содержит недопустимые символы")
 	}
 
 	return username, nil

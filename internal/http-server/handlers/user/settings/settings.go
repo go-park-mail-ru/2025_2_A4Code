@@ -46,20 +46,20 @@ func (h *HandlerSettings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Debug("handle user/settings")
 
 	if r.Method != http.MethodGet {
-		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 		return
 	}
 
 	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
-		resp.SendErrorResponse(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		resp.SendErrorResponse(w, "Необходима авторизация", http.StatusUnauthorized)
 		return
 	}
 
 	settings, err := h.profileUCase.FindSettingsByProfileId(r.Context(), id)
 	if err != nil {
 		log.Error(err.Error())
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
@@ -73,12 +73,12 @@ func (h *HandlerSettings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reponse := Response{
 		Response: resp.Response{
 			Status:  http.StatusOK,
-			Message: "success",
+			Message: "успешно",
 			Body:    settingsResponse,
 		},
 	}
 
 	if err := json.NewEncoder(w).Encode(reponse); err != nil {
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 	}
 }

@@ -31,7 +31,7 @@ func (h *HandlerRefresh) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Debug("handle /auth/refresh")
 
 	if r.Method != http.MethodPost {
-		resp.SendErrorResponse(w, "method not allowed", http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -44,7 +44,7 @@ func (h *HandlerRefresh) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			MaxAge: -1,
 			Path:   "/",
 		})
-		resp.SendErrorResponse(w, "unauthorized", http.StatusUnauthorized)
+		resp.SendErrorResponse(w, "Необходима авторизация", http.StatusUnauthorized)
 		return
 	}
 
@@ -57,7 +57,7 @@ func (h *HandlerRefresh) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	newAccessTokenString, err := newAccessToken.SignedString(h.JWTSecret)
 	if err != nil {
 		log.Error("failed to sign new access token")
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
@@ -76,14 +76,14 @@ func (h *HandlerRefresh) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	response := Response{
 		Response: resp.Response{
 			Status:  http.StatusOK,
-			Message: "success",
+			Message: "успешно",
 			Body:    struct{}{},
 		},
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Error("failed to encode response")
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 }

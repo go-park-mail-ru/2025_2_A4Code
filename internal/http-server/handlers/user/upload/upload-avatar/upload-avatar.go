@@ -48,13 +48,13 @@ func (h *HandlerUploadAvatar) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	log.Debug("Handling user/upload/avatar")
 
 	if r.Method != http.MethodPost {
-		resp.SendErrorResponse(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		resp.SendErrorResponse(w, "Метод не поддерживается", http.StatusMethodNotAllowed)
 		return
 	}
 
 	id, err := session.GetProfileID(r, h.secret)
 	if err != nil {
-		resp.SendErrorResponse(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		resp.SendErrorResponse(w, "Необходима авторизация", http.StatusUnauthorized)
 		return
 	}
 
@@ -62,14 +62,14 @@ func (h *HandlerUploadAvatar) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	err = r.ParseMultipartForm(maxAvatarSize)
 	if err != nil {
 		log.Error("Error parsing avatar form: " + err.Error())
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
 	file, header, err := r.FormFile("avatar")
 	if err != nil {
 		log.Error("Error getting file from form: " + err.Error())
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 	defer file.Close()
@@ -81,14 +81,14 @@ func (h *HandlerUploadAvatar) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	objectName, presignedURL, err := h.avatarUcase.UploadAvatar(ctx, stringId, file, header.Size, header.Filename)
 	if err != nil {
 		log.Error("Error uploading avatar: " + err.Error())
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
 	err = h.profileUcase.InsertProfileAvatar(ctx, id, objectName)
 	if err != nil {
 		log.Error("Error inserting avatar: " + err.Error())
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 
@@ -96,7 +96,7 @@ func (h *HandlerUploadAvatar) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	response := Response{
 		resp.Response{
 			Status:  http.StatusOK,
-			Message: "success",
+			Message: "успешно",
 			Body: struct {
 				AvatarPath string `json:"avatar_path"`
 			}{
@@ -107,7 +107,7 @@ func (h *HandlerUploadAvatar) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
 		log.Error("Error encoding response: " + err.Error())
-		resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)
+		resp.SendErrorResponse(w, "Произошла ошибка", http.StatusInternalServerError)
 		return
 	}
 }

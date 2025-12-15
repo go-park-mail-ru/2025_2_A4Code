@@ -81,8 +81,8 @@ func TestHandlerSettings_ServeHTTP(t *testing.T) {
 					t.Errorf("Response status = %d, want %d", response.Status, http.StatusOK)
 				}
 
-				if response.Message != "success" {
-					t.Errorf("Response message = %s, want 'success'", response.Message)
+				if response.Message != "успешно" {
+					t.Errorf("Response message = %s, want 'успешно'", response.Message)
 				}
 
 				if response.Body.NotificationTolerance != "30" {
@@ -208,8 +208,8 @@ func TestHandlerSettings_ServeHTTP(t *testing.T) {
 					t.Errorf("Expected status %d, got %d", http.StatusInternalServerError, response.Status)
 				}
 
-				if response.Message != "something went wrong" {
-					t.Errorf("Expected message 'something went wrong', got '%s'", response.Message)
+				if response.Message != "Произошла ошибка" {
+					t.Errorf("Expected message 'Произошла ошибка', got '%s'", response.Message)
 				}
 			},
 		},

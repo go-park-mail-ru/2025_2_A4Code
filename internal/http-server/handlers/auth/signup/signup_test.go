@@ -53,7 +53,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 					Return(int64(1), nil)
 			},
 			expectedStatus:  http.StatusOK,
-			expectedMessage: "success",
+			expectedMessage: "успешно",
 			checkCookies:    true,
 		},
 		{
@@ -77,7 +77,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 					Return(int64(2), nil)
 			},
 			expectedStatus:  http.StatusOK,
-			expectedMessage: "success",
+			expectedMessage: "успешно",
 			checkCookies:    true,
 		},
 		{
@@ -95,7 +95,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 					Return(int64(0), profile.ErrUserAlreadyExists)
 			},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "user with this username already exists",
+			expectedMessage: "Пользователь с таким логином уже существует",
 			checkCookies:    false,
 		},
 		{
@@ -113,7 +113,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 					Return(int64(0), errors.New("database error"))
 			},
 			expectedStatus:  http.StatusInternalServerError,
-			expectedMessage: "something went wrong",
+			expectedMessage: "Произошла ошибка",
 			checkCookies:    false,
 		},
 		{
@@ -121,7 +121,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			requestBody:     signup.Request{},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusMethodNotAllowed,
-			expectedMessage: "method not allowed",
+			expectedMessage: "Метод не поддерживается",
 			checkCookies:    false,
 		},
 		{
@@ -129,7 +129,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			requestBody:     "invalid json {",
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "invalid request format",
+			expectedMessage: "Некорректный формат запроса",
 			checkCookies:    false,
 		},
 		{
@@ -143,7 +143,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "all fields are required",
+			expectedMessage: "Все поля обязательны",
 			checkCookies:    false,
 		},
 		{
@@ -157,7 +157,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "all fields are required",
+			expectedMessage: "Все поля обязательны",
 			checkCookies:    false,
 		},
 		{
@@ -171,7 +171,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "all fields are required",
+			expectedMessage: "Все поля обязательны",
 			checkCookies:    false,
 		},
 		{
@@ -185,7 +185,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "all fields are required",
+			expectedMessage: "Все поля обязательны",
 			checkCookies:    false,
 		},
 		{
@@ -199,7 +199,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "all fields are required",
+			expectedMessage: "Все поля обязательны",
 			checkCookies:    false,
 		},
 		{
@@ -213,7 +213,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "name must be between 2 and 100 characters",
+			expectedMessage: "Имя должно быть от 2 до 100 символов",
 			checkCookies:    false,
 		},
 		{
@@ -227,7 +227,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "name can only contain letters, spaces and hyphens",
+			expectedMessage: "Имя может содержать только буквы, пробелы и дефисы",
 			checkCookies:    false,
 		},
 		{
@@ -241,7 +241,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "username must be between 3 and 50 characters",
+			expectedMessage: "Логин должен быть от 3 до 50 символов",
 			checkCookies:    false,
 		},
 		{
@@ -255,7 +255,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "username can only contain letters, numbers and underscores",
+			expectedMessage: "Логин может содержать только буквы, цифры и символ подчеркивания",
 			checkCookies:    false,
 		},
 		{
@@ -269,7 +269,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "birthday must be in DD.MM.YYYY format",
+			expectedMessage: "Дата рождения должна быть в формате ДД.ММ.ГГГГ",
 			checkCookies:    false,
 		},
 		{
@@ -283,7 +283,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "birthday must be in DD.MM.YYYY format",
+			expectedMessage: "Дата рождения должна быть в формате ДД.ММ.ГГГГ",
 			checkCookies:    false,
 		},
 		{
@@ -297,7 +297,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "birthday month must be between 01 and 12",
+			expectedMessage: "Месяц рождения должен быть от 01 до 12",
 			checkCookies:    false,
 		},
 		{
@@ -311,7 +311,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "birthday day is out of range for the month",
+			expectedMessage: "День рождения вне диапазона для выбранного месяца",
 			checkCookies:    false,
 		},
 		{
@@ -325,7 +325,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "birthday must not be in the future",
+			expectedMessage: "Дата рождения не может быть в будущем",
 			checkCookies:    false,
 		},
 		{
@@ -339,7 +339,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "gender must be male or female",
+			expectedMessage: "Пол должен быть \"male\" или \"female\"",
 			checkCookies:    false,
 		},
 		{
@@ -353,7 +353,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "password must be at least 6 characters",
+			expectedMessage: "Пароль должен быть не короче 6 символов",
 			checkCookies:    false,
 		},
 		{
@@ -367,7 +367,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "password must contain both letters and numbers",
+			expectedMessage: "Пароль должен содержать буквы и цифры",
 			checkCookies:    false,
 		},
 		{
@@ -381,7 +381,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "password must contain both letters and numbers",
+			expectedMessage: "Пароль должен содержать буквы и цифры",
 			checkCookies:    false,
 		},
 		{
@@ -395,7 +395,7 @@ func TestHandlerSignup_ServeHTTP(t *testing.T) {
 			},
 			setupMocks:      func() {},
 			expectedStatus:  http.StatusBadRequest,
-			expectedMessage: "password must not contain spaces",
+			expectedMessage: "Пароль не должен содержать пробелы",
 			checkCookies:    false,
 		},
 	}

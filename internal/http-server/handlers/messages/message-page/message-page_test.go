@@ -116,8 +116,8 @@ func TestHandlerMessagePage_ServeHTTP(t *testing.T) {
 					t.Errorf("Response status = %d, want %d", response.Status, http.StatusOK)
 				}
 
-				if response.Message != "success" {
-					t.Errorf("Response message = %s, want 'success'", response.Message)
+				if response.Message != "успешно" {
+					t.Errorf("Response message = %s, want 'успешно'", response.Message)
 				}
 
 				if response.Body.Topic != testFullMessage.Topic {
