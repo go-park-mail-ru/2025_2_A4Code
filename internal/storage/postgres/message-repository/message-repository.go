@@ -113,18 +113,9 @@ func (repo *MessageRepository) SaveOutgoingExternalMessage(ctx context.Context, 
 	log.Debug("Resolving sender base profile ID...")
 	err = tx.QueryRowContext(ctx, `
 		SELECT base_profile_id FROM profile WHERE id = $1`,
-		senderBaseProfileID).Scan(&senderBaseID)
+		senderProfileID).Scan(&senderBaseID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to resolve sender base profile id: ", err)
-	}
-
-	var senderBaseProfileID int64
-	log.Debug("Getting sender base profile ID for external outgoing...")
-	err = tx.QueryRowContext(ctx, `
-        SELECT base_profile_id FROM profile WHERE id = $1`,
-		senderProfileID).Scan(&senderBaseProfileID)
-	if err != nil {
-		return 0, e.Wrap(op+": failed to get sender base profile id: ", err)
 	}
 
 	var messageID int64
@@ -133,7 +124,7 @@ func (repo *MessageRepository) SaveOutgoingExternalMessage(ctx context.Context, 
         INSERT INTO message (topic, text, date_of_dispatch, sender_base_profile_id)
         VALUES ($1, $2, $3, $4)
         RETURNING id`,
-		topic, text, time.Now(), senderBaseProfileID).Scan(&messageID)
+		topic, text, time.Now(), senderBaseID).Scan(&messageID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to insert message: ", err)
 	}
@@ -416,6 +407,15 @@ func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileE
 		return 0, e.Wrap(op+": failed to begin transaction: ", err)
 	}
 	defer tx.Rollback()
+
+	var senderBaseID int64
+	log.Debug("Resolving sender base profile ID...")
+	err = tx.QueryRowContext(ctx, `
+		SELECT base_profile_id FROM profile WHERE id = $1`,
+		senderBaseProfileID).Scan(&senderBaseID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to resolve sender base profile id: ", err)
+	}
 
 	// Вставка сообщения
 	const insertMessage = `
