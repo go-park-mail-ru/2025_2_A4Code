@@ -8,9 +8,10 @@ run:
 linters:
   enable:
     - gosimple     # Упрощение кода
-    - typecheck    # Проверка типов
+   
   disable:
     - unused       # Отключаем проверку неиспользуемого кода
     - errcheck     # Отключаем проверку необработанных ошибок
     - govet        # Стандартный go vet
     - ineffassign  # Обнаружение бесполезных присваиваний
+    - typecheck    # Проверка типов
