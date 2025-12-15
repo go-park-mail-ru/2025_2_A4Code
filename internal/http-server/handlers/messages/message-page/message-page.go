@@ -40,11 +40,18 @@ type File struct {
 
 type Files []File
 
+type Receiver struct {
+	Email string `json:"email"`
+}
+
+type Receivers []Receiver
+
 type Message struct {
-	Topic    string    `json:"topic"`
-	Text     string    `json:"text"`
-	Datetime time.Time `json:"datetime"`
-	ThreadId string    `json:"thread_id"`
+	Topic     string    `json:"topic"`
+	Text      string    `json:"text"`
+	Datetime  time.Time `json:"datetime"`
+	ThreadId  string    `json:"thread_id"`
+	Receivers Receivers `json:"receivers,omitempty"`
 	Sender
 	Files
 }
@@ -126,8 +133,9 @@ func (h *HandlerMessagePage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Username: fullMessage.Username,
 			Avatar:   fullMessage.Avatar,
 		},
-		ThreadId: fullMessage.ThreadRoot,
-		Files:    filesResponse,
+		ThreadId:  fullMessage.ThreadRoot,
+		Files:     filesResponse,
+		Receivers: mapReceivers(fullMessage.Receivers),
 	}
 
 	response := Response{
@@ -178,4 +186,25 @@ func (h *HandlerMessagePage) enrichSenderAvatar(ctx context.Context, sender *dom
 
 	sender.Avatar = url.String()
 	return nil
+}
+
+func mapReceivers(receivers []string) Receivers {
+	if len(receivers) == 0 {
+		return nil
+	}
+
+	mapped := make(Receivers, 0, len(receivers))
+	for _, r := range receivers {
+		email := strings.TrimSpace(r)
+		if email == "" {
+			continue
+		}
+		mapped = append(mapped, Receiver{Email: email})
+	}
+
+	if len(mapped) == 0 {
+		return nil
+	}
+
+	return mapped
 }

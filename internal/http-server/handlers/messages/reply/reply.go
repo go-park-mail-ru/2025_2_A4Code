@@ -104,7 +104,8 @@ func (h *HandlerReply) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, receiver := range req.Receivers {
-		messageID, err := h.messageUCase.SaveMessage(r.Context(), receiver.Email, id, req.Topic, req.Text)
+		email := strings.TrimSpace(strings.ToLower(receiver.Email))
+		messageID, err := h.messageUCase.SaveMessage(r.Context(), email, id, req.Topic, req.Text)
 		if err != nil {
 			log.Error(err.Error())
 			resp.SendErrorResponse(w, "something went wrong", http.StatusInternalServerError)

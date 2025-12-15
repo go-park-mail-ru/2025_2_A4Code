@@ -48,6 +48,7 @@ func TestHandlerMessagePage_ServeHTTP(t *testing.T) {
 			Username: "sender",
 			Avatar:   "avatar.jpg",
 		},
+		Receivers:  []string{"recipient@example.com"},
 		ThreadRoot: "thread-123",
 		Files: []domain.File{
 			{
@@ -145,6 +146,12 @@ func TestHandlerMessagePage_ServeHTTP(t *testing.T) {
 
 				if response.Body.Sender.Avatar != "https://storage.example.com/avatar.jpg?signature=abc" {
 					t.Errorf("Expected avatar URL %s, got %s", "https://storage.example.com/avatar.jpg?signature=abc", response.Body.Sender.Avatar)
+				}
+
+				if len(response.Body.Receivers) != len(testFullMessage.Receivers) {
+					t.Errorf("Expected %d receivers, got %d", len(testFullMessage.Receivers), len(response.Body.Receivers))
+				} else if response.Body.Receivers[0].Email != testFullMessage.Receivers[0] {
+					t.Errorf("Expected receiver email %s, got %s", testFullMessage.Receivers[0], response.Body.Receivers[0].Email)
 				}
 
 				if len(response.Body.Files) != len(testFullMessage.Files) {

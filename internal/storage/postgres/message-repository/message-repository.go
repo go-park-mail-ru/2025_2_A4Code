@@ -109,6 +109,15 @@ func (repo *MessageRepository) SaveOutgoingExternalMessage(ctx context.Context, 
 	}
 	defer tx.Rollback()
 
+	var senderBaseID int64
+	log.Debug("Resolving sender base profile ID...")
+	err = tx.QueryRowContext(ctx, `
+		SELECT base_profile_id FROM profile WHERE id = $1`,
+		senderBaseProfileID).Scan(&senderBaseID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to resolve sender base profile id: ", err)
+	}
+
 	var senderBaseProfileID int64
 	log.Debug("Getting sender base profile ID for external outgoing...")
 	err = tx.QueryRowContext(ctx, `
@@ -167,6 +176,22 @@ func (repo *MessageRepository) SaveOutgoingExternalMessage(ctx context.Context, 
 
 func New(db *sql.DB) *MessageRepository {
 	return &MessageRepository{db: db}
+}
+
+func normalizeEmailParts(email string) (string, string, error) {
+	trimmed := strings.TrimSpace(email)
+	parts := strings.SplitN(trimmed, "@", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid email format")
+	}
+
+	username := strings.ToLower(strings.TrimSpace(parts[0]))
+	domain := strings.ToLower(strings.TrimSpace(parts[1]))
+	if username == "" || domain == "" {
+		return "", "", fmt.Errorf("invalid email format")
+	}
+
+	return username, domain, nil
 }
 
 func buildSnippet(text string, limit int) string {
@@ -399,14 +424,16 @@ func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileE
 		RETURNING id`
 
 	log.Debug("Inserting message...")
-	err = tx.QueryRowContext(ctx, insertMessage, topic, text, time.Now(), senderBaseProfileID).Scan(&messageID)
+	err = tx.QueryRowContext(ctx, insertMessage, topic, text, time.Now(), senderBaseID).Scan(&messageID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to insert message: ", err)
 	}
 
 	// Получение receiver_profile_id
-	username := strings.Split(receiverProfileEmail, "@")[0]
-	domain := strings.Split(receiverProfileEmail, "@")[1]
+	username, domain, parseErr := normalizeEmailParts(receiverProfileEmail)
+	if parseErr != nil {
+		return 0, e.Wrap(op+": invalid receiver email: ", parseErr)
+	}
 
 	var receiverProfileID int64
 	log.Debug("Getting receiver profile ID...")
@@ -1365,19 +1392,30 @@ func (repo *MessageRepository) SaveMessageWithFolderDistribution(
 	}
 	defer tx.Rollback()
 
+	var senderBaseID int64
+	log.Debug("Resolving sender base profile ID...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT base_profile_id FROM profile WHERE id = $1`,
+		senderBaseProfileID).Scan(&senderBaseID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to resolve sender base profile id: ", err)
+	}
+
 	const insertMessage = `
         INSERT INTO message (topic, text, date_of_dispatch, sender_base_profile_id)
         VALUES ($1, $2, $3, $4)
         RETURNING id`
 
 	log.Debug("Inserting message...")
-	err = tx.QueryRowContext(ctx, insertMessage, topic, text, time.Now(), senderBaseProfileID).Scan(&messageID)
+	err = tx.QueryRowContext(ctx, insertMessage, topic, text, time.Now(), senderBaseID).Scan(&messageID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to insert message: ", err)
 	}
 
-	username := strings.Split(receiverProfileEmail, "@")[0]
-	domain := strings.Split(receiverProfileEmail, "@")[1]
+	username, domain, parseErr := normalizeEmailParts(receiverProfileEmail)
+	if parseErr != nil {
+		return 0, e.Wrap(op+": invalid receiver email: ", parseErr)
+	}
 
 	var receiverProfileID int64
 	log.Debug("Getting receiver profile ID...")
@@ -1486,8 +1524,10 @@ func (repo *MessageRepository) ReplyToMessageWithFolderDistribution(
 		return 0, e.Wrap(op+": failed to insert message: ", err)
 	}
 
-	username := strings.Split(receiverEmail, "@")[0]
-	domain := strings.Split(receiverEmail, "@")[1]
+	username, domain, parseErr := normalizeEmailParts(receiverEmail)
+	if parseErr != nil {
+		return 0, e.Wrap(op+": invalid receiver email: ", parseErr)
+	}
 
 	var receiverProfileID int64
 	log.Debug("Getting receiver profile ID...")
