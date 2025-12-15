@@ -31,7 +31,5 @@ go.work.sum
 # files
 cookies.txt
 
-# linter
-.golangci.yml
 
 .github/copilot-instructions.md

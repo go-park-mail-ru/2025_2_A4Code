@@ -1,0 +1,14 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: false
+
+
+linters:
+  enable:
+    - typecheck    # Проверка типов
+
+# linter-settings:
+#   errcheck:
+#     check-type-assertions: true
