@@ -116,7 +116,7 @@ func main() {
 	msgUcase := message.New(msgRepo)
 
 	for {
-		if err := processBatch(ctx, cfg, mailDB, minioClient, msgUcase, log); err != nil {
+		if err := processBatch(ctx, cfg, mailDB, mainDB, minioClient, msgUcase, log); err != nil {
 			log.Error("batch error", "err", err)
 		}
 		time.Sleep(2 * time.Second)
