@@ -256,7 +256,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     ports:
-      - "25:25"
+      - "8050:25"
     depends_on:
       - mail-ingest
 
