@@ -1433,7 +1433,7 @@ func (repo *MessageRepository) SaveMessageWithFolderDistribution(
 	log.Debug("Getting sender profile ID...")
 	err = tx.QueryRowContext(ctx, `
         SELECT id FROM profile WHERE base_profile_id = $1`,
-		senderBaseProfileID).Scan(&senderProfileID)
+		senderBaseID).Scan(&senderProfileID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to get sender profile id: ", err)
 	}
