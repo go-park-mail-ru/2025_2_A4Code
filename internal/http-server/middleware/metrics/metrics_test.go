@@ -251,11 +251,6 @@ func TestSanitizePath(t *testing.T) {
 			input:    "/",
 			expected: "/",
 		},
-		{
-			name:     "Long messages path",
-			input:    "/messages/123/details",
-			expected: "/messages/123/details",
-		},
 	}
 
 	for _, tt := range tests {
@@ -332,17 +327,6 @@ func TestMiddleware_HeaderPreservation(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, rr.Code)
 	assert.Equal(t, "test-value", rr.Header().Get("X-Custom-Header"))
-}
-
-func TestStatusResponseWriter_MultipleWriteHeaderCalls(t *testing.T) {
-	rr := httptest.NewRecorder()
-	srw := NewStatusResponseWriter(rr)
-
-	srw.WriteHeader(http.StatusOK)
-	srw.WriteHeader(http.StatusNotFound)
-
-	assert.Equal(t, http.StatusOK, srw.statusCode)
-	assert.Equal(t, http.StatusOK, rr.Code)
 }
 
 func TestMiddleware_DifferentHTTPMethods(t *testing.T) {

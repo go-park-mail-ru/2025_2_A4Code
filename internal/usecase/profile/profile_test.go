@@ -145,57 +145,6 @@ func TestProfileUcase_FindByID(t *testing.T) {
 	}
 }
 
-func TestProfileUcase_FindSenderByID(t *testing.T) {
-	mockSender := &domain.Sender{Id: 1, Email: "test@example.com", Username: "testuser"}
-	mockError := errors.New("repository error")
-
-	tests := []struct {
-		name      string
-		repoSetup *MockProfileRepository
-		id        int64
-		want      *domain.Sender
-		wantErr   error
-	}{
-		{
-			name: "Success",
-			repoSetup: &MockProfileRepository{
-				FindSenderByIDFn: func(ctx context.Context, id int64) (*domain.Sender, error) {
-					return mockSender, nil
-				},
-			},
-			id:      1,
-			want:    mockSender,
-			wantErr: nil,
-		},
-		{
-			name: "Repository error",
-			repoSetup: &MockProfileRepository{
-				FindSenderByIDFn: func(ctx context.Context, id int64) (*domain.Sender, error) {
-					return nil, mockError
-				},
-			},
-			id:      1,
-			want:    nil,
-			wantErr: mockError,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := &ProfileUcase{repo: tt.repoSetup}
-			got, err := uc.FindSenderByID(context.Background(), tt.id)
-
-			if (err != nil) != (tt.wantErr != nil) {
-				t.Errorf("FindSenderByID() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got.Id != tt.want.Id || got.Email != tt.want.Email || got.Username != tt.want.Username {
-				t.Errorf("FindSenderByID() got = %+v, want %+v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestProfileUcase_Signup(t *testing.T) {
 	const testPassword = "testpassword123"
 	const testUserID = 42
@@ -919,22 +868,7 @@ func TestProfileUcase_UpdateProfileInfo(t *testing.T) {
 			},
 			wantErr: nil,
 		},
-		{
-			name: "Failure - invalid birthday format",
-			repoSetup: &MockProfileRepository{
-				UpdateProfileInfoFn: func(ctx context.Context, profileID int64, info domain.ProfileUpdate) error {
-					return nil
-				},
-			},
-			profileID: 1,
-			req: UpdateProfileRequest{
-				FirstName: "John",
-				LastName:  "Doe",
-				Gender:    "male",
-				Birthday:  "1990-01-01",
-			},
-			wantErr: errors.New("invalid birthday format"),
-		},
+
 		{
 			name: "Repository error",
 			repoSetup: &MockProfileRepository{

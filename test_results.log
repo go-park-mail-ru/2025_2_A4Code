@@ -1,0 +1,855 @@
+?   	2025_2_a4code/auth-service/app	[no test files]
+?   	2025_2_a4code/auth-service/cmd	[no test files]
+=== RUN   TestServer_Login
+=== RUN   TestServer_Login/Success
+=== RUN   TestServer_Login/EmptyLogin
+=== RUN   TestServer_Login/EmptyPassword
+=== RUN   TestServer_Login/InvalidCredentials
+--- PASS: TestServer_Login (0.00s)
+    --- PASS: TestServer_Login/Success (0.00s)
+    --- PASS: TestServer_Login/EmptyLogin (0.00s)
+    --- PASS: TestServer_Login/EmptyPassword (0.00s)
+    --- PASS: TestServer_Login/InvalidCredentials (0.00s)
+=== RUN   TestServer_Signup
+=== RUN   TestServer_Signup/Success
+=== RUN   TestServer_Signup/EmptyUsername
+=== RUN   TestServer_Signup/EmptyPassword
+=== RUN   TestServer_Signup/UserAlreadyExists
+2025/12/15 23:36:35 WARN authservice.Signup: signup failed: user already exists
+--- PASS: TestServer_Signup (0.00s)
+    --- PASS: TestServer_Signup/Success (0.00s)
+    --- PASS: TestServer_Signup/EmptyUsername (0.00s)
+    --- PASS: TestServer_Signup/EmptyPassword (0.00s)
+    --- PASS: TestServer_Signup/UserAlreadyExists (0.00s)
+=== RUN   TestServer_Refresh
+=== RUN   TestServer_Refresh/Success
+=== RUN   TestServer_Refresh/EmptyToken
+=== RUN   TestServer_Refresh/ExpiredToken
+=== RUN   TestServer_Refresh/InvalidSignature
+=== RUN   TestServer_Refresh/WrongTokenType
+--- PASS: TestServer_Refresh (0.00s)
+    --- PASS: TestServer_Refresh/Success (0.00s)
+    --- PASS: TestServer_Refresh/EmptyToken (0.00s)
+    --- PASS: TestServer_Refresh/ExpiredToken (0.00s)
+    --- PASS: TestServer_Refresh/InvalidSignature (0.00s)
+    --- PASS: TestServer_Refresh/WrongTokenType (0.00s)
+=== RUN   TestServer_Logout
+=== RUN   TestServer_Logout/Success
+--- PASS: TestServer_Logout (0.00s)
+    --- PASS: TestServer_Logout/Success (0.00s)
+=== RUN   TestServer_generateAccessToken
+=== RUN   TestServer_generateAccessToken/Success
+=== RUN   TestServer_generateAccessToken/DifferentUserIDs
+--- PASS: TestServer_generateAccessToken (0.00s)
+    --- PASS: TestServer_generateAccessToken/Success (0.00s)
+    --- PASS: TestServer_generateAccessToken/DifferentUserIDs (0.00s)
+=== RUN   TestServer_generateTokenPair
+=== RUN   TestServer_generateTokenPair/Success
+=== RUN   TestServer_generateTokenPair/TokenExpiration
+--- PASS: TestServer_generateTokenPair (0.00s)
+    --- PASS: TestServer_generateTokenPair/Success (0.00s)
+    --- PASS: TestServer_generateTokenPair/TokenExpiration (0.00s)
+=== RUN   TestServer_Login_TrimSpaces
+=== RUN   TestServer_Login_TrimSpaces/TrimSpaces
+--- PASS: TestServer_Login_TrimSpaces (0.00s)
+    --- PASS: TestServer_Login_TrimSpaces/TrimSpaces (0.00s)
+=== RUN   TestServer_Signup_TrimSpaces
+=== RUN   TestServer_Signup_TrimSpaces/TrimSpaces
+--- PASS: TestServer_Signup_TrimSpaces (0.00s)
+    --- PASS: TestServer_Signup_TrimSpaces/TrimSpaces (0.00s)
+=== RUN   TestServer_generateAccessToken_Error
+--- PASS: TestServer_generateAccessToken_Error (0.00s)
+=== RUN   TestServer_TokenStructure
+=== RUN   TestServer_TokenStructure/TokenContainsRequiredClaims
+--- PASS: TestServer_TokenStructure (0.00s)
+    --- PASS: TestServer_TokenStructure/TokenContainsRequiredClaims (0.00s)
+PASS
+ok  	2025_2_a4code/auth-service/grpc-service	0.491s
+?   	2025_2_a4code/auth-service/pkg/authproto	[no test files]
+?   	2025_2_a4code/gateway-service/app	[no test files]
+?   	2025_2_a4code/gateway-service/cmd	[no test files]
+=== RUN   TestServer_UpdateProfileHandler
+=== RUN   TestServer_UpdateProfileHandler/Success
+=== RUN   TestServer_UpdateProfileHandler/InvalidRequestBody
+--- PASS: TestServer_UpdateProfileHandler (0.00s)
+    --- PASS: TestServer_UpdateProfileHandler/Success (0.00s)
+    --- PASS: TestServer_UpdateProfileHandler/InvalidRequestBody (0.00s)
+=== RUN   TestServer_RenameFolderHandler
+=== RUN   TestServer_RenameFolderHandler/Success
+--- PASS: TestServer_RenameFolderHandler (0.00s)
+    --- PASS: TestServer_RenameFolderHandler/Success (0.00s)
+=== RUN   TestServer_SaveDraftHandler
+=== RUN   TestServer_SaveDraftHandler/Success
+--- PASS: TestServer_SaveDraftHandler (0.00s)
+    --- PASS: TestServer_SaveDraftHandler/Success (0.00s)
+=== RUN   TestServer_DeleteDraftHandler
+=== RUN   TestServer_DeleteDraftHandler/Success
+--- PASS: TestServer_DeleteDraftHandler (0.00s)
+    --- PASS: TestServer_DeleteDraftHandler/Success (0.00s)
+=== RUN   TestServer_MarkAsSpamHandler
+=== RUN   TestServer_MarkAsSpamHandler/Success
+--- PASS: TestServer_MarkAsSpamHandler (0.00s)
+    --- PASS: TestServer_MarkAsSpamHandler/Success (0.00s)
+=== RUN   TestServer_MoveToFolderHandler
+=== RUN   TestServer_MoveToFolderHandler/Success
+--- PASS: TestServer_MoveToFolderHandler (0.00s)
+    --- PASS: TestServer_MoveToFolderHandler/Success (0.00s)
+=== RUN   TestServer_UploadAvatarHandler
+=== RUN   TestServer_UploadAvatarHandler/Success
+=== RUN   TestServer_UploadAvatarHandler/NoFileProvided
+--- PASS: TestServer_UploadAvatarHandler (0.00s)
+    --- PASS: TestServer_UploadAvatarHandler/Success (0.00s)
+    --- PASS: TestServer_UploadAvatarHandler/NoFileProvided (0.00s)
+=== RUN   TestNormalizeAvatarURL
+=== RUN   TestNormalizeAvatarURL/ValidURL
+=== RUN   TestNormalizeAvatarURL/LocalhostToMinio
+=== RUN   TestNormalizeAvatarURL/127.0.0.1ToMinio
+=== RUN   TestNormalizeAvatarURL/InvalidURL
+--- PASS: TestNormalizeAvatarURL (0.00s)
+    --- PASS: TestNormalizeAvatarURL/ValidURL (0.00s)
+    --- PASS: TestNormalizeAvatarURL/LocalhostToMinio (0.00s)
+    --- PASS: TestNormalizeAvatarURL/127.0.0.1ToMinio (0.00s)
+    --- PASS: TestNormalizeAvatarURL/InvalidURL (0.00s)
+=== RUN   TestResolveFolderID
+=== RUN   TestResolveFolderID/ByFolderID
+=== RUN   TestResolveFolderID/ByFolderName
+=== RUN   TestResolveFolderID/ByFolderType
+=== RUN   TestResolveFolderID/NotFound
+=== RUN   TestResolveFolderID/EmptyTarget
+--- PASS: TestResolveFolderID (0.00s)
+    --- PASS: TestResolveFolderID/ByFolderID (0.00s)
+    --- PASS: TestResolveFolderID/ByFolderName (0.00s)
+    --- PASS: TestResolveFolderID/ByFolderType (0.00s)
+    --- PASS: TestResolveFolderID/NotFound (0.00s)
+    --- PASS: TestResolveFolderID/EmptyTarget (0.00s)
+=== RUN   TestMapProfile
+--- PASS: TestMapProfile (0.00s)
+=== RUN   TestMapProfile_Nil
+--- PASS: TestMapProfile_Nil (0.00s)
+=== RUN   TestServer_RefreshHandler
+=== RUN   TestServer_RefreshHandler/Success
+=== RUN   TestServer_RefreshHandler/NoRefreshToken
+--- PASS: TestServer_RefreshHandler (0.00s)
+    --- PASS: TestServer_RefreshHandler/Success (0.00s)
+    --- PASS: TestServer_RefreshHandler/NoRefreshToken (0.00s)
+=== RUN   TestServer_LogoutHandler
+=== RUN   TestServer_LogoutHandler/Success
+--- PASS: TestServer_LogoutHandler (0.00s)
+    --- PASS: TestServer_LogoutHandler/Success (0.00s)
+=== RUN   TestWriteGrpcAwareError
+=== RUN   TestWriteGrpcAwareError/Unauthenticated
+=== RUN   TestWriteGrpcAwareError/InvalidArgument
+=== RUN   TestWriteGrpcAwareError/NotFound
+=== RUN   TestWriteGrpcAwareError/PermissionDenied
+=== RUN   TestWriteGrpcAwareError/AlreadyExists
+=== RUN   TestWriteGrpcAwareError/GenericError
+--- PASS: TestWriteGrpcAwareError (0.00s)
+    --- PASS: TestWriteGrpcAwareError/Unauthenticated (0.00s)
+    --- PASS: TestWriteGrpcAwareError/InvalidArgument (0.00s)
+    --- PASS: TestWriteGrpcAwareError/NotFound (0.00s)
+    --- PASS: TestWriteGrpcAwareError/PermissionDenied (0.00s)
+    --- PASS: TestWriteGrpcAwareError/AlreadyExists (0.00s)
+    --- PASS: TestWriteGrpcAwareError/GenericError (0.00s)
+=== RUN   TestServer_ReplyHandler
+=== RUN   TestServer_ReplyHandler/Success
+=== RUN   TestServer_ReplyHandler/InvalidRequestBody
+--- PASS: TestServer_ReplyHandler (0.00s)
+    --- PASS: TestServer_ReplyHandler/Success (0.00s)
+    --- PASS: TestServer_ReplyHandler/InvalidRequestBody (0.00s)
+=== RUN   TestServer_SettingsHandler
+=== RUN   TestServer_SettingsHandler/Success
+--- PASS: TestServer_SettingsHandler (0.00s)
+    --- PASS: TestServer_SettingsHandler/Success (0.00s)
+=== RUN   TestServer_SendDraftHandler
+=== RUN   TestServer_SendDraftHandler/Success
+--- PASS: TestServer_SendDraftHandler (0.00s)
+    --- PASS: TestServer_SendDraftHandler/Success (0.00s)
+=== RUN   TestServer_DeleteFolderHandler
+=== RUN   TestServer_DeleteFolderHandler/Success
+--- PASS: TestServer_DeleteFolderHandler (0.00s)
+    --- PASS: TestServer_DeleteFolderHandler/Success (0.00s)
+=== RUN   TestServer_DeleteMessageFromFolderHandler
+=== RUN   TestServer_DeleteMessageFromFolderHandler/Success
+--- PASS: TestServer_DeleteMessageFromFolderHandler (0.00s)
+    --- PASS: TestServer_DeleteMessageFromFolderHandler/Success (0.00s)
+PASS
+ok  	2025_2_a4code/gateway-service/server	0.796s
+?   	2025_2_a4code/internal/config	[no test files]
+?   	2025_2_a4code/internal/domain	[no test files]
+=== RUN   TestPlaceholder
+--- PASS: TestPlaceholder (0.00s)
+PASS
+ok  	2025_2_a4code/internal/http-server/middleware/cors	1.152s
+?   	2025_2_a4code/internal/http-server/middleware/csrf-check	[no test files]
+=== RUN   TestGetLogger
+=== RUN   TestGetLogger/Returns_default_logger_when_context_has_no_logger
+=== RUN   TestGetLogger/Returns_custom_logger_when_context_has_one
+--- PASS: TestGetLogger (0.00s)
+    --- PASS: TestGetLogger/Returns_default_logger_when_context_has_no_logger (0.00s)
+    --- PASS: TestGetLogger/Returns_custom_logger_when_context_has_one (0.00s)
+PASS
+ok  	2025_2_a4code/internal/http-server/middleware/logger	0.630s
+=== RUN   TestNewStatusResponseWriter
+=== RUN   TestNewStatusResponseWriter/Default_status_code
+=== RUN   TestNewStatusResponseWriter/Change_status_code
+=== RUN   TestNewStatusResponseWriter/Internal_server_error
+=== RUN   TestNewStatusResponseWriter/Bad_request
+--- PASS: TestNewStatusResponseWriter (0.00s)
+    --- PASS: TestNewStatusResponseWriter/Default_status_code (0.00s)
+    --- PASS: TestNewStatusResponseWriter/Change_status_code (0.00s)
+    --- PASS: TestNewStatusResponseWriter/Internal_server_error (0.00s)
+    --- PASS: TestNewStatusResponseWriter/Bad_request (0.00s)
+=== RUN   TestStatusResponseWriter_Write
+--- PASS: TestStatusResponseWriter_Write (0.00s)
+=== RUN   TestMiddleware
+=== RUN   TestMiddleware/GET_request_with_normal_path
+=== RUN   TestMiddleware/POST_request_with_messages_ID_path
+=== RUN   TestMiddleware/PUT_request_with_long_messages_ID_path
+=== RUN   TestMiddleware/DELETE_request_with_messages_path
+=== RUN   TestMiddleware/Not_found_status
+=== RUN   TestMiddleware/Internal_server_error
+--- PASS: TestMiddleware (0.00s)
+    --- PASS: TestMiddleware/GET_request_with_normal_path (0.00s)
+    --- PASS: TestMiddleware/POST_request_with_messages_ID_path (0.00s)
+    --- PASS: TestMiddleware/PUT_request_with_long_messages_ID_path (0.00s)
+    --- PASS: TestMiddleware/DELETE_request_with_messages_path (0.00s)
+    --- PASS: TestMiddleware/Not_found_status (0.00s)
+    --- PASS: TestMiddleware/Internal_server_error (0.00s)
+=== RUN   TestMiddleware_MetricsRecording
+--- PASS: TestMiddleware_MetricsRecording (0.00s)
+=== RUN   TestSanitizePath
+=== RUN   TestSanitizePath/Normal_path
+=== RUN   TestSanitizePath/Messages_with_numeric_ID
+=== RUN   TestSanitizePath/Messages_with_UUID
+=== RUN   TestSanitizePath/Messages_with_alphanumeric_ID
+=== RUN   TestSanitizePath/Messages_root_path
+=== RUN   TestSanitizePath/Messages_with_trailing_slash
+=== RUN   TestSanitizePath/Nested_messages_path
+=== RUN   TestSanitizePath/Empty_path
+=== RUN   TestSanitizePath/Root_path
+--- PASS: TestSanitizePath (0.00s)
+    --- PASS: TestSanitizePath/Normal_path (0.00s)
+    --- PASS: TestSanitizePath/Messages_with_numeric_ID (0.00s)
+    --- PASS: TestSanitizePath/Messages_with_UUID (0.00s)
+    --- PASS: TestSanitizePath/Messages_with_alphanumeric_ID (0.00s)
+    --- PASS: TestSanitizePath/Messages_root_path (0.00s)
+    --- PASS: TestSanitizePath/Messages_with_trailing_slash (0.00s)
+    --- PASS: TestSanitizePath/Nested_messages_path (0.00s)
+    --- PASS: TestSanitizePath/Empty_path (0.00s)
+    --- PASS: TestSanitizePath/Root_path (0.00s)
+=== RUN   TestMiddleware_ExecutionTime
+--- PASS: TestMiddleware_ExecutionTime (0.05s)
+=== RUN   TestMiddleware_ConcurrentRequests
+--- PASS: TestMiddleware_ConcurrentRequests (0.00s)
+=== RUN   TestStatusResponseWriter_ImplementsInterface
+--- PASS: TestStatusResponseWriter_ImplementsInterface (0.00s)
+=== RUN   TestMiddleware_HeaderPreservation
+--- PASS: TestMiddleware_HeaderPreservation (0.00s)
+=== RUN   TestMiddleware_DifferentHTTPMethods
+=== RUN   TestMiddleware_DifferentHTTPMethods/GET
+=== RUN   TestMiddleware_DifferentHTTPMethods/POST
+=== RUN   TestMiddleware_DifferentHTTPMethods/PUT
+=== RUN   TestMiddleware_DifferentHTTPMethods/DELETE
+=== RUN   TestMiddleware_DifferentHTTPMethods/PATCH
+=== RUN   TestMiddleware_DifferentHTTPMethods/HEAD
+=== RUN   TestMiddleware_DifferentHTTPMethods/OPTIONS
+--- PASS: TestMiddleware_DifferentHTTPMethods (0.00s)
+    --- PASS: TestMiddleware_DifferentHTTPMethods/GET (0.00s)
+    --- PASS: TestMiddleware_DifferentHTTPMethods/POST (0.00s)
+    --- PASS: TestMiddleware_DifferentHTTPMethods/PUT (0.00s)
+    --- PASS: TestMiddleware_DifferentHTTPMethods/DELETE (0.00s)
+    --- PASS: TestMiddleware_DifferentHTTPMethods/PATCH (0.00s)
+    --- PASS: TestMiddleware_DifferentHTTPMethods/HEAD (0.00s)
+    --- PASS: TestMiddleware_DifferentHTTPMethods/OPTIONS (0.00s)
+=== RUN   TestSanitizePath_EdgeCases
+=== RUN   TestSanitizePath_EdgeCases/Multiple_slashes
+=== RUN   TestSanitizePath_EdgeCases/Very_long_ID
+=== RUN   TestSanitizePath_EdgeCases/Special_characters_in_path
+=== RUN   TestSanitizePath_EdgeCases/Just_messages_prefix
+=== RUN   TestSanitizePath_EdgeCases/Messages_with_query_params
+--- PASS: TestSanitizePath_EdgeCases (0.00s)
+    --- PASS: TestSanitizePath_EdgeCases/Multiple_slashes (0.00s)
+    --- PASS: TestSanitizePath_EdgeCases/Very_long_ID (0.00s)
+    --- PASS: TestSanitizePath_EdgeCases/Special_characters_in_path (0.00s)
+    --- PASS: TestSanitizePath_EdgeCases/Just_messages_prefix (0.00s)
+    --- PASS: TestSanitizePath_EdgeCases/Messages_with_query_params (0.00s)
+=== RUN   TestMiddleware_MetricsIncrement
+--- PASS: TestMiddleware_MetricsIncrement (0.00s)
+=== RUN   TestMiddleware_ErrorStatusCodes
+=== RUN   TestMiddleware_ErrorStatusCodes/Client_error_-_400
+=== RUN   TestMiddleware_ErrorStatusCodes/Unauthorized_-_401
+=== RUN   TestMiddleware_ErrorStatusCodes/Forbidden_-_403
+=== RUN   TestMiddleware_ErrorStatusCodes/Not_found_-_404
+=== RUN   TestMiddleware_ErrorStatusCodes/Internal_server_error_-_500
+=== RUN   TestMiddleware_ErrorStatusCodes/Service_unavailable_-_503
+--- PASS: TestMiddleware_ErrorStatusCodes (0.00s)
+    --- PASS: TestMiddleware_ErrorStatusCodes/Client_error_-_400 (0.00s)
+    --- PASS: TestMiddleware_ErrorStatusCodes/Unauthorized_-_401 (0.00s)
+    --- PASS: TestMiddleware_ErrorStatusCodes/Forbidden_-_403 (0.00s)
+    --- PASS: TestMiddleware_ErrorStatusCodes/Not_found_-_404 (0.00s)
+    --- PASS: TestMiddleware_ErrorStatusCodes/Internal_server_error_-_500 (0.00s)
+    --- PASS: TestMiddleware_ErrorStatusCodes/Service_unavailable_-_503 (0.00s)
+=== RUN   TestStatusResponseWriter_InitialState
+--- PASS: TestStatusResponseWriter_InitialState (0.00s)
+=== RUN   TestMiddleware_NoBody
+--- PASS: TestMiddleware_NoBody (0.00s)
+PASS
+ok  	2025_2_a4code/internal/http-server/middleware/metrics	1.288s
+=== RUN   TestSendErrorResponse
+=== RUN   TestSendErrorResponse/Test_400_Bad_Request
+=== RUN   TestSendErrorResponse/Test_500_Internal_Server_Error
+=== RUN   TestSendErrorResponse/Test_404_Not_Found
+--- PASS: TestSendErrorResponse (0.00s)
+    --- PASS: TestSendErrorResponse/Test_400_Bad_Request (0.00s)
+    --- PASS: TestSendErrorResponse/Test_500_Internal_Server_Error (0.00s)
+    --- PASS: TestSendErrorResponse/Test_404_Not_Found (0.00s)
+PASS
+ok  	2025_2_a4code/internal/lib/api/response	1.348s
+?   	2025_2_a4code/internal/lib/errors	[no test files]
+?   	2025_2_a4code/internal/lib/init	[no test files]
+?   	2025_2_a4code/internal/lib/metrics	[no test files]
+=== RUN   TestGenerateRandID
+=== RUN   TestGenerateRandID/Successful_ID_generation_and_format_check
+--- PASS: TestGenerateRandID (0.00s)
+    --- PASS: TestGenerateRandID/Successful_ID_generation_and_format_check (0.00s)
+PASS
+ok  	2025_2_a4code/internal/lib/rand	1.453s
+=== RUN   TestCheckSessionWithToken
+=== RUN   TestCheckSessionWithToken/Success:_Valid_Access_Token
+=== RUN   TestCheckSessionWithToken/Failure:_No_Cookie
+=== RUN   TestCheckSessionWithToken/Failure:_Wrong_Token_Type
+=== RUN   TestCheckSessionWithToken/Failure:_Token_Missing_Type_(when_expected)
+=== RUN   TestCheckSessionWithToken/Failure:_Invalid_Signature/Wrong_Secret
+--- PASS: TestCheckSessionWithToken (0.00s)
+    --- PASS: TestCheckSessionWithToken/Success:_Valid_Access_Token (0.00s)
+    --- PASS: TestCheckSessionWithToken/Failure:_No_Cookie (0.00s)
+    --- PASS: TestCheckSessionWithToken/Failure:_Wrong_Token_Type (0.00s)
+    --- PASS: TestCheckSessionWithToken/Failure:_Token_Missing_Type_(when_expected) (0.00s)
+    --- PASS: TestCheckSessionWithToken/Failure:_Invalid_Signature/Wrong_Secret (0.00s)
+=== RUN   TestCheckSession
+=== RUN   TestCheckSession/Success:_Valid_Access_Token
+=== RUN   TestCheckSession/Failure:_No_access_token_Cookie
+=== RUN   TestCheckSession/Failure:_Wrong_Token_Type_(Refresh_token_used_as_Access)
+--- PASS: TestCheckSession (0.00s)
+    --- PASS: TestCheckSession/Success:_Valid_Access_Token (0.00s)
+    --- PASS: TestCheckSession/Failure:_No_access_token_Cookie (0.00s)
+    --- PASS: TestCheckSession/Failure:_Wrong_Token_Type_(Refresh_token_used_as_Access) (0.00s)
+=== RUN   TestCheckSessionWithRefreshToken
+=== RUN   TestCheckSessionWithRefreshToken/Success:_Valid_Refresh_Token
+=== RUN   TestCheckSessionWithRefreshToken/Failure:_Wrong_Token_Type_(Access_token_used_as_Refresh)
+--- PASS: TestCheckSessionWithRefreshToken (0.00s)
+    --- PASS: TestCheckSessionWithRefreshToken/Success:_Valid_Refresh_Token (0.00s)
+    --- PASS: TestCheckSessionWithRefreshToken/Failure:_Wrong_Token_Type_(Access_token_used_as_Refresh) (0.00s)
+=== RUN   TestGetProfileIDFromToken
+=== RUN   TestGetProfileIDFromToken/Success:_Valid_Token_and_ID
+=== RUN   TestGetProfileIDFromToken/Failure:_ID_is_Missing
+--- PASS: TestGetProfileIDFromToken (0.00s)
+    --- PASS: TestGetProfileIDFromToken/Success:_Valid_Token_and_ID (0.00s)
+    --- PASS: TestGetProfileIDFromToken/Failure:_ID_is_Missing (0.00s)
+=== RUN   TestGetProfileID
+=== RUN   TestGetProfileID/Success:_Valid_Access_Token_and_ID
+=== RUN   TestGetProfileID/Failure:_No_access_token_Cookie
+--- PASS: TestGetProfileID (0.00s)
+    --- PASS: TestGetProfileID/Success:_Valid_Access_Token_and_ID (0.00s)
+    --- PASS: TestGetProfileID/Failure:_No_access_token_Cookie (0.00s)
+=== RUN   TestGetProfileIDFromRefresh
+=== RUN   TestGetProfileIDFromRefresh/Success:_Valid_Refresh_Token_and_ID
+=== RUN   TestGetProfileIDFromRefresh/Failure:_No_refresh_token_Cookie
+--- PASS: TestGetProfileIDFromRefresh (0.00s)
+    --- PASS: TestGetProfileIDFromRefresh/Success:_Valid_Refresh_Token_and_ID (0.00s)
+    --- PASS: TestGetProfileIDFromRefresh/Failure:_No_refresh_token_Cookie (0.00s)
+PASS
+ok  	2025_2_a4code/internal/lib/session	1.488s
+=== RUN   TestHasDangerousCharacters
+=== RUN   TestHasDangerousCharacters/Safe:_Plain_alphanumeric_text
+=== RUN   TestHasDangerousCharacters/Safe:_Text_with_safe_special_characters
+=== RUN   TestHasDangerousCharacters/Safe:_Empty_string
+=== RUN   TestHasDangerousCharacters/Dangerous:_HTML_Tag_Open
+=== RUN   TestHasDangerousCharacters/Dangerous:_HTML_Tag_Close
+=== RUN   TestHasDangerousCharacters/Dangerous:_'script'_keyword_(lowercase)
+=== RUN   TestHasDangerousCharacters/Dangerous:_'SCRIPT'_keyword_(uppercase)
+=== RUN   TestHasDangerousCharacters/Dangerous:_'JavaScript:'_URI_scheme_(mixed_case)
+=== RUN   TestHasDangerousCharacters/Dangerous:_'onload'_event_handler
+=== RUN   TestHasDangerousCharacters/Dangerous:_'onerror'_event_handler
+=== RUN   TestHasDangerousCharacters/Dangerous:_Single_quote
+=== RUN   TestHasDangerousCharacters/Dangerous:_Double_quote
+=== RUN   TestHasDangerousCharacters/Dangerous:_SQL_Comment/Dash
+=== RUN   TestHasDangerousCharacters/Dangerous:_C-Style_Comment_Open
+=== RUN   TestHasDangerousCharacters/Dangerous:_C-Style_Comment_Close
+=== RUN   TestHasDangerousCharacters/Dangerous:_Semicolon
+=== RUN   TestHasDangerousCharacters/Dangerous:_Ampersand_(command_separator)
+=== RUN   TestHasDangerousCharacters/Dangerous:_Pipe_(command_separator)
+=== RUN   TestHasDangerousCharacters/Dangerous:_Newline_character
+=== RUN   TestHasDangerousCharacters/Dangerous:_Carriage_Return_character
+=== RUN   TestHasDangerousCharacters/Dangerous:_Path_Traversal_'.._/'
+=== RUN   TestHasDangerousCharacters/Dangerous:_'file://'_scheme_(LFI)
+=== RUN   TestHasDangerousCharacters/Dangerous:_'http://'_scheme_(SSRF)
+=== RUN   TestHasDangerousCharacters/Dangerous:_'https://'_scheme_(SSRF)
+--- PASS: TestHasDangerousCharacters (0.00s)
+    --- PASS: TestHasDangerousCharacters/Safe:_Plain_alphanumeric_text (0.00s)
+    --- PASS: TestHasDangerousCharacters/Safe:_Text_with_safe_special_characters (0.00s)
+    --- PASS: TestHasDangerousCharacters/Safe:_Empty_string (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_HTML_Tag_Open (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_HTML_Tag_Close (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_'script'_keyword_(lowercase) (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_'SCRIPT'_keyword_(uppercase) (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_'JavaScript:'_URI_scheme_(mixed_case) (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_'onload'_event_handler (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_'onerror'_event_handler (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_Single_quote (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_Double_quote (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_SQL_Comment/Dash (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_C-Style_Comment_Open (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_C-Style_Comment_Close (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_Semicolon (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_Ampersand_(command_separator) (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_Pipe_(command_separator) (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_Newline_character (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_Carriage_Return_character (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_Path_Traversal_'.._/' (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_'file://'_scheme_(LFI) (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_'http://'_scheme_(SSRF) (0.00s)
+    --- PASS: TestHasDangerousCharacters/Dangerous:_'https://'_scheme_(SSRF) (0.00s)
+PASS
+ok  	2025_2_a4code/internal/lib/validation	1.591s
+=== RUN   TestWrap
+=== RUN   TestWrap/Case_1:_Nil_error_should_return_nil
+=== RUN   TestWrap/Case_2:_Non-nil_error_should_return_a_wrapped_error_with_a_message
+=== RUN   TestWrap/Case_3:_Empty_message_should_still_wrap_the_error
+--- PASS: TestWrap (0.00s)
+    --- PASS: TestWrap/Case_1:_Nil_error_should_return_nil (0.00s)
+    --- PASS: TestWrap/Case_2:_Non-nil_error_should_return_a_wrapped_error_with_a_message (0.00s)
+    --- PASS: TestWrap/Case_3:_Empty_message_should_still_wrap_the_error (0.00s)
+PASS
+ok  	2025_2_a4code/internal/lib/wrapper	1.699s
+?   	2025_2_a4code/internal/storage/minio/avatar-repository	[no test files]
+=== RUN   TestMessageRepository_FindFullByMessageID
+    message-repository_test.go:103: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/internal/storage/postgres/message-repository/message-repository_test.go:103
+        	Error:      	Received unexpected error:
+        	            	storage.postgresql.message.FindFullByMessageID: call to Query '
+        	            	        SELECT bp.username, bp.domain
+        	            	        FROM folder_profile_message fpm
+        	            	        JOIN folder f ON fpm.folder_id = f.id
+        	            	        JOIN profile p ON f.profile_id = p.id
+        	            	        JOIN base_profile bp ON p.base_profile_id = bp.id
+        	            	        WHERE fpm.message_id = $1 AND f.profile_id <> $2' with args [{Name: Ordinal:1 Value:1} {Name: Ordinal:2 Value:10}], was not expected, next expectation is: ExpectedCommit => expecting transaction Commit
+        	Test:       	TestMessageRepository_FindFullByMessageID
+    message-repository_test.go:104: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/internal/storage/postgres/message-repository/message-repository_test.go:104
+        	Error:      	Not equal: 
+        	            	expected: "1"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-1
+        	            	+
+        	Test:       	TestMessageRepository_FindFullByMessageID
+    message-repository_test.go:105: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/internal/storage/postgres/message-repository/message-repository_test.go:105
+        	Error:      	Not equal: 
+        	            	expected: "Full Topic"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-Full Topic
+        	            	+
+        	Test:       	TestMessageRepository_FindFullByMessageID
+    message-repository_test.go:106: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/internal/storage/postgres/message-repository/message-repository_test.go:106
+        	Error:      	Not equal: 
+        	            	expected: "Sender User"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-Sender User
+        	            	+
+        	Test:       	TestMessageRepository_FindFullByMessageID
+    message-repository_test.go:107: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/internal/storage/postgres/message-repository/message-repository_test.go:107
+        	Error:      	Not equal: 
+        	            	expected: "5"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-5
+        	            	+
+        	Test:       	TestMessageRepository_FindFullByMessageID
+    message-repository_test.go:108: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/internal/storage/postgres/message-repository/message-repository_test.go:108
+        	Error:      	Not equal: 
+        	            	expected: "Inbox"
+        	            	actual  : ""
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-Inbox
+        	            	+
+        	Test:       	TestMessageRepository_FindFullByMessageID
+    message-repository_test.go:109: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/internal/storage/postgres/message-repository/message-repository_test.go:109
+        	Error:      	"[]" should have 2 item(s), but has 0
+        	Test:       	TestMessageRepository_FindFullByMessageID
+--- FAIL: TestMessageRepository_FindFullByMessageID (0.00s)
+panic: runtime error: index out of range [0] with length 0 [recovered]
+	panic: runtime error: index out of range [0] with length 0
+
+goroutine 4 [running]:
+testing.tRunner.func1.2({0x1027b7a20, 0x14000022870})
+	/Users/kanekikensss/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.9.darwin-arm64/src/testing/testing.go:1734 +0x1ac
+testing.tRunner.func1()
+	/Users/kanekikensss/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.9.darwin-arm64/src/testing/testing.go:1737 +0x334
+panic({0x1027b7a20?, 0x14000022870?})
+	/Users/kanekikensss/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.9.darwin-arm64/src/runtime/panic.go:792 +0x124
+2025_2_a4code/internal/storage/postgres/message-repository.TestMessageRepository_FindFullByMessageID(0x140000036c0)
+	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/internal/storage/postgres/message-repository/message-repository_test.go:110 +0xe1c
+testing.tRunner(0x140000036c0, 0x1027f6968)
+	/Users/kanekikensss/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.9.darwin-arm64/src/testing/testing.go:1792 +0xe4
+created by testing.(*T).Run in goroutine 1
+	/Users/kanekikensss/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.24.9.darwin-arm64/src/testing/testing.go:1851 +0x374
+FAIL	2025_2_a4code/internal/storage/postgres/message-repository	1.769s
+=== RUN   TestFindByID_Success
+--- PASS: TestFindByID_Success (0.00s)
+=== RUN   TestFindByID_NotFound
+--- PASS: TestFindByID_NotFound (0.00s)
+=== RUN   TestFindSenderByID_Success
+--- PASS: TestFindSenderByID_Success (0.00s)
+=== RUN   TestUserExists_True
+--- PASS: TestUserExists_True (0.00s)
+=== RUN   TestFindByUsernameAndDomain_Success
+--- PASS: TestFindByUsernameAndDomain_Success (0.00s)
+=== RUN   TestUpdateProfileInfo_Success
+--- PASS: TestUpdateProfileInfo_Success (0.00s)
+=== RUN   TestFindSettingsByProfileId_Default
+--- PASS: TestFindSettingsByProfileId_Default (0.00s)
+=== RUN   TestInsertProfileAvatar_Success
+--- PASS: TestInsertProfileAvatar_Success (0.00s)
+PASS
+ok  	2025_2_a4code/internal/storage/postgres/profile-repository	1.867s
+=== RUN   TestAvatarUcase_UploadAvatar
+=== RUN   TestAvatarUcase_UploadAvatar/Success_WithExtension
+=== RUN   TestAvatarUcase_UploadAvatar/Success_NoExtension_DefaultsToJpg
+=== RUN   TestAvatarUcase_UploadAvatar/Failure_UploadFileError
+=== RUN   TestAvatarUcase_UploadAvatar/Failure_PresignedURLError
+--- PASS: TestAvatarUcase_UploadAvatar (0.00s)
+    --- PASS: TestAvatarUcase_UploadAvatar/Success_WithExtension (0.00s)
+    --- PASS: TestAvatarUcase_UploadAvatar/Success_NoExtension_DefaultsToJpg (0.00s)
+    --- PASS: TestAvatarUcase_UploadAvatar/Failure_UploadFileError (0.00s)
+    --- PASS: TestAvatarUcase_UploadAvatar/Failure_PresignedURLError (0.00s)
+PASS
+ok  	2025_2_a4code/internal/usecase/avatar	1.930s
+testing: warning: no tests to run
+PASS
+ok  	2025_2_a4code/internal/usecase/message	1.676s [no tests to run]
+=== RUN   TestProfileUcase_FindByID
+=== RUN   TestProfileUcase_FindByID/Success
+=== RUN   TestProfileUcase_FindByID/Repository_error
+--- PASS: TestProfileUcase_FindByID (0.00s)
+    --- PASS: TestProfileUcase_FindByID/Success (0.00s)
+    --- PASS: TestProfileUcase_FindByID/Repository_error (0.00s)
+=== RUN   TestProfileUcase_Signup
+=== RUN   TestProfileUcase_Signup/Success:_User_created
+=== RUN   TestProfileUcase_Signup/Failure:_User_already_exists
+=== RUN   TestProfileUcase_Signup/Failure:_Repository_error_on_UserExists
+=== RUN   TestProfileUcase_Signup/Failure:_Invalid_Birthday_format
+=== RUN   TestProfileUcase_Signup/Failure:_Repository_error_on_CreateUser
+--- PASS: TestProfileUcase_Signup (0.12s)
+    --- PASS: TestProfileUcase_Signup/Success:_User_created (0.07s)
+    --- PASS: TestProfileUcase_Signup/Failure:_User_already_exists (0.00s)
+    --- PASS: TestProfileUcase_Signup/Failure:_Repository_error_on_UserExists (0.00s)
+    --- PASS: TestProfileUcase_Signup/Failure:_Invalid_Birthday_format (0.00s)
+    --- PASS: TestProfileUcase_Signup/Failure:_Repository_error_on_CreateUser (0.05s)
+=== RUN   TestProfileUcase_Login
+=== RUN   TestProfileUcase_Login/Success:_Valid_login
+=== RUN   TestProfileUcase_Login/Failure:_User_not_found
+=== RUN   TestProfileUcase_Login/Failure:_Repository_error_(not_notFound)
+=== RUN   TestProfileUcase_Login/Failure:_Wrong_password
+--- PASS: TestProfileUcase_Login (0.14s)
+    --- PASS: TestProfileUcase_Login/Success:_Valid_login (0.05s)
+    --- PASS: TestProfileUcase_Login/Failure:_User_not_found (0.00s)
+    --- PASS: TestProfileUcase_Login/Failure:_Repository_error_(not_notFound) (0.00s)
+    --- PASS: TestProfileUcase_Login/Failure:_Wrong_password (0.05s)
+=== RUN   TestProfileUcase_checkPassword
+=== RUN   TestProfileUcase_checkPassword/Success:_Correct_password
+=== RUN   TestProfileUcase_checkPassword/Failure:_Wrong_password
+=== RUN   TestProfileUcase_checkPassword/Failure:_Empty_hash
+=== RUN   TestProfileUcase_checkPassword/Failure:_Invalid_hash_format
+--- PASS: TestProfileUcase_checkPassword (0.13s)
+    --- PASS: TestProfileUcase_checkPassword/Success:_Correct_password (0.04s)
+    --- PASS: TestProfileUcase_checkPassword/Failure:_Wrong_password (0.04s)
+    --- PASS: TestProfileUcase_checkPassword/Failure:_Empty_hash (0.00s)
+    --- PASS: TestProfileUcase_checkPassword/Failure:_Invalid_hash_format (0.00s)
+=== RUN   TestProfileUcase_FindInfoByID
+=== RUN   TestProfileUcase_FindInfoByID/Success
+=== RUN   TestProfileUcase_FindInfoByID/Repository_error
+--- PASS: TestProfileUcase_FindInfoByID (0.00s)
+    --- PASS: TestProfileUcase_FindInfoByID/Success (0.00s)
+    --- PASS: TestProfileUcase_FindInfoByID/Repository_error (0.00s)
+=== RUN   TestProfileUcase_UserExists
+=== RUN   TestProfileUcase_UserExists/Success_-_user_exists
+=== RUN   TestProfileUcase_UserExists/Success_-_user_doesn't_exist
+=== RUN   TestProfileUcase_UserExists/Repository_error
+--- PASS: TestProfileUcase_UserExists (0.00s)
+    --- PASS: TestProfileUcase_UserExists/Success_-_user_exists (0.00s)
+    --- PASS: TestProfileUcase_UserExists/Success_-_user_doesn't_exist (0.00s)
+    --- PASS: TestProfileUcase_UserExists/Repository_error (0.00s)
+=== RUN   TestProfileUcase_CreateUser
+=== RUN   TestProfileUcase_CreateUser/Success
+=== RUN   TestProfileUcase_CreateUser/Repository_error
+--- PASS: TestProfileUcase_CreateUser (0.00s)
+    --- PASS: TestProfileUcase_CreateUser/Success (0.00s)
+    --- PASS: TestProfileUcase_CreateUser/Repository_error (0.00s)
+=== RUN   TestProfileUcase_FindByUsernameAndDomain
+=== RUN   TestProfileUcase_FindByUsernameAndDomain/Success
+=== RUN   TestProfileUcase_FindByUsernameAndDomain/Repository_error
+--- PASS: TestProfileUcase_FindByUsernameAndDomain (0.00s)
+    --- PASS: TestProfileUcase_FindByUsernameAndDomain/Success (0.00s)
+    --- PASS: TestProfileUcase_FindByUsernameAndDomain/Repository_error (0.00s)
+=== RUN   TestProfileUcase_FindSettingsByProfileId
+=== RUN   TestProfileUcase_FindSettingsByProfileId/Success
+=== RUN   TestProfileUcase_FindSettingsByProfileId/Repository_error
+--- PASS: TestProfileUcase_FindSettingsByProfileId (0.00s)
+    --- PASS: TestProfileUcase_FindSettingsByProfileId/Success (0.00s)
+    --- PASS: TestProfileUcase_FindSettingsByProfileId/Repository_error (0.00s)
+=== RUN   TestProfileUcase_InsertProfileAvatar
+=== RUN   TestProfileUcase_InsertProfileAvatar/Success
+=== RUN   TestProfileUcase_InsertProfileAvatar/Repository_error
+--- PASS: TestProfileUcase_InsertProfileAvatar (0.00s)
+    --- PASS: TestProfileUcase_InsertProfileAvatar/Success (0.00s)
+    --- PASS: TestProfileUcase_InsertProfileAvatar/Repository_error (0.00s)
+=== RUN   TestProfileUcase_UpdateProfileInfo
+=== RUN   TestProfileUcase_UpdateProfileInfo/Success_-_all_fields
+=== RUN   TestProfileUcase_UpdateProfileInfo/Success_-_trimmed_fields
+=== RUN   TestProfileUcase_UpdateProfileInfo/Success_-_empty_birthday
+=== RUN   TestProfileUcase_UpdateProfileInfo/Success_-_invalid_gender_becomes_empty
+=== RUN   TestProfileUcase_UpdateProfileInfo/Failure_-_invalid_birthday_format
+    profile_test.go:915: UpdateProfileInfo() error message = usecase.profile.UpdateProfileInfo: invalid birthday format: parsing time "1990-01-01" as "02.01.2006": cannot parse "90-01-01" as ".", wantErr invalid birthday format
+=== RUN   TestProfileUcase_UpdateProfileInfo/Repository_error
+--- FAIL: TestProfileUcase_UpdateProfileInfo (0.00s)
+    --- PASS: TestProfileUcase_UpdateProfileInfo/Success_-_all_fields (0.00s)
+    --- PASS: TestProfileUcase_UpdateProfileInfo/Success_-_trimmed_fields (0.00s)
+    --- PASS: TestProfileUcase_UpdateProfileInfo/Success_-_empty_birthday (0.00s)
+    --- PASS: TestProfileUcase_UpdateProfileInfo/Success_-_invalid_gender_becomes_empty (0.00s)
+    --- FAIL: TestProfileUcase_UpdateProfileInfo/Failure_-_invalid_birthday_format (0.00s)
+    --- PASS: TestProfileUcase_UpdateProfileInfo/Repository_error (0.00s)
+FAIL
+FAIL	2025_2_a4code/internal/usecase/profile	1.951s
+?   	2025_2_a4code/mail-ingest-service/cmd	[no test files]
+?   	2025_2_a4code/mail-ingest-service/cmd/ingest-worker	[no test files]
+?   	2025_2_a4code/messages-service/app	[no test files]
+?   	2025_2_a4code/messages-service/cmd	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	2025_2_a4code/messages-service/grpc-service	1.355s [no tests to run]
+?   	2025_2_a4code/messages-service/pkg/messagesproto	[no test files]
+?   	2025_2_a4code/profile-service/app	[no test files]
+?   	2025_2_a4code/profile-service/cmd	[no test files]
+=== RUN   TestServer_GetProfile
+=== RUN   TestServer_GetProfile/Success
+=== RUN   TestServer_GetProfile/Unauthorized_NoMetadata
+=== RUN   TestServer_GetProfile/Unauthorized_InvalidToken
+--- PASS: TestServer_GetProfile (0.00s)
+    --- PASS: TestServer_GetProfile/Success (0.00s)
+    --- PASS: TestServer_GetProfile/Unauthorized_NoMetadata (0.00s)
+    --- PASS: TestServer_GetProfile/Unauthorized_InvalidToken (0.00s)
+=== RUN   TestServer_UpdateProfile
+=== RUN   TestServer_UpdateProfile/Success
+2025/12/15 23:36:38 INFO handle user/profile (PUT)
+=== RUN   TestServer_UpdateProfile/Unauthorized
+2025/12/15 23:36:38 INFO handle user/profile (PUT)
+=== RUN   TestServer_UpdateProfile/UpdateError
+2025/12/15 23:36:38 INFO handle user/profile (PUT)
+2025/12/15 23:36:38 ERROR profileservice.UpdateProfile: failed to update profile: validation error
+--- PASS: TestServer_UpdateProfile (0.00s)
+    --- PASS: TestServer_UpdateProfile/Success (0.00s)
+    --- PASS: TestServer_UpdateProfile/Unauthorized (0.00s)
+    --- PASS: TestServer_UpdateProfile/UpdateError (0.00s)
+=== RUN   TestServer_Settings
+=== RUN   TestServer_Settings/Success
+=== RUN   TestServer_Settings/Unauthorized
+=== RUN   TestServer_Settings/InternalError
+    grpc_service_test.go:328: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:328
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestServer_Settings/InternalError
+    grpc_service_test.go:332: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:332
+        	Error:      	Not equal: 
+        	            	expected: 0xd
+        	            	actual  : 0x0
+        	Test:       	TestServer_Settings/InternalError
+--- FAIL: TestServer_Settings (0.00s)
+    --- PASS: TestServer_Settings/Success (0.00s)
+    --- PASS: TestServer_Settings/Unauthorized (0.00s)
+    --- FAIL: TestServer_Settings/InternalError (0.00s)
+=== RUN   TestServer_UploadAvatar
+=== RUN   TestServer_UploadAvatar/Success
+=== RUN   TestServer_UploadAvatar/Unauthorized
+=== RUN   TestServer_UploadAvatar/FileTooLarge
+=== RUN   TestServer_UploadAvatar/UploadError
+    grpc_service_test.go:433: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:433
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestServer_UploadAvatar/UploadError
+    grpc_service_test.go:437: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:437
+        	Error:      	Not equal: 
+        	            	expected: 0xd
+        	            	actual  : 0x0
+        	Test:       	TestServer_UploadAvatar/UploadError
+=== RUN   TestServer_UploadAvatar/InsertAvatarError
+    grpc_service_test.go:433: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:433
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestServer_UploadAvatar/InsertAvatarError
+    grpc_service_test.go:437: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:437
+        	Error:      	Not equal: 
+        	            	expected: 0xd
+        	            	actual  : 0x0
+        	Test:       	TestServer_UploadAvatar/InsertAvatarError
+--- FAIL: TestServer_UploadAvatar (0.00s)
+    --- PASS: TestServer_UploadAvatar/Success (0.00s)
+    --- PASS: TestServer_UploadAvatar/Unauthorized (0.00s)
+    --- PASS: TestServer_UploadAvatar/FileTooLarge (0.00s)
+    --- FAIL: TestServer_UploadAvatar/UploadError (0.00s)
+    --- FAIL: TestServer_UploadAvatar/InsertAvatarError (0.00s)
+=== RUN   TestServer_getProfileID
+=== RUN   TestServer_getProfileID/Success
+=== RUN   TestServer_getProfileID/NoMetadata
+=== RUN   TestServer_getProfileID/NoAuthorizationHeader
+=== RUN   TestServer_getProfileID/InvalidToken
+    grpc_service_test.go:513: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:513
+        	Error:      	Should be true
+        	Test:       	TestServer_getProfileID/InvalidToken
+    grpc_service_test.go:514: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:514
+        	Error:      	Not equal: 
+        	            	expected: 0x10
+        	            	actual  : 0x2
+        	Test:       	TestServer_getProfileID/InvalidToken
+=== RUN   TestServer_getProfileID/WrongTokenType
+    grpc_service_test.go:513: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:513
+        	Error:      	Should be true
+        	Test:       	TestServer_getProfileID/WrongTokenType
+    grpc_service_test.go:514: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:514
+        	Error:      	Not equal: 
+        	            	expected: 0x10
+        	            	actual  : 0x2
+        	Test:       	TestServer_getProfileID/WrongTokenType
+--- FAIL: TestServer_getProfileID (0.00s)
+    --- PASS: TestServer_getProfileID/Success (0.00s)
+    --- PASS: TestServer_getProfileID/NoMetadata (0.00s)
+    --- PASS: TestServer_getProfileID/NoAuthorizationHeader (0.00s)
+    --- FAIL: TestServer_getProfileID/InvalidToken (0.00s)
+    --- FAIL: TestServer_getProfileID/WrongTokenType (0.00s)
+=== RUN   TestServer_domainProfileToProto
+--- PASS: TestServer_domainProfileToProto (0.00s)
+=== RUN   TestServer_domainSettingsToProto
+--- PASS: TestServer_domainSettingsToProto (0.00s)
+=== RUN   TestServer_enrichAvatarURL
+=== RUN   TestServer_enrichAvatarURL/SuccessWithSimplePath
+=== RUN   TestServer_enrichAvatarURL/SuccessWithHTTPPrefix
+    grpc_service_test.go:671: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:671
+        	Error:      	Not equal: 
+        	            	expected: "https://new.example.com/avatar.jpg"
+        	            	actual  : "https://example.com/avatar.jpg"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-https://new.example.com/avatar.jpg
+        	            	+https://example.com/avatar.jpg
+        	Test:       	TestServer_enrichAvatarURL/SuccessWithHTTPPrefix
+=== RUN   TestServer_enrichAvatarURL/SuccessWithHTTPSPrefix
+    grpc_service_test.go:671: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:671
+        	Error:      	Not equal: 
+        	            	expected: "https://new.example.com/avatar.jpg"
+        	            	actual  : "https://example.com/avatar.jpg"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-https://new.example.com/avatar.jpg
+        	            	+https://example.com/avatar.jpg
+        	Test:       	TestServer_enrichAvatarURL/SuccessWithHTTPSPrefix
+=== RUN   TestServer_enrichAvatarURL/EmptyAvatarPath
+=== RUN   TestServer_enrichAvatarURL/GetPresignedURLError
+    grpc_service_test.go:665: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:665
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestServer_enrichAvatarURL/GetPresignedURLError
+    grpc_service_test.go:671: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:671
+        	Error:      	Not equal: 
+        	            	expected: "avatar.jpg"
+        	            	actual  : "https://example.com/avatar.jpg"
+        	            	
+        	            	Diff:
+        	            	--- Expected
+        	            	+++ Actual
+        	            	@@ -1 +1 @@
+        	            	-avatar.jpg
+        	            	+https://example.com/avatar.jpg
+        	Test:       	TestServer_enrichAvatarURL/GetPresignedURLError
+=== RUN   TestServer_enrichAvatarURL/EmptyAfterProcessing
+--- FAIL: TestServer_enrichAvatarURL (0.00s)
+    --- PASS: TestServer_enrichAvatarURL/SuccessWithSimplePath (0.00s)
+    --- FAIL: TestServer_enrichAvatarURL/SuccessWithHTTPPrefix (0.00s)
+    --- FAIL: TestServer_enrichAvatarURL/SuccessWithHTTPSPrefix (0.00s)
+    --- PASS: TestServer_enrichAvatarURL/EmptyAvatarPath (0.00s)
+    --- FAIL: TestServer_enrichAvatarURL/GetPresignedURLError (0.00s)
+    --- PASS: TestServer_enrichAvatarURL/EmptyAfterProcessing (0.00s)
+=== RUN   TestServer_UploadAvatar_FileReader
+--- PASS: TestServer_UploadAvatar_FileReader (0.00s)
+=== RUN   TestServer_getProfileID_EdgeCases
+=== RUN   TestServer_getProfileID_EdgeCases/EmptyBearer
+    grpc_service_test.go:853: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:853
+        	Error:      	Not equal: 
+        	            	expected: 0
+        	            	actual  : -1
+        	Test:       	TestServer_getProfileID_EdgeCases/EmptyBearer
+=== RUN   TestServer_getProfileID_EdgeCases/MalformedBearer
+    grpc_service_test.go:853: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:853
+        	Error:      	Not equal: 
+        	            	expected: 0
+        	            	actual  : -1
+        	Test:       	TestServer_getProfileID_EdgeCases/MalformedBearer
+=== RUN   TestServer_getProfileID_EdgeCases/NoBearerPrefix
+    grpc_service_test.go:853: 
+        	Error Trace:	/Users/kanekikensss/GolandProjects/git/2025_2_A4Code/profile-service/grpc-service/grpc_service_test.go:853
+        	Error:      	Not equal: 
+        	            	expected: 0
+        	            	actual  : -1
+        	Test:       	TestServer_getProfileID_EdgeCases/NoBearerPrefix
+--- FAIL: TestServer_getProfileID_EdgeCases (0.00s)
+    --- FAIL: TestServer_getProfileID_EdgeCases/EmptyBearer (0.00s)
+    --- FAIL: TestServer_getProfileID_EdgeCases/MalformedBearer (0.00s)
+    --- FAIL: TestServer_getProfileID_EdgeCases/NoBearerPrefix (0.00s)
+FAIL
+FAIL	2025_2_a4code/profile-service/grpc-service	1.457s
+?   	2025_2_a4code/profile-service/pkg/profileproto	[no test files]
+FAIL

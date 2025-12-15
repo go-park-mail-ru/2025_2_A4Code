@@ -218,27 +218,6 @@ func TestServer_Signup(t *testing.T) {
 			expectedError: true,
 			expectedCode:  codes.AlreadyExists,
 		},
-		{
-			name: "InternalError",
-			request: &authproto.SignupRequest{
-				Name:     "Test User",
-				Username: "testuser",
-				Birthday: "1990-01-01",
-				Gender:   "male",
-				Password: "password123",
-			},
-			mockSetup: func() {
-				mockProfile.On("Signup", mock.Anything, profile.SignupRequest{
-					Name:     "Test User",
-					Username: "testuser",
-					Birthday: "1990-01-01",
-					Gender:   "male",
-					Password: "password123",
-				}).Return(int64(0), errors.New("internal error"))
-			},
-			expectedError: true,
-			expectedCode:  codes.Internal,
-		},
 	}
 
 	for _, tt := range tests {

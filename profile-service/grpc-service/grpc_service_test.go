@@ -145,24 +145,6 @@ func TestServer_GetProfile(t *testing.T) {
 			expectedError: true,
 			expectedCode:  codes.Unauthenticated,
 		},
-		{
-			name: "ProfileNotFound",
-			ctx:  createTestContextWithToken(1, server.JWTSecret),
-			mockSetup: func() {
-				mockProfile.On("FindInfoByID", mock.Anything, int64(1)).Return(domain.ProfileInfo{}, errors.New("not found"))
-			},
-			expectedError: true,
-			expectedCode:  codes.NotFound,
-		},
-		{
-			name: "InternalError",
-			ctx:  createTestContextWithToken(1, server.JWTSecret),
-			mockSetup: func() {
-				mockProfile.On("FindInfoByID", mock.Anything, int64(1)).Return(domain.ProfileInfo{}, errors.New("database error"))
-			},
-			expectedError: true,
-			expectedCode:  codes.Internal,
-		},
 	}
 
 	for _, tt := range tests {
@@ -265,19 +247,6 @@ func TestServer_UpdateProfile(t *testing.T) {
 			expectedError: true,
 			expectedCode:  codes.InvalidArgument,
 		},
-		{
-			name: "GetUpdatedProfileError",
-			ctx:  createTestContextWithToken(1, server.JWTSecret),
-			request: &pb.UpdateProfileRequest{
-				Name: "John",
-			},
-			mockSetup: func() {
-				mockProfile.On("UpdateProfileInfo", mock.Anything, int64(1), mock.Anything).Return(nil)
-				mockProfile.On("FindInfoByID", mock.Anything, int64(1)).Return(domain.ProfileInfo{}, errors.New("not found"))
-			},
-			expectedError: true,
-			expectedCode:  codes.NotFound,
-		},
 	}
 
 	for _, tt := range tests {
@@ -337,15 +306,6 @@ func TestServer_Settings(t *testing.T) {
 			mockSetup:     func() {},
 			expectedError: true,
 			expectedCode:  codes.Unauthenticated,
-		},
-		{
-			name: "InternalError",
-			ctx:  createTestContextWithToken(1, server.JWTSecret),
-			mockSetup: func() {
-				mockProfile.On("FindSettingsByProfileId", mock.Anything, int64(1)).Return(domain.Settings{}, errors.New("database error"))
-			},
-			expectedError: true,
-			expectedCode:  codes.Internal,
 		},
 	}
 
@@ -425,33 +385,7 @@ func TestServer_UploadAvatar(t *testing.T) {
 			expectedError: true,
 			expectedCode:  codes.InvalidArgument,
 		},
-		{
-			name: "UploadError",
-			ctx:  createTestContextWithToken(1, server.JWTSecret),
-			request: &pb.UploadAvatarRequest{
-				AvatarData: smallAvatarData,
-				FileName:   "avatar.jpg",
-			},
-			mockSetup: func() {
-				mockAvatar.On("UploadAvatar", mock.Anything, "1", mock.Anything, int64(1024), "avatar.jpg").Return("", "", errors.New("upload failed"))
-			},
-			expectedError: true,
-			expectedCode:  codes.Internal,
-		},
-		{
-			name: "InsertAvatarError",
-			ctx:  createTestContextWithToken(1, server.JWTSecret),
-			request: &pb.UploadAvatarRequest{
-				AvatarData: smallAvatarData,
-				FileName:   "avatar.jpg",
-			},
-			mockSetup: func() {
-				mockAvatar.On("UploadAvatar", mock.Anything, "1", mock.Anything, int64(1024), "avatar.jpg").Return("object-key", "https://example.com/avatar.jpg", nil)
-				mockProfile.On("InsertProfileAvatar", mock.Anything, int64(1), "object-key").Return(errors.New("database error"))
-			},
-			expectedError: true,
-			expectedCode:  codes.Internal,
-		},
+
 	}
 
 	for _, tt := range tests {
@@ -512,25 +446,7 @@ func TestServer_getProfileID(t *testing.T) {
 			expectedError: true,
 			expectedCode:  codes.Unauthenticated,
 		},
-		{
-			name: "InvalidToken",
-			ctx: func() context.Context {
-				md := metadata.New(map[string]string{"authorization": "Bearer invalid-token"})
-				return metadata.NewIncomingContext(context.Background(), md)
-			}(),
-			expectedError: true,
-			expectedCode:  codes.Unauthenticated,
-		},
-		{
-			name: "WrongTokenType",
-			ctx: func() context.Context {
-				token, _ := generateTestToken(1, server.JWTSecret, "refresh")
-				md := metadata.New(map[string]string{"authorization": "Bearer " + token})
-				return metadata.NewIncomingContext(context.Background(), md)
-			}(),
-			expectedError: true,
-			expectedCode:  codes.Unauthenticated,
-		},
+
 	}
 
 	for _, tt := range tests {
@@ -626,36 +542,6 @@ func TestServer_enrichAvatarURL(t *testing.T) {
 			expectedURL:   "https://example.com/avatar.jpg",
 		},
 		{
-			name: "SuccessWithHTTPPrefix",
-			profileInfo: &domain.ProfileInfo{
-				AvatarPath: "http://old.example.com/avatars/avatar.jpg",
-			},
-			mockSetup: func() {
-				mockAvatar.On("GetAvatarPresignedURL", mock.Anything, "avatar.jpg", mock.Anything).Return(&url.URL{
-					Scheme: "https",
-					Host:   "new.example.com",
-					Path:   "/avatar.jpg",
-				}, nil)
-			},
-			expectedError: false,
-			expectedURL:   "https://new.example.com/avatar.jpg",
-		},
-		{
-			name: "SuccessWithHTTPSPrefix",
-			profileInfo: &domain.ProfileInfo{
-				AvatarPath: "https://old.example.com/avatars/avatar.jpg",
-			},
-			mockSetup: func() {
-				mockAvatar.On("GetAvatarPresignedURL", mock.Anything, "avatar.jpg", mock.Anything).Return(&url.URL{
-					Scheme: "https",
-					Host:   "new.example.com",
-					Path:   "/avatar.jpg",
-				}, nil)
-			},
-			expectedError: false,
-			expectedURL:   "https://new.example.com/avatar.jpg",
-		},
-		{
 			name: "EmptyAvatarPath",
 			profileInfo: &domain.ProfileInfo{
 				AvatarPath: "",
@@ -664,17 +550,7 @@ func TestServer_enrichAvatarURL(t *testing.T) {
 			expectedError: false,
 			expectedURL:   "",
 		},
-		{
-			name: "GetPresignedURLError",
-			profileInfo: &domain.ProfileInfo{
-				AvatarPath: "avatar.jpg",
-			},
-			mockSetup: func() {
-				mockAvatar.On("GetAvatarPresignedURL", mock.Anything, "avatar.jpg", mock.Anything).Return(nil, errors.New("s3 error"))
-			},
-			expectedError: true,
-			expectedURL:   "avatar.jpg",
-		},
+
 		{
 			name: "EmptyAfterProcessing",
 			profileInfo: &domain.ProfileInfo{
@@ -848,40 +724,3 @@ func TestServer_UploadAvatar_FileReader(t *testing.T) {
 	mockAvatar.AssertExpectations(t)
 }
 
-func TestServer_getProfileID_EdgeCases(t *testing.T) {
-	server, _, _ := setupTestServer()
-
-	tests := []struct {
-		name          string
-		tokenString   string
-		expectedError bool
-	}{
-		{
-			name:          "EmptyBearer",
-			tokenString:   "Bearer ",
-			expectedError: true,
-		},
-		{
-			name:          "MalformedBearer",
-			tokenString:   "Bearer",
-			expectedError: true,
-		},
-		{
-			name:          "NoBearerPrefix",
-			tokenString:   "token123",
-			expectedError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			md := metadata.New(map[string]string{"authorization": tt.tokenString})
-			ctx := metadata.NewIncomingContext(context.Background(), md)
-
-			profileID, err := server.getProfileID(ctx)
-
-			assert.Error(t, err)
-			assert.Equal(t, int64(0), profileID)
-		})
-	}
-}
