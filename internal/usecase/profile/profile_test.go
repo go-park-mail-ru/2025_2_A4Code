@@ -791,5 +791,3 @@ func TestProfileUcase_InsertProfileAvatar(t *testing.T) {
 		})
 	}
 }
-
-
