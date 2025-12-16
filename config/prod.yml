@@ -28,3 +28,4 @@ minio:
   public_endpoint: flintmail.ru
   public_use_ssl: true
   
+# go generate ./...

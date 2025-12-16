@@ -32,6 +32,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+//go:generate go run github.com/mailru/easyjson/easyjson@v0.9.1 -all server.go
+
 type Server struct {
 	cfg               *config.Config
 	httpServer        *http.Server

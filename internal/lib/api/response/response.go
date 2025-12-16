@@ -5,6 +5,8 @@ import (
 	"net/http"
 )
 
+//go:generate go run github.com/mailru/easyjson/easyjson@v0.9.1 -all response.go
+
 type Response struct {
 	Status  int         `json:"status"`
 	Message string      `json:"message"`

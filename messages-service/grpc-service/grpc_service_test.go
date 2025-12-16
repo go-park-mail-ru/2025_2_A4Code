@@ -307,15 +307,15 @@ func TestServer_enrichSenderAvatar(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		sender        *domain.Sender
+		email         string
+		avatar        string
 		mockSetup     func()
 		expectedError bool
 	}{
 		{
-			name: "Success",
-			sender: &domain.Sender{
-				Avatar: "avatar.jpg",
-			},
+			name:   "Success",
+			email:  "sender@example.com",
+			avatar: "avatar.jpg",
 			mockSetup: func() {
 				mockAvatar.On("GetAvatarPresignedURL", mock.Anything, "avatar.jpg", mock.Anything).Return(&url.URL{
 					Scheme: "https",
@@ -326,24 +326,16 @@ func TestServer_enrichSenderAvatar(t *testing.T) {
 			expectedError: false,
 		},
 		{
-			name: "EmptyAvatar",
-			sender: &domain.Sender{
-				Avatar: "",
-			},
+			name:          "EmptyAvatar",
+			email:         "sender@example.com",
+			avatar:        "",
 			mockSetup:     func() {},
 			expectedError: false,
 		},
 		{
-			name:          "NilSender",
-			sender:        nil,
-			mockSetup:     func() {},
-			expectedError: false,
-		},
-		{
-			name: "AvatarWithHTTPPrefix",
-			sender: &domain.Sender{
-				Avatar: "http://example.com/avatar.jpg",
-			},
+			name:   "AvatarWithHTTPPrefix",
+			email:  "sender@example.com",
+			avatar: "http://example.com/avatar.jpg",
 			mockSetup: func() {
 				mockAvatar.On("GetAvatarPresignedURL", mock.Anything, "avatar.jpg", mock.Anything).Return(&url.URL{
 					Scheme: "https",
@@ -354,10 +346,9 @@ func TestServer_enrichSenderAvatar(t *testing.T) {
 			expectedError: false,
 		},
 		{
-			name: "AvatarWithHTTPSPrefix",
-			sender: &domain.Sender{
-				Avatar: "https://example.com/avatar.jpg",
-			},
+			name:   "AvatarWithHTTPSPrefix",
+			email:  "sender@example.com",
+			avatar: "https://example.com/avatar.jpg",
 			mockSetup: func() {
 				mockAvatar.On("GetAvatarPresignedURL", mock.Anything, "avatar.jpg", mock.Anything).Return(&url.URL{
 					Scheme: "https",
@@ -373,14 +364,16 @@ func TestServer_enrichSenderAvatar(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockSetup()
 
-			err := server.enrichSenderAvatar(context.Background(), tt.sender)
+			email := tt.email
+			avatar := tt.avatar
+			err := server.enrichSenderAvatar(context.Background(), &email, &avatar)
 
 			if tt.expectedError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				if tt.sender != nil && tt.sender.Avatar != "" && !tt.expectedError {
-					assert.Equal(t, "https://example.com/avatar.jpg", tt.sender.Avatar)
+				if avatar != "" && !tt.expectedError {
+					assert.Equal(t, "https://example.com/avatar.jpg", avatar)
 				}
 			}
 
@@ -402,12 +395,14 @@ func BenchmarkServer_MessagePage(b *testing.B) {
 		Text:       "Test Text",
 		Datetime:   time.Now(),
 		ThreadRoot: "456",
-		Sender: domain.Sender{
-			Email:    "sender@example.com",
-			Username: "sender",
-			Avatar:   "avatar.jpg",
-		},
-		Files: []domain.File{},
+		SenderID:   1,
+		Email:      "sender@example.com",
+		Username:   "sender",
+		Avatar:     "avatar.jpg",
+		FolderID:   1,
+		FolderName: "inbox",
+		Receivers:  []string{},
+		Files:      []domain.File{},
 	}, nil)
 	mockMessage.On("MarkMessageAsRead", mock.Anything, int64(123), int64(1)).Return(nil)
 	mockAvatar.On("GetAvatarPresignedURL", mock.Anything, "avatar.jpg", mock.Anything).Return(&url.URL{

@@ -188,7 +188,7 @@ func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*
 		log.Warn("failed to mark message as read: " + err.Error())
 	}
 
-	if err := s.enrichSenderAvatar(ctx, &fullMessage.Sender); err != nil {
+	if err := s.enrichSenderAvatar(ctx, &fullMessage.Email, &fullMessage.Avatar); err != nil {
 		log.Warn("failed to enrich sender avatar: " + err.Error())
 	}
 
@@ -214,7 +214,7 @@ func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*
 			Text:      fullMessage.Text,
 			Datetime:  fullMessage.Datetime.Format(time.RFC3339),
 			ThreadId:  fullMessage.ThreadRoot,
-			Sender:    s.domainSenderToProto(&fullMessage.Sender),
+			Sender:    s.domainSenderToProto(&fullMessage.Email, &fullMessage.Avatar, fullMessage.SenderID, fullMessage.Username),
 			Files:     pbFiles,
 			Receivers: pbReceivers,
 		},
@@ -425,23 +425,23 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	}, nil
 }
 
-func (s *Server) domainSenderToProto(sender *domain.Sender) *pb.Sender {
-	if sender == nil {
+func (s *Server) domainSenderToProto(email *string, avatar *string, senderID int64, username string) *pb.Sender {
+	if email == nil {
 		return nil
 	}
 	return &pb.Sender{
-		Email:    sender.Email,
-		Username: sender.Username,
-		Avatar:   sender.Avatar,
+		Email:    *email,
+		Username: username,
+		Avatar:   *avatar,
 	}
 }
 
-func (s *Server) enrichSenderAvatar(ctx context.Context, sender *domain.Sender) error {
-	if sender == nil || sender.Avatar == "" {
+func (s *Server) enrichSenderAvatar(ctx context.Context, email *string, avatarPath *string) error {
+	if avatarPath == nil || *avatarPath == "" {
 		return nil
 	}
 
-	objectName := sender.Avatar
+	objectName := *avatarPath
 	if strings.HasPrefix(objectName, "http://") || strings.HasPrefix(objectName, "https://") {
 		parsed, err := url.Parse(objectName)
 		if err != nil {
@@ -471,7 +471,7 @@ func (s *Server) enrichSenderAvatar(ctx context.Context, sender *domain.Sender) 
 		return err
 	}
 
-	sender.Avatar = url.String()
+	*avatarPath = url.String()
 	return nil
 }
 
@@ -658,7 +658,7 @@ func (s *Server) validateSendRequest(req *pb.SendRequest) error {
 }
 
 func (s *Server) MarkAsSpam(ctx context.Context, req *pb.MarkAsSpamRequest) (*pb.MarkAsSpamResponse, error) {
-	const op = "messagesservice.MarkAsSpam"
+	// const op = "messagesservice.MarkAsSpam"
 	log := logger.GetLogger(ctx)
 	log.Debug("handle messages/mark-as-spam")
 
@@ -843,13 +843,13 @@ func (s *Server) GetFolder(ctx context.Context, req *pb.GetFolderRequest) (*pb.G
 
 	for _, m := range messages {
 		messageID, _ := strconv.ParseInt(m.ID, 10, 64)
-		if err := s.enrichSenderAvatar(ctx, &m.Sender); err != nil {
+		if err := s.enrichSenderAvatar(ctx, &m.Email, &m.Avatar); err != nil {
 			log.Warn("failed to enrich sender avatar: " + err.Error())
 		}
 
 		pbMessages = append(pbMessages, &pb.Message{
 			Id:       m.ID,
-			Sender:   s.domainSenderToProto(&m.Sender),
+			Sender:   s.domainSenderToProto(&m.Email, &m.Avatar, m.SenderID, m.Username),
 			Topic:    m.Topic,
 			Snippet:  m.Snippet,
 			Datetime: m.Datetime.Format(time.RFC3339),

@@ -245,13 +245,11 @@ func (repo *MessageRepository) FindByMessageID(ctx context.Context, messageID in
 	// Создаем snippet из текста сообщения
 	message.Snippet = buildSnippet(text, 40)
 
-	message.Sender = domain.Sender{
-		Id:    senderId,
-		Email: fmt.Sprintf("%s@%s", senderUsername, senderDomain),
-		Username: strings.TrimSpace(fmt.Sprintf("%s %s",
-			senderName.String, senderSurname.String)),
-		Avatar: senderAvatar.String,
-	}
+	message.SenderID = senderId
+	message.Email = fmt.Sprintf("%s@%s", senderUsername, senderDomain)
+	message.Username = strings.TrimSpace(fmt.Sprintf("%s %s",
+		senderName.String, senderSurname.String))
+	message.Avatar = senderAvatar.String
 
 	return &message, nil
 }
@@ -312,13 +310,11 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 
 	msg.ID = strconv.FormatInt(messageIdInt, 10)
 
-	msg.Sender = domain.Sender{
-		Id:    senderId,
-		Email: fmt.Sprintf("%s@%s", senderUsername, senderDomain),
-		Username: strings.TrimSpace(fmt.Sprintf("%s %s",
-			senderName.String, senderSurname.String)),
-		Avatar: senderAvatar.String,
-	}
+	msg.SenderID = senderId
+	msg.Email = fmt.Sprintf("%s@%s", senderUsername, senderDomain)
+	msg.Username = strings.TrimSpace(fmt.Sprintf("%s %s",
+		senderName.String, senderSurname.String))
+	msg.Avatar = senderAvatar.String
 
 	// Обработка thread_id и root_message_id
 	if threadID.Valid {
@@ -327,12 +323,8 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 
 	// Обработка информации о папке
 	if folderID.Valid {
-		msg.Folder = domain.Folder{
-			ID:        folderID.Int64,
-			ProfileID: folderProfileID.Int64,
-			Name:      folderName.String,
-			Type:      domain.FolderType(folderType.String),
-		}
+		msg.FolderID = folderID.Int64
+		msg.FolderName = folderName.String
 	}
 
 	// Получаем файлы
@@ -1333,13 +1325,11 @@ func (repo *MessageRepository) GetFolderMessagesWithKeysetPagination(
 		seen[message.ID] = struct{}{}
 
 		message.Snippet = buildSnippet(text, 40)
-		message.Sender = domain.Sender{
-			Id:    senderId,
-			Email: fmt.Sprintf("%s@%s", senderUsername, senderDomain),
-			Username: strings.TrimSpace(fmt.Sprintf("%s %s",
-				senderName.String, senderSurname.String)),
-			Avatar: senderAvatar.String,
-		}
+		message.SenderID = senderId
+		message.Email = fmt.Sprintf("%s@%s", senderUsername, senderDomain)
+		message.Username = strings.TrimSpace(fmt.Sprintf("%s %s",
+			senderName.String, senderSurname.String))
+		message.Avatar = senderAvatar.String
 		messages = append(messages, message)
 	}
 

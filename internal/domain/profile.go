@@ -2,6 +2,8 @@ package domain
 
 import "time"
 
+//go:generate go run github.com/mailru/easyjson/easyjson@v0.9.1 -all profile.go
+
 type Profile struct {
 	ID              int64     `json:"id"`
 	Username        string    `json:"username"`

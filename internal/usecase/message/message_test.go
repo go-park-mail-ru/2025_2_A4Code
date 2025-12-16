@@ -1611,7 +1611,7 @@ func TestMessageUcase_GetFolderMessagesInfo(t *testing.T) {
 	expectedMessagesInfo := domain.Messages{
 		MessageTotal:  5,
 		MessageUnread: 2,
-		Messages:      []domain.Message{},
+		MessageList:   []domain.Message{},
 	}
 
 	type fields struct {
