@@ -179,7 +179,7 @@ func (s *Server) Refresh(ctx context.Context, req *pb.RefreshRequest) (*pb.Refre
 }
 
 func (s *Server) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutResponse, error) {
-	const op = "authservice.Logout"
+	// const op = "authservice.Logout"
 	log := logger.GetLogger(ctx)
 	log.Debug("handle /auth/logout")
 
