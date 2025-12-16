@@ -535,8 +535,7 @@ func storeAttachment(ctx context.Context, client *minio.Client, bucket string, a
 	if name == "" {
 		name = "file.bin"
 	}
-	safeName := sanitizeFileName(name)
-	objectName := path.Join("attachments", fmt.Sprintf("%d", time.Now().UnixNano()), safeName)
+	objectName := sanitizeStoragePath(name)
 	ct := strings.TrimSpace(att.ContentType)
 	if parsed, _, err := mime.ParseMediaType(ct); err == nil && strings.TrimSpace(parsed) != "" {
 		ct = strings.TrimSpace(parsed)
@@ -561,10 +560,49 @@ func sanitizeFileName(name string) string {
 	name = path.Base(name)
 	name = strings.ReplaceAll(name, "\\", "-")
 	name = strings.ReplaceAll(name, "/", "-")
-	if strings.TrimSpace(name) == "" {
-		return "file.bin"
+	// оставляем только разрешённые символы
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '.', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
 	}
-	return name
+	clean := strings.Trim(b.String(), "._-")
+	if clean == "" {
+		clean = "file"
+	}
+	// гарантируем расширение
+	if !strings.Contains(clean, ".") {
+		clean += ".bin"
+	}
+	return clean
+}
+
+// sanitizeStoragePath приводит путь к виду, проходящему CHECK file_storage_path_check.
+func sanitizeStoragePath(name string) string {
+	safeName := sanitizeFileName(name)
+	ts := fmt.Sprintf("%d", time.Now().UnixNano())
+	obj := path.Join("attachments", ts, safeName)
+	// ограничиваем длину 200 символов (constraint)
+	if len(obj) > 200 {
+		ext := path.Ext(safeName)
+		base := strings.TrimSuffix(safeName, ext)
+		maxBase := 200 - len("attachments/"+ts+"/") - len(ext)
+		if maxBase < 1 {
+			maxBase = 1
+		}
+		if len(base) > maxBase {
+			base = base[:maxBase]
+		}
+		obj = path.Join("attachments", ts, base+ext)
+	}
+	return obj
 }
 
 func ensureBucket(ctx context.Context, client *minio.Client, bucket string) error {
