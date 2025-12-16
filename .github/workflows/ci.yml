@@ -2,7 +2,7 @@ name: CI/CD prod pipeline
 
 on:
   push:
-    branches: "feature/A4M-D"
+    branches: ["feature/A4M-D"]
 
 jobs:
   lint:
