@@ -58,4 +58,4 @@ jobs:
 
             git pull origin feature/A4M-D
 
-            docker-compose up -d --build auth messages profile gateway
+            docker compose up -d --build auth messages profile gateway
