@@ -2009,6 +2009,210 @@ func TestRespondError(t *testing.T) {
 	assert.Equal(t, "error message", response["message"])
 }
 
+func TestServer_GetFolderHandler(t *testing.T) {
+	t.Run("FolderNotFound", func(t *testing.T) {
+		server, _, _, mockMessage, _ := setupTestServer()
+
+		mockMessage.On("GetFolders", mock.Anything, mock.AnythingOfType("*messagesproto.GetFoldersRequest")).
+			Return(&messagesproto.GetFoldersResponse{
+				Folders: []*messagesproto.Folder{},
+			}, nil)
+
+		req := httptest.NewRequest("GET", "/folder/NonExistent", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "access_token",
+			Value: "test-token",
+		})
+		w := httptest.NewRecorder()
+
+		server.getFolderHandler(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		mockMessage.AssertExpectations(t)
+	})
+
+	t.Run("GetFoldersError", func(t *testing.T) {
+		server, _, _, mockMessage, _ := setupTestServer()
+
+		mockMessage.On("GetFolders", mock.Anything, mock.AnythingOfType("*messagesproto.GetFoldersRequest")).
+			Return(nil, status.Error(codes.Internal, "get folders error"))
+
+		req := httptest.NewRequest("GET", "/folder/Test", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "access_token",
+			Value: "test-token",
+		})
+		w := httptest.NewRecorder()
+
+		server.getFolderHandler(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+		mockMessage.AssertExpectations(t)
+	})
+
+	t.Run("NoAccessToken", func(t *testing.T) {
+		server, _, _, _, _ := setupTestServer()
+
+		req := httptest.NewRequest("GET", "/folder/Test", nil)
+		w := httptest.NewRecorder()
+
+		server.getFolderHandler(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+}
+
+func TestServer_DeleteFolderHandler(t *testing.T) {
+	t.Run("SuccessfulDeleteFolder", func(t *testing.T) {
+		server, _, _, mockMessage, _ := setupTestServer()
+
+		mockMessage.On("DeleteFolder", mock.Anything, mock.AnythingOfType("*messagesproto.DeleteFolderRequest")).
+			Return(&messagesproto.DeleteFolderResponse{}, nil)
+
+		req := httptest.NewRequest("DELETE", "/folder?folder_id=folder-1", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "access_token",
+			Value: "test-token",
+		})
+		w := httptest.NewRecorder()
+
+		server.deleteFolderHandler(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		mockMessage.AssertExpectations(t)
+	})
+
+	t.Run("DeleteFolderError", func(t *testing.T) {
+		server, _, _, mockMessage, _ := setupTestServer()
+
+		mockMessage.On("DeleteFolder", mock.Anything, mock.AnythingOfType("*messagesproto.DeleteFolderRequest")).
+			Return(nil, errors.New("delete folder error"))
+
+		req := httptest.NewRequest("DELETE", "/folder?folder_id=folder-1", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "access_token",
+			Value: "test-token",
+		})
+		w := httptest.NewRecorder()
+
+		server.deleteFolderHandler(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+		mockMessage.AssertExpectations(t)
+	})
+
+	t.Run("NoAccessToken", func(t *testing.T) {
+		server, _, _, _, _ := setupTestServer()
+
+		req := httptest.NewRequest("DELETE", "/folder?folder_id=folder-1", nil)
+		w := httptest.NewRecorder()
+
+		server.deleteFolderHandler(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+}
+
+func TestServer_DeleteMessageFromFolderHandler(t *testing.T) {
+	t.Run("SuccessfulDeleteMessage", func(t *testing.T) {
+		server, _, _, mockMessage, _ := setupTestServer()
+
+		mockMessage.On("DeleteMessageFromFolder", mock.Anything, mock.AnythingOfType("*messagesproto.DeleteMessageFromFolderRequest")).
+			Return(&messagesproto.DeleteMessageFromFolderResponse{}, nil)
+
+		body := bytes.NewBufferString(`{"message_id": "msg-1", "folder_id": "folder-1"}`)
+		req := httptest.NewRequest("DELETE", "/folder/message", body)
+		req.AddCookie(&http.Cookie{
+			Name:  "access_token",
+			Value: "test-token",
+		})
+		w := httptest.NewRecorder()
+
+		server.deleteMessageFromFolderHandler(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		mockMessage.AssertExpectations(t)
+	})
+
+	t.Run("InvalidBodyFormat", func(t *testing.T) {
+		server, _, _, _, _ := setupTestServer()
+
+		body := bytes.NewBufferString(`invalid json`)
+		req := httptest.NewRequest("DELETE", "/folder/message", body)
+		req.AddCookie(&http.Cookie{
+			Name:  "access_token",
+			Value: "test-token",
+		})
+		w := httptest.NewRecorder()
+
+		server.deleteMessageFromFolderHandler(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("DeleteMessageError", func(t *testing.T) {
+		server, _, _, mockMessage, _ := setupTestServer()
+
+		mockMessage.On("DeleteMessageFromFolder", mock.Anything, mock.AnythingOfType("*messagesproto.DeleteMessageFromFolderRequest")).
+			Return(nil, errors.New("delete message error"))
+
+		body := bytes.NewBufferString(`{"message_id": "msg-1", "folder_id": "folder-1"}`)
+		req := httptest.NewRequest("DELETE", "/folder/message", body)
+		req.AddCookie(&http.Cookie{
+			Name:  "access_token",
+			Value: "test-token",
+		})
+		w := httptest.NewRecorder()
+
+		server.deleteMessageFromFolderHandler(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+		mockMessage.AssertExpectations(t)
+	})
+
+	t.Run("NoAccessToken", func(t *testing.T) {
+		server, _, _, _, _ := setupTestServer()
+
+		body := bytes.NewBufferString(`{"message_id": "msg-1", "folder_id": "folder-1"}`)
+		req := httptest.NewRequest("DELETE", "/folder/message", body)
+		w := httptest.NewRecorder()
+
+		server.deleteMessageFromFolderHandler(w, req)
+
+		resp := w.Result()
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+}
+
 func TestGetAccessToken(t *testing.T) {
 	t.Run("FromAuthorizationHeader", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
