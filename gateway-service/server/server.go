@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	easyjson "github.com/mailru/easyjson"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -1126,12 +1127,16 @@ func writeResponse(w http.ResponseWriter, status int, message string, body inter
 	if status >= 400 {
 		code = status
 	}
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(apiResponse{
+	resp := apiResponse{
 		Status:  status,
 		Message: message,
 		Body:    body,
-	})
+	}
+
+	w.WriteHeader(code)
+	if _, _, err := easyjson.MarshalToHTTPResponseWriter(resp, w); err != nil {
+		slog.Error("failed to marshal response", slog.String("error", err.Error()))
+	}
 }
 
 func writeGrpcAwareError(w http.ResponseWriter, err error, defaultMessage string) {
