@@ -1219,3 +1219,4 @@ func (s *Server) addTokenToContext(ctx context.Context, token string) context.Co
 	md := metadata.Pairs("authorization", "Bearer "+token)
 	return metadata.NewOutgoingContext(ctx, md)
 }
+
