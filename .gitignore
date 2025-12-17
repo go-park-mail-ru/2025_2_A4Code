@@ -14,6 +14,8 @@ coverage.*
 *.coverprofile
 profile.cov
 
+*.pem
+
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
@@ -27,7 +29,9 @@ go.work.sum
 # Editor/IDE
 .idea/
 .vscode/
-.github/
+.github/copilot-instructions.md
 
 # files
 cookies.txt
+# Generated easyjson files
+*_easyjson.go

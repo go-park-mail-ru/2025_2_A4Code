@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"net"
 	"net/http"
+	"strings"
 
 	// "2025_2_a4code/internal/http-server/handlers/messages/threads"
 	// uploadfile "2025_2_a4code/internal/http-server/handlers/user/upload/upload-file"
@@ -74,9 +75,16 @@ func MessagesInit() {
 		log.Error("error connecting to minio")
 	}
 
-	err = bucketExists(client, cfg.MinioConfig.BucketName)
-	if err != nil {
+	attachmentsBucket := cfg.MinioConfig.AttachmentsBucketName
+	if strings.TrimSpace(attachmentsBucket) == "" {
+		attachmentsBucket = "attachments"
+	}
+
+	if err = bucketExists(client, cfg.MinioConfig.BucketName); err != nil {
 		log.Error("error checking bucket: " + err.Error())
+	}
+	if err = bucketExists(client, attachmentsBucket); err != nil {
+		log.Error("error checking attachments bucket: " + err.Error())
 	}
 
 	// Создание репозиториев
@@ -97,7 +105,7 @@ func MessagesInit() {
 		),
 	)
 
-	messagesService := messagesservice.New(messageUCase, avatarUCase, SECRET)
+	messagesService := messagesservice.New(messageUCase, avatarUCase, SECRET, client, attachmentsBucket)
 	pb.RegisterMessagesServiceServer(grpcServer, messagesService)
 
 	lis, err := net.Listen("tcp", cfg.AppConfig.Host+":"+cfg.AppConfig.MessagesPort)

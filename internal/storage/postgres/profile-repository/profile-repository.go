@@ -27,7 +27,7 @@ func (repo *ProfileRepository) FindByID(ctx context.Context, id int64) (*domain.
 
 	const query = `
 		SELECT 
-			bp.id, bp.username, bp.domain, bp.created_at,
+			p.id, bp.username, bp.domain, bp.created_at,
 			p.password_hash, p.auth_version, p.name, p.surname, 
 			p.patronymic, p.gender, p.birthday, p.image_path
 		FROM 
@@ -35,7 +35,7 @@ func (repo *ProfileRepository) FindByID(ctx context.Context, id int64) (*domain.
 		JOIN 
 			profile p ON bp.id = p.base_profile_id
 		WHERE 
-			bp.id = $1`
+			p.id = $1`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
@@ -85,14 +85,14 @@ func (repo *ProfileRepository) FindSenderByID(ctx context.Context, id int64) (*d
 
 	const query = `
 		SELECT 
-			bp.id, bp.username, bp.domain, 
+			p.id, bp.username, bp.domain, 
 			p.name, p.surname, p.image_path
 		FROM 
 			base_profile bp
 		LEFT JOIN 
 			profile p ON bp.id = p.base_profile_id
 		WHERE 
-			bp.id = $1`
+			p.id = $1`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
@@ -230,7 +230,7 @@ func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Pr
 		return 0, e.Wrap(op+": failed to commit transaction: ", err)
 	}
 
-	return newBaseProfileId, nil
+	return newProfileId, nil
 }
 
 func (repo *ProfileRepository) createSystemFolders(ctx context.Context, tx *sql.Tx, profileID int64) error {
@@ -274,7 +274,7 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 
 	const query = `
 		SELECT 
-			bp.id, bp.created_at,
+			p.id, bp.created_at,
 			p.password_hash, p.auth_version, p.name, p.surname, 
 			p.patronymic, p.gender, p.birthday, p.image_path
 		FROM 
@@ -338,7 +338,7 @@ func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64
 
 	const query = `
 		SELECT 
-			bp.id, bp.username, bp.created_at,
+			p.id, bp.username, bp.created_at,
 			p.name, p.surname, 
 			p.patronymic, p.gender, p.birthday, p.image_path
 		FROM 
@@ -346,7 +346,7 @@ func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64
 		JOIN 
 			profile p ON bp.id = p.base_profile_id
 		WHERE 
-			bp.id = $1`
+			p.id = $1`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
@@ -403,7 +403,7 @@ func (repo *ProfileRepository) FindSettingsByProfileId(ctx context.Context, prof
         LEFT JOIN 
             settings s ON p.id = s.profile_id
         WHERE 
-            bp.id = $1`
+            p.id = $1`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {

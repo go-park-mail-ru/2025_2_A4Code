@@ -35,7 +35,7 @@ func GatewayInit() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, err := gatewayservice.NewServer(cfg.AppConfig)
+	srv, err := gatewayservice.NewServer(&cfg)
 	if err != nil {
 		log.Error("Failed to start gateway server: " + err.Error())
 		os.Exit(1)

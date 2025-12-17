@@ -32,6 +32,8 @@ service ProfileService {
 
   rpc Settings(SettingsRequest) returns (SettingsResponse);
 
+  rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);
+
   rpc UploadAvatar(UploadAvatarRequest) returns (UploadAvatarResponse);
 }
 
@@ -56,6 +58,14 @@ message UpdateProfileResponse {
 message SettingsRequest {}
 
 message SettingsResponse {
+  Settings settings = 1;
+}
+
+message UpdateSettingsRequest {
+  repeated string signatures = 1;
+}
+
+message UpdateSettingsResponse {
   Settings settings = 1;
 }
 

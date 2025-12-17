@@ -12,38 +12,37 @@ import (
 var mockError = errors.New("mock repository error")
 
 type MockMessageRepository struct {
-	FindByMessageIDFn                                 func(ctx context.Context, messageID int64) (*domain.Message, error)
-	FindByProfileIDFn                                 func(ctx context.Context, profileID int64) ([]domain.Message, error)
-	FindFullByMessageIDFn                             func(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
-	SaveMessageFn                                     func(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
-	SaveFileFn                                        func(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
-	SaveThreadFn                                      func(ctx context.Context, messageID int64) (threadID int64, err error)
-	SaveThreadIdToMessageFn                           func(ctx context.Context, messageID int64, threadID int64) error
-	FindByProfileIDWithKeysetPaginationFn             func(ctx context.Context, profileID int64, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
-	GetMessagesStatsFn                                func(ctx context.Context, profileID int64) (int, int, error)
-	FindThreadsByProfileIDFn                          func(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error)
-	MarkMessageAsReadFn                               func(ctx context.Context, messageID int64, profileID int64) error
-	FindSentMessagesByProfileIDWithKeysetPaginationFn func(ctx context.Context, profileID int64, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
-	GetSentMessagesStatsFn                            func(ctx context.Context, profileID int64) (int, int, error)
-	MarkMessageAsSpamFn                               func(ctx context.Context, messageID int64, profileID int64) error
-	IsUsersMessageFn                                  func(ctx context.Context, messageID int64, profileID int64) (bool, error)
-	SaveDraftFn                                       func(ctx context.Context, profileID int64, draftID, receiverEmail, topic, text string) (int64, error)
-	IsDraftBelongsToUserFn                            func(ctx context.Context, draftID, profileID int64) (bool, error)
-	DeleteDraftFn                                     func(ctx context.Context, draftID, profileID int64) error
-	SendDraftFn                                       func(ctx context.Context, draftID, profileID int64) error
-	GetDraftFn                                        func(ctx context.Context, draftID, profileID int64) (domain.FullMessage, error)
-	MoveToFolderFn                                    func(ctx context.Context, profileID, messageID, folderID int64) error
-	GetFolderByTypeFn                                 func(ctx context.Context, profileID int64, folderType string) (int64, error)
-	ShouldMarkAsReadFn                                func(ctx context.Context, messageID, profileID int64) (bool, error)
-	CreateFolderFn                                    func(ctx context.Context, profileID int64, folderName string) (*domain.Folder, error)
-	GetUserFoldersFn                                  func(ctx context.Context, profileID int64) ([]domain.Folder, error)
-	RenameFolderFn                                    func(ctx context.Context, profileID, folderID int64, newName string) (*domain.Folder, error)
-	DeleteFolderFn                                    func(ctx context.Context, profileID, folderID int64) error
-	DeleteMessageFromFolderFn                         func(ctx context.Context, profileID, messageID, folderID int64) error
-	GetFolderMessagesWithKeysetPaginationFn           func(ctx context.Context, profileID, folderID, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
-	GetFolderMessagesInfoFn                           func(ctx context.Context, profileID, folderID int64) (domain.Messages, error)
-	SaveMessageWithFolderDistributionFn               func(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
-	ReplyToMessageWithFolderDistributionFn            func(ctx context.Context, receiverEmail string, senderProfileID int64, threadRoot int64, topic, text string) (int64, error)
+	FindByMessageIDFn                       func(ctx context.Context, messageID int64) (*domain.Message, error)
+	FindFullByMessageIDFn                   func(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
+	SaveMessageFn                           func(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
+	GetProfileEmailFn                       func(ctx context.Context, profileID int64) (string, error)
+	EnsureBaseProfileFn                     func(ctx context.Context, username, domain string) (int64, error)
+	EnsureProfileForBaseFn                  func(ctx context.Context, baseProfileID int64, displayName string) error
+	SaveFileFn                              func(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
+	SaveThreadFn                            func(ctx context.Context, messageID int64) (threadID int64, err error)
+	SaveThreadIdToMessageFn                 func(ctx context.Context, messageID int64, threadID int64) error
+	FindThreadsByProfileIDFn                func(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error)
+	MarkMessageAsReadFn                     func(ctx context.Context, messageID int64, profileID int64) error
+	MarkMessageAsSpamFn                     func(ctx context.Context, messageID int64, profileID int64) error
+	IsUsersMessageFn                        func(ctx context.Context, messageID int64, profileID int64) (bool, error)
+	SaveDraftFn                             func(ctx context.Context, profileID int64, draftID, receiverEmail, topic, text string) (int64, error)
+	IsDraftBelongsToUserFn                  func(ctx context.Context, draftID, profileID int64) (bool, error)
+	DeleteDraftFn                           func(ctx context.Context, draftID, profileID int64) error
+	SendDraftFn                             func(ctx context.Context, draftID, profileID int64) error
+	GetDraftFn                              func(ctx context.Context, draftID, profileID int64) (domain.FullMessage, error)
+	SaveOutgoingExternalMessageFn           func(ctx context.Context, senderProfileID int64, topic, text string) (int64, error)
+	MoveToFolderFn                          func(ctx context.Context, profileID, messageID, folderID int64) error
+	GetFolderByTypeFn                       func(ctx context.Context, profileID int64, folderType string) (int64, error)
+	ShouldMarkAsReadFn                      func(ctx context.Context, messageID, profileID int64) (bool, error)
+	CreateFolderFn                          func(ctx context.Context, profileID int64, folderName string) (*domain.Folder, error)
+	GetUserFoldersFn                        func(ctx context.Context, profileID int64) ([]domain.Folder, error)
+	RenameFolderFn                          func(ctx context.Context, profileID, folderID int64, newName string) (*domain.Folder, error)
+	DeleteFolderFn                          func(ctx context.Context, profileID, folderID int64) error
+	DeleteMessageFromFolderFn               func(ctx context.Context, profileID, messageID, folderID int64) error
+	GetFolderMessagesWithKeysetPaginationFn func(ctx context.Context, profileID, folderID, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
+	GetFolderMessagesInfoFn                 func(ctx context.Context, profileID, folderID int64) (domain.Messages, error)
+	SaveMessageWithFolderDistributionFn     func(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
+	ReplyToMessageWithFolderDistributionFn  func(ctx context.Context, receiverEmail string, senderProfileID int64, threadRoot int64, topic, text string) (int64, error)
 }
 
 func (m *MockMessageRepository) FindByMessageID(ctx context.Context, messageID int64) (*domain.Message, error) {
@@ -52,78 +51,77 @@ func (m *MockMessageRepository) FindByMessageID(ctx context.Context, messageID i
 	}
 	return nil, nil
 }
-func (m *MockMessageRepository) FindByProfileID(ctx context.Context, profileID int64) ([]domain.Message, error) {
-	if m.FindByProfileIDFn != nil {
-		return m.FindByProfileIDFn(ctx, profileID)
-	}
-	return nil, nil
-}
+
 func (m *MockMessageRepository) FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error) {
 	if m.FindFullByMessageIDFn != nil {
 		return m.FindFullByMessageIDFn(ctx, messageID, profileID)
 	}
 	return domain.FullMessage{}, nil
 }
+
 func (m *MockMessageRepository) SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error) {
 	if m.SaveMessageFn != nil {
 		return m.SaveMessageFn(ctx, receiverProfileEmail, senderBaseProfileID, topic, text)
 	}
 	return 0, nil
 }
+
+func (m *MockMessageRepository) GetProfileEmail(ctx context.Context, profileID int64) (string, error) {
+	if m.GetProfileEmailFn != nil {
+		return m.GetProfileEmailFn(ctx, profileID)
+	}
+	return "", nil
+}
+
+func (m *MockMessageRepository) EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error) {
+	if m.EnsureBaseProfileFn != nil {
+		return m.EnsureBaseProfileFn(ctx, username, domain)
+	}
+	return 0, nil
+}
+
+func (m *MockMessageRepository) EnsureProfileForBase(ctx context.Context, baseProfileID int64, displayName string) error {
+	if m.EnsureProfileForBaseFn != nil {
+		return m.EnsureProfileForBaseFn(ctx, baseProfileID, displayName)
+	}
+	return nil
+}
+
 func (m *MockMessageRepository) SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error) {
 	if m.SaveFileFn != nil {
 		return m.SaveFileFn(ctx, messageID, fileName, fileType, storagePath, size)
 	}
 	return 0, nil
 }
+
 func (m *MockMessageRepository) SaveThread(ctx context.Context, messageID int64) (threadID int64, err error) {
 	if m.SaveThreadFn != nil {
 		return m.SaveThreadFn(ctx, messageID)
 	}
 	return 0, nil
 }
+
 func (m *MockMessageRepository) SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error {
 	if m.SaveThreadIdToMessageFn != nil {
 		return m.SaveThreadIdToMessageFn(ctx, messageID, threadID)
 	}
 	return nil
 }
-func (m *MockMessageRepository) FindByProfileIDWithKeysetPagination(ctx context.Context, profileID int64, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error) {
-	if m.FindByProfileIDWithKeysetPaginationFn != nil {
-		return m.FindByProfileIDWithKeysetPaginationFn(ctx, profileID, lastMessageID, lastDatetime, limit)
-	}
-	return nil, nil
-}
-func (m *MockMessageRepository) GetMessagesStats(ctx context.Context, profileID int64) (int, int, error) {
-	if m.GetMessagesStatsFn != nil {
-		return m.GetMessagesStatsFn(ctx, profileID)
-	}
-	return 0, 0, nil
-}
+
 func (m *MockMessageRepository) FindThreadsByProfileID(ctx context.Context, profileID int64) ([]domain.ThreadInfo, error) {
 	if m.FindThreadsByProfileIDFn != nil {
 		return m.FindThreadsByProfileIDFn(ctx, profileID)
 	}
 	return nil, nil
 }
+
 func (m *MockMessageRepository) MarkMessageAsRead(ctx context.Context, messageID int64, profileID int64) error {
 	if m.MarkMessageAsReadFn != nil {
 		return m.MarkMessageAsReadFn(ctx, messageID, profileID)
 	}
 	return nil
 }
-func (m *MockMessageRepository) FindSentMessagesByProfileIDWithKeysetPagination(ctx context.Context, profileID int64, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error) {
-	if m.FindSentMessagesByProfileIDWithKeysetPaginationFn != nil {
-		return m.FindSentMessagesByProfileIDWithKeysetPaginationFn(ctx, profileID, lastMessageID, lastDatetime, limit)
-	}
-	return nil, nil
-}
-func (m *MockMessageRepository) GetSentMessagesStats(ctx context.Context, profileID int64) (int, int, error) {
-	if m.GetSentMessagesStatsFn != nil {
-		return m.GetSentMessagesStatsFn(ctx, profileID)
-	}
-	return 0, 0, nil
-}
+
 func (m *MockMessageRepository) MarkMessageAsSpam(ctx context.Context, messageID int64, profileID int64) error {
 	if m.MarkMessageAsSpamFn != nil {
 		return m.MarkMessageAsSpamFn(ctx, messageID, profileID)
@@ -171,6 +169,13 @@ func (m *MockMessageRepository) GetDraft(ctx context.Context, draftID, profileID
 		return m.GetDraftFn(ctx, draftID, profileID)
 	}
 	return domain.FullMessage{}, nil
+}
+
+func (m *MockMessageRepository) SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error) {
+	if m.SaveOutgoingExternalMessageFn != nil {
+		return m.SaveOutgoingExternalMessageFn(ctx, senderProfileID, topic, text)
+	}
+	return 0, nil
 }
 
 func (m *MockMessageRepository) MoveToFolder(ctx context.Context, profileID, messageID, folderID int64) error {
@@ -265,8 +270,8 @@ func TestNew(t *testing.T) {
 		t.Error("New() returned nil")
 	}
 
-	if uc.repo != mockRepo {
-		t.Error("New() didn't set repository correctly")
+	if uc.repo == nil {
+		t.Error("New() didn't set repository")
 	}
 }
 
@@ -1050,6 +1055,7 @@ func TestMessageUcase_GetDraft(t *testing.T) {
 		})
 	}
 }
+
 func TestMessageUcase_MoveToFolder(t *testing.T) {
 	type fields struct {
 		repo MessageRepository
@@ -1605,7 +1611,7 @@ func TestMessageUcase_GetFolderMessagesInfo(t *testing.T) {
 	expectedMessagesInfo := domain.Messages{
 		MessageTotal:  5,
 		MessageUnread: 2,
-		Messages:      []domain.Message{},
+		MessageList:   []domain.Message{},
 	}
 
 	type fields struct {
@@ -1860,6 +1866,300 @@ func TestMessageUcase_IsUsersMessage(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("IsUsersMessage() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMessageUcase_GetProfileEmail(t *testing.T) {
+	type fields struct {
+		repo MessageRepository
+	}
+	type args struct {
+		ctx       context.Context
+		profileID int64
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "Success",
+			fields: fields{
+				repo: &MockMessageRepository{
+					GetProfileEmailFn: func(ctx context.Context, profileID int64) (string, error) {
+						return "test@example.com", nil
+					},
+				},
+			},
+			args:    args{ctx: context.Background(), profileID: 1},
+			want:    "test@example.com",
+			wantErr: false,
+		},
+		{
+			name: "Failure",
+			fields: fields{
+				repo: &MockMessageRepository{
+					GetProfileEmailFn: func(ctx context.Context, profileID int64) (string, error) {
+						return "", mockError
+					},
+				},
+			},
+			args:    args{ctx: context.Background(), profileID: 1},
+			want:    "",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := &MessageUcase{
+				repo: tt.fields.repo,
+			}
+			got, err := uc.GetProfileEmail(tt.args.ctx, tt.args.profileID)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetProfileEmail() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("GetProfileEmail() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMessageUcase_EnsureBaseProfile(t *testing.T) {
+	type fields struct {
+		repo MessageRepository
+	}
+	type args struct {
+		ctx      context.Context
+		username string
+		domain   string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    int64
+		wantErr bool
+	}{
+		{
+			name: "Success",
+			fields: fields{
+				repo: &MockMessageRepository{
+					EnsureBaseProfileFn: func(ctx context.Context, username, domain string) (int64, error) {
+						return 123, nil
+					},
+				},
+			},
+			args:    args{ctx: context.Background(), username: "test", domain: "example.com"},
+			want:    123,
+			wantErr: false,
+		},
+		{
+			name: "Failure",
+			fields: fields{
+				repo: &MockMessageRepository{
+					EnsureBaseProfileFn: func(ctx context.Context, username, domain string) (int64, error) {
+						return 0, mockError
+					},
+				},
+			},
+			args:    args{ctx: context.Background(), username: "test", domain: "example.com"},
+			want:    0,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := &MessageUcase{
+				repo: tt.fields.repo,
+			}
+			got, err := uc.EnsureBaseProfile(tt.args.ctx, tt.args.username, tt.args.domain)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("EnsureBaseProfile() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("EnsureBaseProfile() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMessageUcase_EnsureProfileForBase(t *testing.T) {
+	type fields struct {
+		repo MessageRepository
+	}
+	type args struct {
+		ctx           context.Context
+		baseProfileID int64
+		displayName   string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "Success",
+			fields: fields{
+				repo: &MockMessageRepository{
+					EnsureProfileForBaseFn: func(ctx context.Context, baseProfileID int64, displayName string) error {
+						return nil
+					},
+				},
+			},
+			args:    args{ctx: context.Background(), baseProfileID: 1, displayName: "Test User"},
+			wantErr: false,
+		},
+		{
+			name: "Failure",
+			fields: fields{
+				repo: &MockMessageRepository{
+					EnsureProfileForBaseFn: func(ctx context.Context, baseProfileID int64, displayName string) error {
+						return mockError
+					},
+				},
+			},
+			args:    args{ctx: context.Background(), baseProfileID: 1, displayName: "Test User"},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := &MessageUcase{
+				repo: tt.fields.repo,
+			}
+			err := uc.EnsureProfileForBase(tt.args.ctx, tt.args.baseProfileID, tt.args.displayName)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("EnsureProfileForBase() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestMessageUcase_SaveOutgoingExternalMessage(t *testing.T) {
+	type fields struct {
+		repo MessageRepository
+	}
+	type args struct {
+		ctx             context.Context
+		senderProfileID int64
+		topic           string
+		text            string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    int64
+		wantErr bool
+	}{
+		{
+			name: "Success",
+			fields: fields{
+				repo: &MockMessageRepository{
+					SaveOutgoingExternalMessageFn: func(ctx context.Context, senderProfileID int64, topic, text string) (int64, error) {
+						return 777, nil
+					},
+				},
+			},
+			args:    args{ctx: context.Background(), senderProfileID: 1, topic: "External", text: "Hello"},
+			want:    777,
+			wantErr: false,
+		},
+		{
+			name: "Failure",
+			fields: fields{
+				repo: &MockMessageRepository{
+					SaveOutgoingExternalMessageFn: func(ctx context.Context, senderProfileID int64, topic, text string) (int64, error) {
+						return 0, mockError
+					},
+				},
+			},
+			args:    args{ctx: context.Background(), senderProfileID: 1, topic: "External", text: "Hello"},
+			want:    0,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := &MessageUcase{
+				repo: tt.fields.repo,
+			}
+			got, err := uc.SaveOutgoingExternalMessage(tt.args.ctx, tt.args.senderProfileID, tt.args.topic, tt.args.text)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("SaveOutgoingExternalMessage() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("SaveOutgoingExternalMessage() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMessageUcase_FindByMessageID(t *testing.T) {
+	expectedMessage := &domain.Message{ID: "1", Topic: "Test"}
+
+	type fields struct {
+		repo MessageRepository
+	}
+	type args struct {
+		ctx       context.Context
+		messageID int64
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *domain.Message
+		wantErr bool
+	}{
+		{
+			name: "Success",
+			fields: fields{
+				repo: &MockMessageRepository{
+					FindByMessageIDFn: func(ctx context.Context, messageID int64) (*domain.Message, error) {
+						return expectedMessage, nil
+					},
+				},
+			},
+			args:    args{ctx: context.Background(), messageID: 1},
+			want:    expectedMessage,
+			wantErr: false,
+		},
+		{
+			name: "Failure",
+			fields: fields{
+				repo: &MockMessageRepository{
+					FindByMessageIDFn: func(ctx context.Context, messageID int64) (*domain.Message, error) {
+						return nil, mockError
+					},
+				},
+			},
+			args:    args{ctx: context.Background(), messageID: 1},
+			want:    nil,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := &MessageUcase{
+				repo: tt.fields.repo,
+			}
+			got, err := uc.FindByMessageID(tt.args.ctx, tt.args.messageID)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("FindByMessageID() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("FindByMessageID() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -56,7 +56,7 @@ func New() func(next http.Handler) http.Handler {
 			}
 
 			if clientCookieToken == "" || clientHeaderToken == "" || !strings.EqualFold(clientCookieToken, clientHeaderToken) {
-				resp.SendErrorResponse(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+				resp.SendErrorResponse(w, "Доступ запрещен", http.StatusForbidden)
 				return
 			}
 

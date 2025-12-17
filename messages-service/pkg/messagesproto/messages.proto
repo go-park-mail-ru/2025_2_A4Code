@@ -21,6 +21,7 @@ message FullMessage {
   string thread_id = 4;
   Sender sender = 5;
   repeated File files = 6;
+  repeated Receiver receivers = 7;
 }
 
 message Sender {

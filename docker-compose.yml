@@ -11,6 +11,11 @@ services:
       - "8004:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d a4code_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   minio:
     image: minio/minio
@@ -24,6 +29,11 @@ services:
       - "8006:9001"
     volumes:
       - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/ready || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   pgadmin:
     image: dpage/pgadmin4
@@ -95,7 +105,7 @@ services:
   auth:
     build:
       context: .
-      dockerfile: Dockerfile.auth
+      dockerfile: auth-service/Dockerfile.auth
     container_name: a4-auth
     environment:
       CONFIG_PATH: config/docker.yml
@@ -105,27 +115,34 @@ services:
       - "8001:8001"
       - "8013:8013"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   messages:
     build:
       context: .
-      dockerfile: Dockerfile.messages
+      dockerfile: messages-service/Dockerfile.messages
     container_name: a4-messages
     environment:
       CONFIG_PATH: config/docker.yml
+      SMTP_ADDR: exim:25
+      SMTP_SKIP_TLS: "1"
+      LOCAL_DOMAIN: flintmail.ru
     volumes:
       - ./db:/app/db:ro
     ports:
       - "8002:8002"
       - "8014:8014"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
 
   profile:
     build:
       context: .
-      dockerfile: Dockerfile.profile
+      dockerfile: profile-service/Dockerfile.profile
     container_name: a4-profile
     environment:
       CONFIG_PATH: config/docker.yml
@@ -135,13 +152,15 @@ services:
       - "8003:8003"
       - "8015:8015"
     depends_on:
-      - postgres
-      - minio
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
 
   gateway:
     build:
       context: .
-      dockerfile: Dockerfile.gateway
+      dockerfile: gateway-service/Dockerfile.gateway
     container_name: a4-gateway
     environment:
       CONFIG_PATH: config/docker-gateway.yml
@@ -153,9 +172,93 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - auth
-      - messages
-      - profile
+      auth:
+        condition: service_started
+      messages:
+        condition: service_started
+      profile:
+        condition: service_started
+
+  mail-postgres:
+    image: postgres:15
+    container_name: a4-mail-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgresql
+      POSTGRES_DB: maildb
+      POSTGRES_HOST_AUTH_METHOD: md5
+    ports:
+      - "8017:5432"
+    volumes:
+      - mail-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d maildb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mail-ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile.mail-ingest
+    container_name: a4-mail-ingest
+    environment:
+      MAIL_DB_DSN: postgres://postgres:postgresql@a4-mail-postgres:5432/maildb?sslmode=disable
+      MAIL_MINIO_ENDPOINT: minio:9000
+      MAIL_MINIO_USER: minio
+      MAIL_MINIO_PASSWORD: miniominio
+      MAIL_MINIO_BUCKET: mail-ingest
+      MAIL_MINIO_ATTACHMENTS_BUCKET: attachments
+      MAIL_LMTP_ADDR: "0.0.0.0:2525"
+      MAIL_HTTP_ADDR: ":8085"
+      MAIL_DOMAIN: flintmail.ru
+    depends_on:
+      mail-postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "8085:8085"
+
+  ingest-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.mail-ingest
+    container_name: a4-ingest-worker
+    command: ["/app/mail-ingest-worker"]
+    environment:
+      MAIL_DB_DSN: postgres://postgres:postgresql@mail-postgres:5432/maildb?sslmode=disable
+      MAIN_DB_DSN: postgres://postgres:postgresql@postgres:5432/a4code_db?sslmode=disable
+      MAIL_MINIO_ENDPOINT: minio:9000
+      MAIL_MINIO_USER: minio
+      MAIL_MINIO_PASSWORD: miniominio
+      MAIL_MINIO_BUCKET: mail-ingest
+      MAIL_MINIO_ATTACHMENTS_BUCKET: attachments
+      INGEST_DOMAIN: flintmail.ru
+    depends_on:
+      mail-postgres:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+  exim:
+    build:
+      context: ./deploy/exim
+      dockerfile: Dockerfile
+    container_name: a4-exim
+    environment:
+      - TZ=Europe/Moscow
+    volumes:
+      - /etc/letsencrypt/archive/flintmail.ru-0001/fullchain2.pem:/etc/exim4/fullchain.pem
+      - /etc/letsencrypt/archive/flintmail.ru-0001/privkey2.pem:/etc/exim4/privkey.pem
+      - /root/dkim_private.key:/etc/exim4/dkim_private.key:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    ports:
+      - "25:25"
+    depends_on:
+      - mail-ingest
 
 volumes:
   pgdata:
@@ -163,3 +266,4 @@ volumes:
   pgadmin-data:
   portainer-data:
   grafana_data:
+  mail-pgdata:

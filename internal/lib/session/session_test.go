@@ -455,3 +455,66 @@ func TestGetProfileIDFromRefresh(t *testing.T) {
 		})
 	}
 }
+
+func TestGetProfileIDFromTokenString(t *testing.T) {
+	const expectedType = "access"
+	testUserID := int64(123)
+
+	validTime := time.Now().Add(time.Hour)
+
+	validClaims := createClaims(testUserID, expectedType, validTime)
+	noIDClaims := createClaims(testUserID, expectedType, validTime)
+	delete(noIDClaims, "user_id")
+
+	validToken, _ := generateToken(validClaims, testSecret)
+	noIDToken, _ := generateToken(noIDClaims, testSecret)
+
+	tests := []struct {
+		name         string
+		tokenString  string
+		secret       []byte
+		expectedType string
+		wantID       int64
+		wantErr      error
+	}{
+		{
+			name:         "Success: Valid Token with ID",
+			tokenString:  validToken,
+			secret:       testSecret,
+			expectedType: expectedType,
+			wantID:       testUserID,
+			wantErr:      nil,
+		},
+		{
+			name:         "Failure: Token without ID",
+			tokenString:  noIDToken,
+			secret:       testSecret,
+			expectedType: expectedType,
+			wantID:       -1,
+			wantErr:      ErrorIdNotFound,
+		},
+		{
+			name:         "Failure: Invalid Token",
+			tokenString:  "invalid.token",
+			secret:       testSecret,
+			expectedType: expectedType,
+			wantID:       -1,
+			wantErr:      ErrorInvalidToken,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotID, err := GetProfileIDFromTokenString(tt.tokenString, tt.secret, tt.expectedType)
+
+			if (err != nil && tt.wantErr == nil) || (err == nil && tt.wantErr != nil) || (err != nil && tt.wantErr != nil && err.Error() != tt.wantErr.Error()) {
+				t.Errorf("GetProfileIDFromTokenString() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if gotID != tt.wantID {
+				t.Errorf("GetProfileIDFromTokenString() gotID = %v, want %v", gotID, tt.wantID)
+			}
+		})
+	}
+}

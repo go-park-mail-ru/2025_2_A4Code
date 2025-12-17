@@ -6,8 +6,10 @@ import (
 	e "2025_2_a4code/internal/lib/wrapper"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -17,8 +19,170 @@ type MessageRepository struct {
 	db *sql.DB
 }
 
+// EnsureBaseProfile returns id of base_profile, creating it if needed by username+domain.
+func (repo *MessageRepository) EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error) {
+	const op = "storage.postgresql.message.EnsureBaseProfile"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+		INSERT INTO base_profile (username, domain)
+		VALUES ($1, $2)
+		ON CONFLICT (username, domain) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+		RETURNING id`
+
+	var id int64
+	log.Debug("Ensuring base profile for external sender...")
+	err := repo.db.QueryRowContext(ctx, query, username, domain).Scan(&id)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to ensure base_profile: ", err)
+	}
+
+	return id, nil
+}
+
+// EnsureProfileForBase creates profile for given base_profile if missing, and fills name if empty.
+// Used for external senders to display their name.
+func (repo *MessageRepository) EnsureProfileForBase(ctx context.Context, baseProfileID int64, displayName string) error {
+	const op = "storage.postgresql.message.EnsureProfileForBase"
+
+	var existingName sql.NullString
+	err := repo.db.QueryRowContext(ctx, `SELECT name FROM profile WHERE base_profile_id = $1`, baseProfileID).Scan(&existingName)
+	switch {
+	case err == nil:
+		// profile exists; optionally update name if empty and we have displayName
+		if strings.TrimSpace(existingName.String) == "" && strings.TrimSpace(displayName) != "" {
+			_, updErr := repo.db.ExecContext(ctx, `
+                UPDATE profile SET name = $1 WHERE base_profile_id = $2`,
+				strings.TrimSpace(displayName), baseProfileID)
+			if updErr != nil {
+				return e.Wrap(op+": failed to update sender name: ", updErr)
+			}
+		}
+		return nil
+	case errors.Is(err, sql.ErrNoRows):
+		// create minimal profile with display name; password_hash is empty for external senders
+		_, insErr := repo.db.ExecContext(ctx, `
+                INSERT INTO profile (base_profile_id, password_hash, name)
+                VALUES ($1, '', $2)`,
+			baseProfileID, strings.TrimSpace(displayName))
+		if insErr != nil {
+			return e.Wrap(op+": failed to insert sender profile: ", insErr)
+		}
+		return nil
+	default:
+		return e.Wrap(op+": failed to fetch sender profile: ", err)
+	}
+}
+
+// GetProfileEmail returns email (username@domain) for given profile id.
+func (repo *MessageRepository) GetProfileEmail(ctx context.Context, profileID int64) (string, error) {
+	const op = "storage.postgresql.message.GetProfileEmail"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	const query = `
+        SELECT bp.username, bp.domain
+        FROM profile p
+        JOIN base_profile bp ON p.base_profile_id = bp.id
+        WHERE p.id = $1`
+
+	var username, domain string
+	log.Debug("Fetching profile email by profile id...")
+	if err := repo.db.QueryRowContext(ctx, query, profileID).Scan(&username, &domain); err != nil {
+		return "", e.Wrap(op+": failed to fetch profile email: ", err)
+	}
+
+	return fmt.Sprintf("%s@%s", username, domain), nil
+}
+
+// SaveOutgoingExternalMessage stores a message from senderProfileID into sender's sent folder without resolving receiver.
+func (repo *MessageRepository) SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error) {
+	const op = "storage.postgresql.message.SaveOutgoingExternalMessage"
+	log := logger.GetLogger(ctx).With(slog.String("op", op))
+
+	if strings.TrimSpace(topic) == "" {
+		topic = "(без темы)"
+	}
+
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to begin transaction: ", err)
+	}
+	defer tx.Rollback()
+
+	var senderBaseID int64
+	log.Debug("Resolving sender base profile ID...")
+	err = tx.QueryRowContext(ctx, `
+		SELECT base_profile_id FROM profile WHERE id = $1`,
+		senderProfileID).Scan(&senderBaseID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to resolve sender base profile id: ", err)
+	}
+
+	var messageID int64
+	log.Debug("Inserting outgoing external message...")
+	err = tx.QueryRowContext(ctx, `
+        INSERT INTO message (topic, text, date_of_dispatch, sender_base_profile_id)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id`,
+		topic, text, time.Now(), senderBaseID).Scan(&messageID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert message: ", err)
+	}
+
+	var sentFolderID int64
+	log.Debug("Getting sender sent folder ID...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT id FROM folder 
+        WHERE profile_id = $1 AND folder_type = 'sent'`,
+		senderProfileID).Scan(&sentFolderID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to get sent folder: ", err)
+	}
+
+	log.Debug("Linking message to sent folder...")
+	_, err = tx.ExecContext(ctx, `
+        INSERT INTO folder_profile_message (message_id, folder_id)
+        VALUES ($1, $2)`,
+		messageID, sentFolderID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to link to sent folder: ", err)
+	}
+
+	log.Debug("Creating profile_message bond for sender...")
+	_, err = tx.ExecContext(ctx, `
+        INSERT INTO profile_message (profile_id, message_id, read_status)
+        VALUES ($1, $2, false)
+        ON CONFLICT (profile_id, message_id) DO NOTHING`,
+		senderProfileID, messageID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to insert profile_message for sender: ", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, e.Wrap(op+": failed to commit transaction: ", err)
+	}
+
+	return messageID, nil
+}
+
 func New(db *sql.DB) *MessageRepository {
 	return &MessageRepository{db: db}
+}
+
+func normalizeEmailParts(email string) (string, string, error) {
+	trimmed := strings.TrimSpace(email)
+	parts := strings.SplitN(trimmed, "@", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid email format")
+	}
+
+	username := strings.ToLower(strings.TrimSpace(parts[0]))
+	domain := strings.ToLower(strings.TrimSpace(parts[1]))
+	if username == "" || domain == "" {
+		return "", "", fmt.Errorf("invalid email format")
+	}
+
+	return username, domain, nil
 }
 
 func buildSnippet(text string, limit int) string {
@@ -51,7 +215,7 @@ func (repo *MessageRepository) FindByMessageID(ctx context.Context, messageID in
         LEFT JOIN
             profile p ON bp.id = p.base_profile_id
         LEFT JOIN
-            profile_message pm ON m.id = pm.message_id
+            profile_message pm ON m.id = pm.message_id AND pm.profile_id = f.profile_id
         WHERE
             m.id = $1`
 
@@ -81,13 +245,11 @@ func (repo *MessageRepository) FindByMessageID(ctx context.Context, messageID in
 	// Создаем snippet из текста сообщения
 	message.Snippet = buildSnippet(text, 40)
 
-	message.Sender = domain.Sender{
-		Id:    senderId,
-		Email: fmt.Sprintf("%s@%s", senderUsername, senderDomain),
-		Username: strings.TrimSpace(fmt.Sprintf("%s %s",
-			senderName.String, senderSurname.String)),
-		Avatar: senderAvatar.String,
-	}
+	message.SenderID = senderId
+	message.Email = fmt.Sprintf("%s@%s", senderUsername, senderDomain)
+	message.Username = strings.TrimSpace(fmt.Sprintf("%s %s",
+		senderName.String, senderSurname.String))
+	message.Avatar = senderAvatar.String
 
 	return &message, nil
 }
@@ -148,13 +310,11 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 
 	msg.ID = strconv.FormatInt(messageIdInt, 10)
 
-	msg.Sender = domain.Sender{
-		Id:    senderId,
-		Email: fmt.Sprintf("%s@%s", senderUsername, senderDomain),
-		Username: strings.TrimSpace(fmt.Sprintf("%s %s",
-			senderName.String, senderSurname.String)),
-		Avatar: senderAvatar.String,
-	}
+	msg.SenderID = senderId
+	msg.Email = fmt.Sprintf("%s@%s", senderUsername, senderDomain)
+	msg.Username = strings.TrimSpace(fmt.Sprintf("%s %s",
+		senderName.String, senderSurname.String))
+	msg.Avatar = senderAvatar.String
 
 	// Обработка thread_id и root_message_id
 	if threadID.Valid {
@@ -163,12 +323,8 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 
 	// Обработка информации о папке
 	if folderID.Valid {
-		msg.Folder = domain.Folder{
-			ID:        folderID.Int64,
-			ProfileID: folderProfileID.Int64,
-			Name:      folderName.String,
-			Type:      domain.FolderType(folderType.String),
-		}
+		msg.FolderID = folderID.Int64
+		msg.FolderName = folderName.String
 	}
 
 	// Получаем файлы
@@ -189,10 +345,39 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 		if err != nil {
 			return domain.FullMessage{}, e.Wrap(op, err)
 		}
+		if strings.TrimSpace(file.Name) == "" && strings.TrimSpace(file.StoragePath) != "" {
+			file.Name = path.Base(strings.TrimSpace(file.StoragePath))
+		}
 		files = append(files, file)
 	}
 
 	msg.Files = files
+
+	// Получаем получателей (другие владельцы папок этого письма)
+	receiversRows, err := repo.db.QueryContext(ctx, `
+        SELECT bp.username, bp.domain
+        FROM folder_profile_message fpm
+        JOIN folder f ON fpm.folder_id = f.id
+        JOIN profile p ON f.profile_id = p.id
+        JOIN base_profile bp ON p.base_profile_id = bp.id
+        WHERE fpm.message_id = $1 AND f.profile_id <> $2`, messageID, profileID)
+	if err != nil {
+		return domain.FullMessage{}, e.Wrap(op, err)
+	}
+	defer receiversRows.Close()
+
+	for receiversRows.Next() {
+		var username, domainStr string
+		if err := receiversRows.Scan(&username, &domainStr); err != nil {
+			return domain.FullMessage{}, e.Wrap(op, err)
+		}
+		username = strings.TrimSpace(username)
+		domainStr = strings.TrimSpace(domainStr)
+		if username != "" && domainStr != "" {
+			msg.Receivers = append(msg.Receivers, fmt.Sprintf("%s@%s", username, domainStr))
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return domain.FullMessage{}, e.Wrap(op+": failed to commit transaction: ", err)
 	}
@@ -205,11 +390,24 @@ func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileE
 	const op = "storage.postgresql.message.SaveMessage"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
+	if strings.TrimSpace(topic) == "" {
+		topic = "(без темы)"
+	}
+
 	tx, err := repo.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to begin transaction: ", err)
 	}
 	defer tx.Rollback()
+
+	var senderBaseID int64
+	log.Debug("Resolving sender base profile ID...")
+	err = tx.QueryRowContext(ctx, `
+		SELECT base_profile_id FROM profile WHERE id = $1`,
+		senderBaseProfileID).Scan(&senderBaseID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to resolve sender base profile id: ", err)
+	}
 
 	// Вставка сообщения
 	const insertMessage = `
@@ -218,14 +416,16 @@ func (repo *MessageRepository) SaveMessage(ctx context.Context, receiverProfileE
 		RETURNING id`
 
 	log.Debug("Inserting message...")
-	err = tx.QueryRowContext(ctx, insertMessage, topic, text, time.Now(), senderBaseProfileID).Scan(&messageID)
+	err = tx.QueryRowContext(ctx, insertMessage, topic, text, time.Now(), senderBaseID).Scan(&messageID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to insert message: ", err)
 	}
 
 	// Получение receiver_profile_id
-	username := strings.Split(receiverProfileEmail, "@")[0]
-	domain := strings.Split(receiverProfileEmail, "@")[1]
+	username, domain, parseErr := normalizeEmailParts(receiverProfileEmail)
+	if parseErr != nil {
+		return 0, e.Wrap(op+": invalid receiver email: ", parseErr)
+	}
 
 	var receiverProfileID int64
 	log.Debug("Getting receiver profile ID...")
@@ -417,9 +617,7 @@ func (repo *MessageRepository) MarkMessageAsRead(ctx context.Context, messageID 
 
 	const query = `
 		INSERT INTO profile_message (profile_id, message_id, read_status)
-		SELECT p.id, $2, TRUE
-		FROM profile p
-		WHERE p.base_profile_id = $1
+		VALUES ($1, $2, TRUE)
 		ON CONFLICT (profile_id, message_id)
 		DO UPDATE SET read_status = TRUE
 	`
@@ -1102,6 +1300,7 @@ func (repo *MessageRepository) GetFolderMessagesWithKeysetPagination(
 	defer rows.Close()
 
 	var messages []domain.Message
+	seen := make(map[string]struct{})
 	log.Debug("Scanning messages...")
 	for rows.Next() {
 		var message domain.Message
@@ -1120,14 +1319,17 @@ func (repo *MessageRepository) GetFolderMessagesWithKeysetPagination(
 			return nil, e.Wrap(op, err)
 		}
 		message.ID = strconv.FormatInt(messageIdInt, 10)
-		message.Snippet = buildSnippet(text, 40)
-		message.Sender = domain.Sender{
-			Id:    senderId,
-			Email: fmt.Sprintf("%s@%s", senderUsername, senderDomain),
-			Username: strings.TrimSpace(fmt.Sprintf("%s %s",
-				senderName.String, senderSurname.String)),
-			Avatar: senderAvatar.String,
+		if _, exists := seen[message.ID]; exists {
+			continue
 		}
+		seen[message.ID] = struct{}{}
+
+		message.Snippet = buildSnippet(text, 40)
+		message.SenderID = senderId
+		message.Email = fmt.Sprintf("%s@%s", senderUsername, senderDomain)
+		message.Username = strings.TrimSpace(fmt.Sprintf("%s %s",
+			senderName.String, senderSurname.String))
+		message.Avatar = senderAvatar.String
 		messages = append(messages, message)
 	}
 
@@ -1170,11 +1372,24 @@ func (repo *MessageRepository) SaveMessageWithFolderDistribution(
 	const op = "storage.postgresql.message.SaveMessageWithFolderDistribution"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
+	if strings.TrimSpace(topic) == "" {
+		topic = "(без темы)"
+	}
+
 	tx, err := repo.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to begin transaction: ", err)
 	}
 	defer tx.Rollback()
+
+	var senderBaseID int64
+	log.Debug("Resolving sender base profile ID...")
+	err = tx.QueryRowContext(ctx, `
+        SELECT base_profile_id FROM profile WHERE id = $1`,
+		senderBaseProfileID).Scan(&senderBaseID)
+	if err != nil {
+		return 0, e.Wrap(op+": failed to resolve sender base profile id: ", err)
+	}
 
 	const insertMessage = `
         INSERT INTO message (topic, text, date_of_dispatch, sender_base_profile_id)
@@ -1182,13 +1397,15 @@ func (repo *MessageRepository) SaveMessageWithFolderDistribution(
         RETURNING id`
 
 	log.Debug("Inserting message...")
-	err = tx.QueryRowContext(ctx, insertMessage, topic, text, time.Now(), senderBaseProfileID).Scan(&messageID)
+	err = tx.QueryRowContext(ctx, insertMessage, topic, text, time.Now(), senderBaseID).Scan(&messageID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to insert message: ", err)
 	}
 
-	username := strings.Split(receiverProfileEmail, "@")[0]
-	domain := strings.Split(receiverProfileEmail, "@")[1]
+	username, domain, parseErr := normalizeEmailParts(receiverProfileEmail)
+	if parseErr != nil {
+		return 0, e.Wrap(op+": invalid receiver email: ", parseErr)
+	}
 
 	var receiverProfileID int64
 	log.Debug("Getting receiver profile ID...")
@@ -1206,7 +1423,7 @@ func (repo *MessageRepository) SaveMessageWithFolderDistribution(
 	log.Debug("Getting sender profile ID...")
 	err = tx.QueryRowContext(ctx, `
         SELECT id FROM profile WHERE base_profile_id = $1`,
-		senderBaseProfileID).Scan(&senderProfileID)
+		senderBaseID).Scan(&senderProfileID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to get sender profile id: ", err)
 	}
@@ -1297,8 +1514,10 @@ func (repo *MessageRepository) ReplyToMessageWithFolderDistribution(
 		return 0, e.Wrap(op+": failed to insert message: ", err)
 	}
 
-	username := strings.Split(receiverEmail, "@")[0]
-	domain := strings.Split(receiverEmail, "@")[1]
+	username, domain, parseErr := normalizeEmailParts(receiverEmail)
+	if parseErr != nil {
+		return 0, e.Wrap(op+": invalid receiver email: ", parseErr)
+	}
 
 	var receiverProfileID int64
 	log.Debug("Getting receiver profile ID...")
@@ -1370,7 +1589,7 @@ func (repo *MessageRepository) IsUsersMessage(ctx context.Context, messageID int
 			SELECT 1
 			FROM profile_message pm
 			JOIN profile p ON pm.profile_id = p.id
-			WHERE pm.message_id = $1 AND p.base_profile_id = $2
+			WHERE pm.message_id = $1 AND p.id = $2
 		)`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)

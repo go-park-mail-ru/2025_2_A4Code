@@ -3,13 +3,23 @@ package messages_service
 import (
 	"2025_2_a4code/internal/domain"
 	"2025_2_a4code/internal/lib/metrics"
+	"bytes"
 	"context"
+	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"log/slog"
+	"mime/multipart"
+	"mime/quotedprintable"
+	"net"
 	"net/mail"
+	"net/smtp"
+	"net/textproto"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,6 +31,7 @@ import (
 
 	pb "2025_2_a4code/messages-service/pkg/messagesproto"
 
+	"github.com/minio/minio-go/v7"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -29,9 +40,14 @@ import (
 
 type Server struct {
 	pb.UnimplementedMessagesServiceServer
-	messageUCase MessageUsecase
-	avatarUCase  AvatarUsecase
-	JWTSecret    []byte
+	messageUCase      MessageUsecase
+	avatarUCase       AvatarUsecase
+	JWTSecret         []byte
+	smtpAddr          string
+	localDomain       string
+	smtpSkipTLS       bool
+	minioClient       *minio.Client
+	attachmentsBucket string
 }
 
 type MessageUsecase interface {
@@ -57,6 +73,8 @@ type MessageUsecase interface {
 	DeleteDraft(ctx context.Context, draftID, profileID int64) error
 	SendDraft(ctx context.Context, draftID, profileID int64) error
 	GetDraft(ctx context.Context, draftID, profileID int64) (domain.FullMessage, error)
+	SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error)
+	GetProfileEmail(ctx context.Context, profileID int64) (string, error)
 
 	// методы для папок
 	MoveToFolder(ctx context.Context, profileID, messageID, folderID int64) error
@@ -82,7 +100,8 @@ type AvatarUsecase interface {
 const (
 	maxTopicLen       = 255
 	maxTextLen        = 10000
-	maxFileSize       = 10 * 1024 * 1024 // 10 MB
+	maxFileSize       = 40_000_000 // 40 MB (decimal)
+	maxTotalFilesSize = 40_000_000 // 40 MB (decimal)
 	defaultLimitFiles = 20
 )
 
@@ -93,11 +112,19 @@ var allowedFileTypes = map[string]struct{}{
 	"text/plain":      {},
 }
 
-func New(messageUCase MessageUsecase, avatarUCase AvatarUsecase, secret []byte) *Server {
+func New(messageUCase MessageUsecase, avatarUCase AvatarUsecase, secret []byte, minioClient *minio.Client, attachmentsBucket string) *Server {
+	if strings.TrimSpace(attachmentsBucket) == "" {
+		attachmentsBucket = "attachments"
+	}
 	return &Server{
-		messageUCase: messageUCase,
-		avatarUCase:  avatarUCase,
-		JWTSecret:    secret,
+		messageUCase:      messageUCase,
+		avatarUCase:       avatarUCase,
+		JWTSecret:         secret,
+		smtpAddr:          smtpAddrFromEnv(),
+		localDomain:       localDomainFromEnv(),
+		smtpSkipTLS:       smtpSkipTLSFromEnv(),
+		minioClient:       minioClient,
+		attachmentsBucket: attachmentsBucket,
 	}
 }
 
@@ -156,19 +183,12 @@ func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*
 		return nil, status.Error(codes.Internal, "could not get message")
 	}
 
-	shouldMarkAsRead, err := s.messageUCase.ShouldMarkAsRead(ctx, messageID, profileID)
-	if err != nil {
-		log.Warn("failed to check if should mark as read: " + err.Error())
-		shouldMarkAsRead = false
+	// Помечаем как прочитанное без дополнительной проверки, чтобы не пропускать обновление статуса
+	if err := s.messageUCase.MarkMessageAsRead(ctx, messageID, profileID); err != nil {
+		log.Warn("failed to mark message as read: " + err.Error())
 	}
 
-	if shouldMarkAsRead {
-		if err := s.messageUCase.MarkMessageAsRead(ctx, messageID, profileID); err != nil {
-			log.Warn("failed to mark message as read: " + err.Error())
-		}
-	}
-
-	if err := s.enrichSenderAvatar(ctx, &fullMessage.Sender); err != nil {
+	if err := s.enrichSenderAvatar(ctx, &fullMessage.Email, &fullMessage.Avatar); err != nil {
 		log.Warn("failed to enrich sender avatar: " + err.Error())
 	}
 
@@ -181,17 +201,22 @@ func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*
 			StoragePath: file.StoragePath,
 		}
 	}
+	var pbReceivers []*pb.Receiver
+	for _, r := range fullMessage.Receivers {
+		pbReceivers = append(pbReceivers, &pb.Receiver{Email: r})
+	}
 
 	metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "ok").Inc()
 
 	return &pb.MessagePageResponse{
 		Message: &pb.FullMessage{
-			Topic:    fullMessage.Topic,
-			Text:     fullMessage.Text,
-			Datetime: fullMessage.Datetime.Format(time.RFC3339),
-			ThreadId: fullMessage.ThreadRoot,
-			Sender:   s.domainSenderToProto(&fullMessage.Sender),
-			Files:    pbFiles,
+			Topic:     fullMessage.Topic,
+			Text:      fullMessage.Text,
+			Datetime:  fullMessage.Datetime.Format(time.RFC3339),
+			ThreadId:  fullMessage.ThreadRoot,
+			Sender:    s.domainSenderToProto(&fullMessage.Email, &fullMessage.Avatar, fullMessage.SenderID, fullMessage.Username),
+			Files:     pbFiles,
+			Receivers: pbReceivers,
 		},
 	}, nil
 }
@@ -225,30 +250,65 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 	safeTopic, safeText := sanitizeContent(req.Topic, req.Text)
 
 	var messageID int64
+	senderEmail, err := s.messageUCase.GetProfileEmail(ctx, profileID)
+	if err != nil {
+		log.Error(op + ": failed to resolve sender email: " + err.Error())
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
+		return nil, status.Error(codes.Internal, "could not resolve sender")
+	}
+
 	for _, receiver := range req.Receivers {
-		msgID, err := s.messageUCase.ReplyToMessage(ctx, receiver.Email, profileID, threadRoot, safeTopic, safeText)
-		if err != nil {
-			log.Error(op + ": failed to reply to message: " + err.Error())
-			metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
-			return nil, status.Error(codes.Internal, "could not reply to message")
-		}
-
-		metrics.MessagesSentTotal.WithLabelValues("reply").Inc()
-
-		for _, file := range req.Files {
-			size, _ := strconv.ParseInt(file.Size, 10, 64)
-			_, err = s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size)
+		email := strings.TrimSpace(receiver.Email)
+		if s.isLocalDomain(email) {
+			msgID, err := s.messageUCase.ReplyToMessage(ctx, email, profileID, threadRoot, safeTopic, safeText)
 			if err != nil {
-				log.Error(op + ": failed to save file: " + err.Error())
+				log.Error(op + ": failed to reply to message: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not save file")
+				return nil, status.Error(codes.Internal, "could not reply to message")
 			}
 
-			metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
-			metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
-		}
+			for _, file := range req.Files {
+				size, _ := strconv.ParseInt(file.Size, 10, 64)
+				_, err = s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size)
+				if err != nil {
+					log.Error(op + ": failed to save file: " + err.Error())
+					metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
+					return nil, status.Error(codes.Internal, "could not save file")
+				}
 
-		messageID = msgID
+				metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
+				metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
+			}
+
+			metrics.MessagesSentTotal.WithLabelValues("reply").Inc()
+			messageID = msgID
+		} else {
+			if err := s.sendExternalMail(senderEmail, email, safeTopic, safeText, req.Files); err != nil {
+				log.Error(op + ": failed to send external reply: " + err.Error())
+				metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
+				return nil, status.Error(codes.Internal, "could not send external reply")
+			}
+			msgID, err := s.messageUCase.SaveOutgoingExternalMessage(ctx, profileID, safeTopic, safeText)
+			if err != nil {
+				log.Error(op + ": failed to save external outgoing reply: " + err.Error())
+				metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
+				return nil, status.Error(codes.Internal, "could not save external reply")
+			}
+
+			for _, file := range req.Files {
+				size, _ := strconv.ParseInt(file.Size, 10, 64)
+				if _, err := s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size); err != nil {
+					log.Error(op + ": failed to save external reply file: " + err.Error())
+					metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
+					return nil, status.Error(codes.Internal, "could not save external reply file")
+				}
+				metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
+				metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
+			}
+
+			metrics.MessagesSentTotal.WithLabelValues("reply_external").Inc()
+			messageID = msgID
+		}
 	}
 
 	metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "ok").Inc()
@@ -281,45 +341,81 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	safeTopic, safeText := sanitizeContent(req.Topic, req.Text)
 
 	var messageID int64
+	senderEmail, err := s.messageUCase.GetProfileEmail(ctx, profileID)
+	if err != nil {
+		log.Error(op + ": failed to resolve sender email: " + err.Error())
+		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
+		return nil, status.Error(codes.Internal, "could not resolve sender")
+	}
+
 	for _, receiver := range req.Receivers {
-		msgID, err := s.messageUCase.SendMessage(ctx, receiver.Email, profileID, safeTopic, safeText)
-		if err != nil {
-			log.Error(op + ": failed to send message: " + err.Error())
-			metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-			return nil, status.Error(codes.Internal, "could not send message")
-		}
-
-		metrics.MessagesSentTotal.WithLabelValues("send").Inc()
-
-		if messageID == 0 {
-			threadID, err := s.messageUCase.SaveThread(ctx, msgID)
+		email := strings.TrimSpace(receiver.Email)
+		if s.isLocalDomain(email) {
+			msgID, err := s.messageUCase.SendMessage(ctx, email, profileID, safeTopic, safeText)
 			if err != nil {
-				log.Error(op + ": failed to save thread: " + err.Error())
+				log.Error(op + ": failed to send message: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not save thread")
+				return nil, status.Error(codes.Internal, "could not send message")
 			}
 
-			if err := s.messageUCase.SaveThreadIdToMessage(ctx, msgID, threadID); err != nil {
-				log.Error(op + ": failed to save thread id: " + err.Error())
-				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not save thread id")
-			}
-		}
+			if messageID == 0 {
+				threadID, err := s.messageUCase.SaveThread(ctx, msgID)
+				if err != nil {
+					log.Error(op + ": failed to save thread: " + err.Error())
+					metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
+					return nil, status.Error(codes.Internal, "could not save thread")
+				}
 
-		for _, file := range req.Files {
-			size, _ := strconv.ParseInt(file.Size, 10, 64)
-			_, err = s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size)
+				if err := s.messageUCase.SaveThreadIdToMessage(ctx, msgID, threadID); err != nil {
+					log.Error(op + ": failed to save thread id: " + err.Error())
+					metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
+					return nil, status.Error(codes.Internal, "could not save thread id")
+				}
+			}
+
+			for _, file := range req.Files {
+				size, _ := strconv.ParseInt(file.Size, 10, 64)
+				_, err = s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size)
+				if err != nil {
+					log.Error(op + ": failed to save file: " + err.Error())
+					metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
+					return nil, status.Error(codes.Internal, "could not save file")
+				}
+
+				metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
+				metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
+			}
+
+			metrics.MessagesSentTotal.WithLabelValues("send").Inc()
+			messageID = msgID
+		} else {
+			if err := s.sendExternalMail(senderEmail, email, safeTopic, safeText, req.Files); err != nil {
+				log.Error(op + ": failed to send external message: " + err.Error())
+				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
+				return nil, status.Error(codes.Internal, "could not send external message")
+			}
+
+			msgID, err := s.messageUCase.SaveOutgoingExternalMessage(ctx, profileID, safeTopic, safeText)
 			if err != nil {
-				log.Error(op + ": failed to save file: " + err.Error())
+				log.Error(op + ": failed to save external outgoing message: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not save file")
+				return nil, status.Error(codes.Internal, "could not save external message")
 			}
 
-			metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
-			metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
-		}
+			for _, file := range req.Files {
+				size, _ := strconv.ParseInt(file.Size, 10, 64)
+				if _, err := s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size); err != nil {
+					log.Error(op + ": failed to save external file: " + err.Error())
+					metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
+					return nil, status.Error(codes.Internal, "could not save external file")
+				}
+				metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
+				metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
+			}
 
-		messageID = msgID
+			metrics.MessagesSentTotal.WithLabelValues("send_external").Inc()
+			messageID = msgID
+		}
 	}
 
 	metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "ok").Inc()
@@ -329,23 +425,23 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	}, nil
 }
 
-func (s *Server) domainSenderToProto(sender *domain.Sender) *pb.Sender {
-	if sender == nil {
+func (s *Server) domainSenderToProto(email *string, avatar *string, senderID int64, username string) *pb.Sender {
+	if email == nil {
 		return nil
 	}
 	return &pb.Sender{
-		Email:    sender.Email,
-		Username: sender.Username,
-		Avatar:   sender.Avatar,
+		Email:    *email,
+		Username: username,
+		Avatar:   *avatar,
 	}
 }
 
-func (s *Server) enrichSenderAvatar(ctx context.Context, sender *domain.Sender) error {
-	if sender == nil || sender.Avatar == "" {
+func (s *Server) enrichSenderAvatar(ctx context.Context, email *string, avatarPath *string) error {
+	if avatarPath == nil || *avatarPath == "" {
 		return nil
 	}
 
-	objectName := sender.Avatar
+	objectName := *avatarPath
 	if strings.HasPrefix(objectName, "http://") || strings.HasPrefix(objectName, "https://") {
 		parsed, err := url.Parse(objectName)
 		if err != nil {
@@ -375,7 +471,7 @@ func (s *Server) enrichSenderAvatar(ctx context.Context, sender *domain.Sender) 
 		return err
 	}
 
-	sender.Avatar = url.String()
+	*avatarPath = url.String()
 	return nil
 }
 
@@ -471,11 +567,13 @@ func (s *Server) validateReplyRequest(req *pb.ReplyRequest) error {
 	if len(req.Files) > defaultLimitFiles {
 		return fmt.Errorf("too many files")
 	}
+	var totalSize int64
 	for _, f := range req.Files {
 		size, _ := strconv.ParseInt(f.Size, 10, 64)
 		if size < 0 || size > maxFileSize {
 			return fmt.Errorf("file size invalid or too large: %s", f.Name)
 		}
+		totalSize += size
 		if _, ok := allowedFileTypes[f.FileType]; !ok {
 			return fmt.Errorf("unsupported file type: %s", f.FileType)
 		}
@@ -489,6 +587,9 @@ func (s *Server) validateReplyRequest(req *pb.ReplyRequest) error {
 		if validation.HasDangerousCharacters(f.Name) {
 			return fmt.Errorf("invalid file name: %s", f.Name)
 		}
+	}
+	if totalSize > maxTotalFilesSize {
+		return fmt.Errorf("total attachments size exceeds %d MB", maxTotalFilesSize/(1024*1024))
 	}
 
 	return nil
@@ -557,7 +658,7 @@ func (s *Server) validateSendRequest(req *pb.SendRequest) error {
 }
 
 func (s *Server) MarkAsSpam(ctx context.Context, req *pb.MarkAsSpamRequest) (*pb.MarkAsSpamResponse, error) {
-	const op = "messagesservice.MarkAsSpam"
+	// const op = "messagesservice.MarkAsSpam"
 	log := logger.GetLogger(ctx)
 	log.Debug("handle messages/mark-as-spam")
 
@@ -588,23 +689,23 @@ func (s *Server) MoveToFolder(ctx context.Context, req *pb.MoveToFolderRequest) 
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	messageID, err := strconv.ParseInt(req.MessageId, 10, 64)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid message id")
+		return nil, status.Error(codes.InvalidArgument, "Некорректный идентификатор сообщения")
 	}
 
 	folderID, err := strconv.ParseInt(req.FolderId, 10, 64)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid folder id")
+		return nil, status.Error(codes.InvalidArgument, "Некорректный идентификатор папки")
 	}
 
 	if err := s.messageUCase.MoveToFolder(ctx, profileID, messageID, folderID); err != nil {
 		log.Error(op + ": failed to move message to folder: " + err.Error())
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "move_to_folder", "error").Inc()
-		return nil, status.Error(codes.Internal, "could not move message to folder")
+		return nil, status.Error(codes.Internal, "Не удалось переместить письмо")
 	}
 
 	metrics.MessagesOperationsTotal.WithLabelValues("messages", "move_to_folder", "ok").Inc()
@@ -618,7 +719,7 @@ func (s *Server) CreateFolder(ctx context.Context, req *pb.CreateFolderRequest) 
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	if err := s.validateFolderName(req.FolderName); err != nil {
@@ -628,11 +729,11 @@ func (s *Server) CreateFolder(ctx context.Context, req *pb.CreateFolderRequest) 
 	folder, err := s.messageUCase.CreateFolder(ctx, profileID, req.FolderName)
 	if err != nil {
 		if errors.Is(err, domain.ErrFolderExists) {
-			return nil, status.Error(codes.AlreadyExists, err.Error())
+			return nil, status.Error(codes.AlreadyExists, "Папка с таким именем уже существует")
 		}
 		log.Error(op + ": failed to create folder: " + err.Error())
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "create_folder", "error").Inc()
-		return nil, status.Error(codes.Internal, "could not create folder")
+		return nil, status.Error(codes.Internal, "Не удалось создать папку")
 	}
 
 	metrics.MessagesOperationsTotal.WithLabelValues("messages", "create_folder", "ok").Inc()
@@ -645,19 +746,19 @@ func (s *Server) CreateFolder(ctx context.Context, req *pb.CreateFolderRequest) 
 
 func (s *Server) validateFolderName(folderName string) error {
 	if folderName == "" {
-		return fmt.Errorf("folder name cannot be empty")
+		return fmt.Errorf("Название папки не может быть пустым")
 	}
 
 	if len(folderName) > 50 {
-		return fmt.Errorf("folder name too long (max 50 characters)")
+		return fmt.Errorf("Название папки слишком длинное (максимум 50 символов)")
 	}
 
 	if len(folderName) < 1 {
-		return fmt.Errorf("folder name too short (min 1 character)")
+		return fmt.Errorf("Название папки слишком короткое")
 	}
 
 	if validation.HasDangerousCharacters(folderName) {
-		return fmt.Errorf("folder name contains forbidden characters")
+		return fmt.Errorf("Название папки содержит недопустимые символы")
 	}
 
 	systemFolders := map[string]struct{}{
@@ -671,7 +772,7 @@ func (s *Server) validateFolderName(folderName string) error {
 
 	lowerName := strings.ToLower(folderName)
 	if _, exists := systemFolders[lowerName]; exists {
-		return fmt.Errorf("folder name '%s' is reserved for system folders", folderName)
+		return fmt.Errorf("Название папки '%s' зарезервировано для системных папок", folderName)
 	}
 
 	return nil
@@ -688,17 +789,17 @@ func (s *Server) GetFolder(ctx context.Context, req *pb.GetFolderRequest) (*pb.G
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_folder_messages", "error").Inc()
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	folderID, err := strconv.ParseInt(req.FolderId, 10, 64)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid folder id")
+		return nil, status.Error(codes.InvalidArgument, "Некорректный идентификатор папки")
 	}
 
 	var lastMessageID int64
 	var lastDatetime time.Time
-	limit := 20
+	limit := 100
 
 	if req.LastMessageId != "" {
 		if id, err := strconv.ParseInt(req.LastMessageId, 10, 64); err == nil {
@@ -713,8 +814,12 @@ func (s *Server) GetFolder(ctx context.Context, req *pb.GetFolderRequest) (*pb.G
 	}
 
 	if req.Limit != "" {
-		if l, err := strconv.Atoi(req.Limit); err == nil && l > 0 && l <= 100 {
-			limit = l
+		if l, err := strconv.Atoi(req.Limit); err == nil && l > 0 {
+			if l > 200 {
+				limit = 200
+			} else {
+				limit = l
+			}
 		}
 	}
 
@@ -722,14 +827,14 @@ func (s *Server) GetFolder(ctx context.Context, req *pb.GetFolderRequest) (*pb.G
 	if err != nil {
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_folder_messages", "error").Inc()
 		log.Error(op + ": failed to get folder messages: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not get folder messages")
+		return nil, status.Error(codes.Internal, "Не удалось получить письма папки")
 	}
 
 	messagesInfo, err := s.messageUCase.GetFolderMessagesInfo(ctx, profileID, folderID)
 	if err != nil {
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_folder_messages", "error").Inc()
 		log.Error(op + ": failed to get folder messages info: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not get folder messages info")
+		return nil, status.Error(codes.Internal, "Не удалось получить данные папки")
 	}
 
 	pbMessages := make([]*pb.Message, 0, len(messages))
@@ -738,13 +843,13 @@ func (s *Server) GetFolder(ctx context.Context, req *pb.GetFolderRequest) (*pb.G
 
 	for _, m := range messages {
 		messageID, _ := strconv.ParseInt(m.ID, 10, 64)
-		if err := s.enrichSenderAvatar(ctx, &m.Sender); err != nil {
+		if err := s.enrichSenderAvatar(ctx, &m.Email, &m.Avatar); err != nil {
 			log.Warn("failed to enrich sender avatar: " + err.Error())
 		}
 
 		pbMessages = append(pbMessages, &pb.Message{
 			Id:       m.ID,
-			Sender:   s.domainSenderToProto(&m.Sender),
+			Sender:   s.domainSenderToProto(&m.Email, &m.Avatar, m.SenderID, m.Username),
 			Topic:    m.Topic,
 			Snippet:  m.Snippet,
 			Datetime: m.Datetime.Format(time.RFC3339),
@@ -780,14 +885,14 @@ func (s *Server) GetFolders(ctx context.Context, req *pb.GetFoldersRequest) (*pb
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_folders", "error").Inc()
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	folders, err := s.messageUCase.GetUserFolders(ctx, profileID)
 	if err != nil {
 		log.Error(op + ": failed to get user folders: " + err.Error())
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_folders", "error").Inc()
-		return nil, status.Error(codes.Internal, "could not get folders")
+		return nil, status.Error(codes.Internal, "Не удалось получить список папок")
 	}
 
 	pbFolders := make([]*pb.Folder, 0, len(folders))
@@ -812,12 +917,12 @@ func (s *Server) RenameFolder(ctx context.Context, req *pb.RenameFolderRequest) 
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	folderID, err := strconv.ParseInt(req.FolderId, 10, 64)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid folder id")
+		return nil, status.Error(codes.InvalidArgument, "Некорректный идентификатор папки")
 	}
 
 	if err := s.validateFolderName(req.NewFolderName); err != nil {
@@ -827,10 +932,10 @@ func (s *Server) RenameFolder(ctx context.Context, req *pb.RenameFolderRequest) 
 	folder, err := s.messageUCase.RenameFolder(ctx, profileID, folderID, req.NewFolderName)
 	if err != nil {
 		if errors.Is(err, domain.ErrFolderExists) {
-			return nil, status.Error(codes.AlreadyExists, err.Error())
+			return nil, status.Error(codes.AlreadyExists, "Папка с таким именем уже существует")
 		}
 		log.Error(op + ": failed to rename folder: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not rename folder")
+		return nil, status.Error(codes.Internal, "Не удалось переименовать папку")
 	}
 
 	return &pb.RenameFolderResponse{
@@ -848,23 +953,23 @@ func (s *Server) DeleteFolder(ctx context.Context, req *pb.DeleteFolderRequest) 
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	folderID, err := strconv.ParseInt(req.FolderId, 10, 64)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid folder id")
+		return nil, status.Error(codes.InvalidArgument, "Некорректный идентификатор папки")
 	}
 
 	if err := s.messageUCase.DeleteFolder(ctx, profileID, folderID); err != nil {
 		if errors.Is(err, domain.ErrFolderNotFound) {
-			return nil, status.Error(codes.NotFound, err.Error())
+			return nil, status.Error(codes.NotFound, "Папка не найдена")
 		}
 		if errors.Is(err, domain.ErrFolderSystem) {
-			return nil, status.Error(codes.PermissionDenied, err.Error())
+			return nil, status.Error(codes.PermissionDenied, "Системную папку нельзя удалить")
 		}
 		log.Error(op + ": failed to delete folder: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not delete folder")
+		return nil, status.Error(codes.Internal, "Не удалось удалить папку")
 	}
 
 	return &pb.DeleteFolderResponse{}, nil
@@ -878,22 +983,22 @@ func (s *Server) DeleteMessageFromFolder(ctx context.Context, req *pb.DeleteMess
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	messageID, err := strconv.ParseInt(req.MessageId, 10, 64)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid message id")
+		return nil, status.Error(codes.InvalidArgument, "Некорректный идентификатор сообщения")
 	}
 
 	folderID, err := strconv.ParseInt(req.FolderId, 10, 64)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid folder id")
+		return nil, status.Error(codes.InvalidArgument, "Некорректный идентификатор папки")
 	}
 
 	if err := s.messageUCase.DeleteMessageFromFolder(ctx, profileID, messageID, folderID); err != nil {
 		log.Error(op + ": failed to delete message from folder: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not delete message from folder")
+		return nil, status.Error(codes.Internal, "Не удалось удалить письмо из папки")
 	}
 
 	return &pb.DeleteMessageFromFolderResponse{}, nil
@@ -1016,11 +1121,13 @@ func (s *Server) validateDraftRequest(req *pb.SaveDraftRequest) error {
 	if len(req.Files) > defaultLimitFiles {
 		return fmt.Errorf("too many files")
 	}
+	var totalSize int64
 	for _, f := range req.Files {
 		size, _ := strconv.ParseInt(f.Size, 10, 64)
 		if size < 0 || size > maxFileSize {
 			return fmt.Errorf("file size invalid or too large: %s", f.Name)
 		}
+		totalSize += size
 		if _, ok := allowedFileTypes[f.FileType]; !ok {
 			return fmt.Errorf("unsupported file type: %s", f.FileType)
 		}
@@ -1034,6 +1141,9 @@ func (s *Server) validateDraftRequest(req *pb.SaveDraftRequest) error {
 		if validation.HasDangerousCharacters(f.Name) {
 			return fmt.Errorf("invalid file name: %s", f.Name)
 		}
+	}
+	if totalSize > maxTotalFilesSize {
+		return fmt.Errorf("total attachments size exceeds %d MB", maxTotalFilesSize/(1024*1024))
 	}
 
 	return nil
@@ -1126,4 +1236,150 @@ func (s *Server) SendDraft(ctx context.Context, req *pb.SendDraftRequest) (*pb.S
 		Success:   true,
 		MessageId: req.DraftId,
 	}, nil
+}
+
+func localDomainFromEnv() string {
+	if v := strings.TrimSpace(os.Getenv("LOCAL_DOMAIN")); v != "" {
+		return v
+	}
+	return "flintmail.ru"
+}
+
+func smtpAddrFromEnv() string {
+	if v := strings.TrimSpace(os.Getenv("SMTP_ADDR")); v != "" {
+		return v
+	}
+	return "exim:25"
+}
+
+func smtpSkipTLSFromEnv() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_SKIP_TLS")))
+	return v == "1" || v == "true" || v == "yes"
+}
+
+func (s *Server) isLocalDomain(email string) bool {
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(parts[1]), s.localDomain)
+}
+
+func (s *Server) sendExternalMail(from, to, subject, body string, files []*pb.File) error {
+	if strings.TrimSpace(from) == "" {
+		from = fmt.Sprintf("no-reply@%s", s.localDomain)
+	}
+	var msgBytes []byte
+	if len(files) == 0 {
+		msgBytes = []byte(fmt.Sprintf("From: %s\r\nReply-To: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s", from, from, to, subject, body))
+	} else {
+		var buf bytes.Buffer
+		writer := multipart.NewWriter(&buf)
+		boundary := writer.Boundary()
+		buf.WriteString(fmt.Sprintf("From: %s\r\nReply-To: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=%s\r\n\r\n", from, from, to, subject, boundary))
+
+		textHeader := textproto.MIMEHeader{}
+		textHeader.Set("Content-Type", "text/plain; charset=UTF-8")
+		textHeader.Set("Content-Transfer-Encoding", "quoted-printable")
+		textPart, _ := writer.CreatePart(textHeader)
+		qp := quotedprintable.NewWriter(textPart)
+		_, _ = qp.Write([]byte(body))
+		_ = qp.Close()
+
+		for _, file := range files {
+			data, ct, name, err := s.getAttachmentData(file)
+			if err != nil {
+				return err
+			}
+			h := textproto.MIMEHeader{}
+			if ct == "" {
+				ct = "application/octet-stream"
+			}
+			h.Set("Content-Type", ct)
+			h.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, name))
+			h.Set("Content-Transfer-Encoding", "base64")
+			part, _ := writer.CreatePart(h)
+			writeBase64WithCRLF(part, data)
+		}
+		writer.Close()
+		msgBytes = buf.Bytes()
+	}
+
+	host, _, err := net.SplitHostPort(s.smtpAddr)
+	if err != nil {
+		host = s.smtpAddr
+	}
+
+	c, err := smtp.Dial(s.smtpAddr)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	if !s.smtpSkipTLS {
+		if ok, _ := c.Extension("STARTTLS"); ok {
+			cfg := &tls.Config{ServerName: host, InsecureSkipVerify: s.smtpSkipTLS}
+			if err := c.StartTLS(cfg); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := c.Mail(from); err != nil {
+		return err
+	}
+	if err := c.Rcpt(to); err != nil {
+		return err
+	}
+
+	w, err := c.Data()
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write(msgBytes); err != nil {
+		return err
+	}
+	if err := w.Close(); err != nil {
+		return err
+	}
+	return c.Quit()
+}
+
+func (s *Server) getAttachmentData(file *pb.File) ([]byte, string, string, error) {
+	if s.minioClient == nil {
+		return nil, "", "", fmt.Errorf("minio client is not configured")
+	}
+	objectName := strings.TrimLeft(file.GetStoragePath(), "/")
+	obj, err := s.minioClient.GetObject(context.Background(), s.attachmentsBucket, objectName, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, "", "", err
+	}
+	defer obj.Close()
+
+	data, err := io.ReadAll(obj)
+	if err != nil {
+		return nil, "", "", err
+	}
+	name := file.GetName()
+	if strings.TrimSpace(name) == "" {
+		name = filepath.Base(objectName)
+	}
+	return data, file.GetFileType(), name, nil
+}
+
+// writeBase64WithCRLF writes base64-encoded data with CRLF line wrapping at 76 chars to satisfy SMTP line length limits.
+func writeBase64WithCRLF(w io.Writer, data []byte) {
+	const lineLen = 76
+	enc := base64.StdEncoding
+	encoded := enc.EncodeToString(data)
+	for len(encoded) > 0 {
+		chunk := encoded
+		if len(chunk) > lineLen {
+			chunk = encoded[:lineLen]
+			encoded = encoded[lineLen:]
+		} else {
+			encoded = ""
+		}
+		_, _ = fmt.Fprintf(w, "%s\r\n", chunk)
+	}
 }

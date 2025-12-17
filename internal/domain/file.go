@@ -1,5 +1,7 @@
 package domain
 
+//go:generate go run github.com/mailru/easyjson/easyjson@v0.9.1 -all file.go
+
 type File struct {
 	ID          int64  `json:"id"`
 	Name        string `json:"name"`

@@ -22,8 +22,10 @@ minio:
   user: minio
   password: miniominio
   bucket_name: "avatars"
+  attachments_bucket_name: "attachments"
   endpoint: 127.0.0.1:8005
   use_ssl: false
   public_endpoint: flintmail.ru
   public_use_ssl: true
   
+# go generate ./...

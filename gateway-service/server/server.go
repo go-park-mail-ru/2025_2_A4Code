@@ -10,13 +10,21 @@ import (
 	"2025_2_a4code/profile-service/pkg/profileproto"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"path"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gorilla/websocket"
+	easyjson "github.com/mailru/easyjson"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -25,12 +33,17 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+//go:generate go run github.com/mailru/easyjson/easyjson@v0.9.1 -all server.go
+
 type Server struct {
-	cfg           *config.AppConfig
-	httpServer    *http.Server
-	authClient    authproto.AuthServiceClient
-	profileClient profileproto.ProfileServiceClient
-	messageClient messagesproto.MessagesServiceClient
+	cfg               *config.Config
+	httpServer        *http.Server
+	authClient        authproto.AuthServiceClient
+	profileClient     profileproto.ProfileServiceClient
+	messageClient     messagesproto.MessagesServiceClient
+	minioClient       *minio.Client
+	minioBucket       string
+	attachmentsBucket string
 }
 
 type apiResponse struct {
@@ -51,27 +64,56 @@ type profileDTO struct {
 	Role        string `json:"role,omitempty"`
 }
 
-func NewServer(cfg *config.AppConfig) (*Server, error) {
+func NewServer(cfg *config.Config) (*Server, error) {
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 
-	authConn, err := grpc.NewClient(cfg.Host+":"+cfg.AuthPort, opts...)
+	authConn, err := grpc.NewClient(cfg.AppConfig.Host+":"+cfg.AppConfig.AuthPort, opts...)
 	if err != nil {
 		return nil, err
 	}
-	profileConn, err := grpc.NewClient(cfg.Host+":"+cfg.ProfilePort, opts...)
+	profileConn, err := grpc.NewClient(cfg.AppConfig.Host+":"+cfg.AppConfig.ProfilePort, opts...)
 	if err != nil {
 		return nil, err
 	}
-	messagesConn, err := grpc.NewClient(cfg.Host+":"+cfg.MessagesPort, opts...)
+	messagesConn, err := grpc.NewClient(cfg.AppConfig.Host+":"+cfg.AppConfig.MessagesPort, opts...)
 	if err != nil {
 		return nil, err
+	}
+
+	var minioClient *minio.Client
+	bucketName := ""
+	attachmentsBucket := ""
+	if cfg.MinioConfig != nil {
+		client, err := minio.New(cfg.MinioConfig.Endpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(cfg.MinioConfig.User, cfg.MinioConfig.Password, ""),
+			Secure: cfg.MinioConfig.UseSSL,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to init minio client: %w", err)
+		}
+		minioClient = client
+		bucketName = cfg.MinioConfig.BucketName
+		attachmentsBucket = cfg.MinioConfig.AttachmentsBucketName
+		if strings.TrimSpace(attachmentsBucket) == "" {
+			attachmentsBucket = "attachments"
+		}
+
+		if err := ensureBucket(context.Background(), minioClient, bucketName); err != nil {
+			return nil, fmt.Errorf("ensure bucket %s: %w", bucketName, err)
+		}
+		if err := ensureBucket(context.Background(), minioClient, attachmentsBucket); err != nil {
+			return nil, fmt.Errorf("ensure attachments bucket %s: %w", attachmentsBucket, err)
+		}
 	}
 
 	return &Server{
-		cfg:           cfg,
-		authClient:    authproto.NewAuthServiceClient(authConn),
-		profileClient: profileproto.NewProfileServiceClient(profileConn),
-		messageClient: messagesproto.NewMessagesServiceClient(messagesConn),
+		cfg:               cfg,
+		authClient:        authproto.NewAuthServiceClient(authConn),
+		profileClient:     profileproto.NewProfileServiceClient(profileConn),
+		messageClient:     messagesproto.NewMessagesServiceClient(messagesConn),
+		minioClient:       minioClient,
+		minioBucket:       bucketName,
+		attachmentsBucket: attachmentsBucket,
 	}, nil
 }
 
@@ -79,10 +121,10 @@ func (s *Server) Start(ctx context.Context) error {
 	log := logger.GetLogger(ctx)
 	slog.SetDefault(log)
 
-	// Запуск сервера метрик
+	// Р—Р°РїСѓСЃРє СЃРµСЂРІРµСЂР° РјРµС‚СЂРёРє
 	go func() {
-		http.Handle("/metrics", promhttp.Handler()) // promhttp экспортирует CPU/Mem автоматически
-		metricsAddr := ":" + s.cfg.GatewayMetricsPort
+		http.Handle("/metrics", promhttp.Handler()) // promhttp СЌРєСЃРїРѕСЂС‚РёСЂСѓРµС‚ CPU/Mem Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё
+		metricsAddr := ":" + s.cfg.AppConfig.GatewayMetricsPort
 		log.Info("Gateway metrics server started on " + metricsAddr)
 		if err := http.ListenAndServe(metricsAddr, nil); err != nil {
 			log.Error("Failed to start metrics server: " + err.Error())
@@ -117,6 +159,9 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.Handle("POST /messages/save-draft", http.HandlerFunc(s.saveDraftHandler))
 	mux.Handle("DELETE /messages/delete-draft", http.HandlerFunc(s.deleteDraftHandler))
 	mux.Handle("POST /messages/send-draft", http.HandlerFunc(s.sendDraftHandler))
+	mux.Handle("GET /files/{file_path...}", http.HandlerFunc(s.downloadFileHandler))
+	mux.Handle("POST /files/upload", http.HandlerFunc(s.uploadFileHandler))
+	mux.Handle("GET /ws/notifications", http.HandlerFunc(s.wsNotificationsHandler))
 
 	var handler http.Handler = mux
 	handler = logger.New(log)(handler)
@@ -124,14 +169,14 @@ func (s *Server) Start(ctx context.Context) error {
 	handler = metrics.Middleware(handler)
 
 	s.httpServer = &http.Server{
-		Addr:         ":" + s.cfg.GatewayPort,
+		Addr:         ":" + s.cfg.AppConfig.GatewayPort,
 		Handler:      handler,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
 
-	log.Info("Server is listening port: " + s.cfg.GatewayPort)
+	log.Info("Server is listening port: " + s.cfg.AppConfig.GatewayPort)
 	if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
 		log.Error("Server stopped: " + err.Error())
 		return err
@@ -142,13 +187,13 @@ func (s *Server) Start(ctx context.Context) error {
 func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 	var req authproto.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, "Invalid request body")
+		respondError(w, "Некорректное тело запроса")
 		return
 	}
 
 	resp, err := s.authClient.Login(r.Context(), &req)
 	if err != nil {
-		respondError(w, "Login failed")
+		writeGrpcAwareError(w, err, "Неверный логин или пароль")
 		return
 	}
 
@@ -159,7 +204,7 @@ func (s *Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) signupHandler(w http.ResponseWriter, r *http.Request) {
 	var req authproto.SignupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, "Invalid request body")
+		respondError(w, "Некорректное тело запроса")
 		return
 	}
 
@@ -168,12 +213,12 @@ func (s *Server) signupHandler(w http.ResponseWriter, r *http.Request) {
 		if grpcErr, ok := status.FromError(err); ok {
 			switch grpcErr.Code() {
 			case codes.InvalidArgument, codes.AlreadyExists:
-				writeResponse(w, http.StatusBadRequest, "Signup failed: "+grpcErr.Message(), nil)
+				writeResponse(w, http.StatusBadRequest, "Ошибка регистрации: "+grpcErr.Message(), nil)
 			default:
-				respondError(w, "Signup failed: "+grpcErr.Message())
+				respondError(w, "Ошибка регистрации: "+grpcErr.Message())
 			}
 		} else {
-			respondError(w, "Signup failed")
+			respondError(w, "Ошибка регистрации")
 		}
 		return
 	}
@@ -183,29 +228,41 @@ func (s *Server) signupHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) refreshHandler(w http.ResponseWriter, r *http.Request) {
-	refreshCookie, err := r.Cookie("refresh_token")
-	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Refresh token required", nil)
+	refreshToken := ""
+
+	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+		refreshToken = strings.TrimSpace(authHeader[7:])
+	}
+
+	if refreshToken == "" {
+		if cookie, err := r.Cookie("refresh_token"); err == nil {
+			refreshToken = cookie.Value
+		}
+	}
+
+	if refreshToken == "" {
+		var body struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err == nil && strings.TrimSpace(body.RefreshToken) != "" {
+			refreshToken = body.RefreshToken
+		}
+	}
+
+	if refreshToken == "" {
+		writeResponse(w, http.StatusUnauthorized, "????????? refresh token", nil)
 		return
 	}
 
-	req := &authproto.RefreshRequest{RefreshToken: refreshCookie.Value}
+	req := &authproto.RefreshRequest{RefreshToken: refreshToken}
 	resp, err := s.authClient.Refresh(r.Context(), req)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Refresh failed", nil)
+		writeResponse(w, http.StatusUnauthorized, "?? ??????? ???????? ????? ???????", nil)
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "access_token",
-		Value:    resp.AccessToken,
-		MaxAge:   15 * 60,
-		HttpOnly: true,
-		Secure:   true,
-		Path:     "/",
-		SameSite: http.SameSiteNoneMode,
-	})
-
+	setAuthCookies(w, resp.AccessToken, refreshToken)
 	respondSuccess(w, resp)
 }
 
@@ -213,7 +270,7 @@ func (s *Server) logoutHandler(w http.ResponseWriter, r *http.Request) {
 	req := &authproto.LogoutRequest{}
 	resp, err := s.authClient.Logout(r.Context(), req)
 	if err != nil {
-		respondError(w, "Logout failed")
+		respondError(w, "Ошибка выхода")
 		return
 	}
 
@@ -229,24 +286,25 @@ func (s *Server) logoutHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getProfileHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 
 	ctx := s.addTokenToContext(r.Context(), accessToken)
 	resp, err := s.profileClient.GetProfile(ctx, &profileproto.GetProfileRequest{})
 	if err != nil {
-		writeGrpcAwareError(w, err, "Failed to get profile")
+		writeGrpcAwareError(w, err, "Не удалось получить профиль")
 		return
 	}
 
-	respondSuccess(w, mapProfile(resp.Profile))
+	dto := mapProfile(resp.Profile)
+	respondSuccess(w, dto)
 }
 
 func (s *Server) updateProfileHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 
@@ -254,13 +312,13 @@ func (s *Server) updateProfileHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req profileproto.UpdateProfileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, "Invalid request body", nil)
+		writeResponse(w, http.StatusBadRequest, "Некорректное тело запроса", nil)
 		return
 	}
 
 	resp, err := s.profileClient.UpdateProfile(ctx, &req)
 	if err != nil {
-		writeGrpcAwareError(w, err, "Failed to update profile")
+		writeGrpcAwareError(w, err, "Не удалось обновить профиль")
 		return
 	}
 
@@ -270,14 +328,14 @@ func (s *Server) updateProfileHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) settingsHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 
 	ctx := s.addTokenToContext(r.Context(), accessToken)
 	resp, err := s.profileClient.Settings(ctx, &profileproto.SettingsRequest{})
 	if err != nil {
-		writeGrpcAwareError(w, err, "Failed to get settings")
+		writeGrpcAwareError(w, err, "Не удалось получить настройки")
 		return
 	}
 
@@ -289,7 +347,7 @@ func (s *Server) settingsHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) messagePageHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 
@@ -298,8 +356,8 @@ func (s *Server) messagePageHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.messageClient.MessagePage(ctx, req)
 	if err != nil {
-		//respondError(w, "Failed to get message")
-		writeGrpcAwareError(w, err, "Failed to get message")
+		//respondError(w, "Не удалось получить письмо")
+		writeGrpcAwareError(w, err, "Не удалось получить письмо")
 		return
 	}
 
@@ -309,19 +367,19 @@ func (s *Server) messagePageHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) replyHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 	ctx := s.addTokenToContext(r.Context(), accessToken)
 
 	var req messagesproto.ReplyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, "Invalid request body", nil)
+		writeResponse(w, http.StatusBadRequest, "Некорректное тело запроса", nil)
 		return
 	}
 
 	if _, err := s.messageClient.Reply(ctx, &req); err != nil {
-		respondError(w, "Failed to send reply")
+		respondError(w, "Не удалось отправить ответ")
 		return
 	}
 	respondSuccess(w, map[string]string{"status": "ok"})
@@ -330,19 +388,19 @@ func (s *Server) replyHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) sendHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 	ctx := s.addTokenToContext(r.Context(), accessToken)
 
 	var req messagesproto.SendRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, "Invalid request body", nil)
+		writeResponse(w, http.StatusBadRequest, "Некорректное тело запроса", nil)
 		return
 	}
 
 	if _, err := s.messageClient.Send(ctx, &req); err != nil {
-		respondError(w, "Failed to send message")
+		respondError(w, "Не удалось отправить письмо")
 		return
 	}
 	respondSuccess(w, map[string]string{"status": "ok"})
@@ -351,7 +409,7 @@ func (s *Server) sendHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getFolderHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 	ctx := s.addTokenToContext(r.Context(), accessToken)
@@ -363,7 +421,7 @@ func (s *Server) getFolderHandler(w http.ResponseWriter, r *http.Request) {
 
 	foldersResp, err := s.messageClient.GetFolders(ctx, &messagesproto.GetFoldersRequest{})
 	if err != nil {
-		respondError(w, "Failed to get folders")
+		writeGrpcAwareError(w, err, "Не удалось получить папки")
 		return
 	}
 
@@ -373,24 +431,24 @@ func (s *Server) getFolderHandler(w http.ResponseWriter, r *http.Request) {
 			s.handleInbox(ctx, w, r)
 			return
 		}
-		writeResponse(w, http.StatusNotFound, "Folder not found", nil)
+		writeResponse(w, http.StatusNotFound, "Папка не найдена", nil)
 		return
 	}
 
-	s.respondFolder(ctx, w, r, folderID, lastMessageID, lastDatetime, limit, "Failed to get folder")
+	s.respondFolder(ctx, w, r, folderID, lastMessageID, lastDatetime, limit, "Не удалось получить папку")
 }
 
 func (s *Server) getFoldersHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 	ctx := s.addTokenToContext(r.Context(), accessToken)
 
 	resp, err := s.messageClient.GetFolders(ctx, &messagesproto.GetFoldersRequest{})
 	if err != nil {
-		respondError(w, "Failed to get folders")
+		writeGrpcAwareError(w, err, "Не удалось получить папки")
 		return
 	}
 	respondSuccess(w, resp)
@@ -399,7 +457,7 @@ func (s *Server) getFoldersHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) inboxHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 	ctx := s.addTokenToContext(r.Context(), accessToken)
@@ -409,7 +467,7 @@ func (s *Server) inboxHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleInbox(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	foldersResp, err := s.messageClient.GetFolders(ctx, &messagesproto.GetFoldersRequest{})
 	if err != nil {
-		respondError(w, "Failed to get folders")
+		respondError(w, "Не удалось получить папки")
 		return
 	}
 
@@ -419,7 +477,7 @@ func (s *Server) handleInbox(ctx context.Context, w http.ResponseWriter, r *http
 		return
 	}
 
-	s.respondFolder(ctx, w, r, folderID, r.URL.Query().Get("last_message_id"), r.URL.Query().Get("last_datetime"), r.URL.Query().Get("limit"), "Failed to get inbox")
+	s.respondFolder(ctx, w, r, folderID, r.URL.Query().Get("last_message_id"), r.URL.Query().Get("last_datetime"), r.URL.Query().Get("limit"), "Не удалось получить входящие")
 }
 
 func (s *Server) respondFolder(ctx context.Context, w http.ResponseWriter, r *http.Request, folderID, lastMessageID, lastDatetime, limit, errorMessage string) {
@@ -453,7 +511,7 @@ func emptyFolderResponse() *messagesproto.GetFolderResponse {
 func (s *Server) renameFolderHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 
@@ -461,13 +519,13 @@ func (s *Server) renameFolderHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req messagesproto.RenameFolderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, "Invalid request body", nil)
+		writeResponse(w, http.StatusBadRequest, "Некорректное тело запроса", nil)
 		return
 	}
 
 	resp, err := s.messageClient.RenameFolder(ctx, &req)
 	if err != nil {
-		writeGrpcAwareError(w, err, "Failed to rename folder")
+		writeGrpcAwareError(w, err, "Не удалось переименовать папку")
 		return
 	}
 
@@ -477,7 +535,7 @@ func (s *Server) renameFolderHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteFolderHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 
@@ -488,7 +546,7 @@ func (s *Server) deleteFolderHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.messageClient.DeleteFolder(ctx, req)
 	if err != nil {
-		respondError(w, "Failed to delete folder")
+		respondError(w, "Не удалось удалить папку")
 		return
 	}
 
@@ -498,7 +556,7 @@ func (s *Server) deleteFolderHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteMessageFromFolderHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 
@@ -506,13 +564,13 @@ func (s *Server) deleteMessageFromFolderHandler(w http.ResponseWriter, r *http.R
 
 	var req messagesproto.DeleteMessageFromFolderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, "Invalid request body", nil)
+		writeResponse(w, http.StatusBadRequest, "Некорректное тело запроса", nil)
 		return
 	}
 
 	resp, err := s.messageClient.DeleteMessageFromFolder(ctx, &req)
 	if err != nil {
-		respondError(w, "Failed to delete message from folder")
+		respondError(w, "Не удалось удалить письмо из папки")
 		return
 	}
 
@@ -522,7 +580,7 @@ func (s *Server) deleteMessageFromFolderHandler(w http.ResponseWriter, r *http.R
 func (s *Server) saveDraftHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 
@@ -530,13 +588,13 @@ func (s *Server) saveDraftHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req messagesproto.SaveDraftRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, "Invalid request body", nil)
+		writeResponse(w, http.StatusBadRequest, "Некорректное тело запроса", nil)
 		return
 	}
 
 	resp, err := s.messageClient.SaveDraft(ctx, &req)
 	if err != nil {
-		respondError(w, "Failed to save draft")
+		respondError(w, "Не удалось сохранить черновик")
 		return
 	}
 
@@ -546,7 +604,7 @@ func (s *Server) saveDraftHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteDraftHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 
@@ -554,13 +612,13 @@ func (s *Server) deleteDraftHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req messagesproto.DeleteDraftRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, "Invalid request body", nil)
+		writeResponse(w, http.StatusBadRequest, "Некорректное тело запроса", nil)
 		return
 	}
 
 	resp, err := s.messageClient.DeleteDraft(ctx, &req)
 	if err != nil {
-		respondError(w, "Failed to delete draft")
+		respondError(w, "Не удалось удалить черновик")
 		return
 	}
 
@@ -570,7 +628,7 @@ func (s *Server) deleteDraftHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) sendDraftHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 
@@ -578,17 +636,294 @@ func (s *Server) sendDraftHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req messagesproto.SendDraftRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, "Invalid request body", nil)
+		writeResponse(w, http.StatusBadRequest, "Некорректное тело запроса", nil)
 		return
 	}
 
 	resp, err := s.messageClient.SendDraft(ctx, &req)
 	if err != nil {
-		respondError(w, "Failed to send draft")
+		respondError(w, "Не удалось отправить черновик")
 		return
 	}
 
 	respondSuccess(w, resp)
+}
+
+func (s *Server) downloadFileHandler(w http.ResponseWriter, r *http.Request) {
+	if s.minioClient == nil || s.attachmentsBucket == "" {
+		writeResponse(w, http.StatusInternalServerError, "file storage is not configured", nil)
+		return
+	}
+
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
+		return
+	}
+
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+	rawPath := r.PathValue("file_path")
+	if strings.TrimSpace(rawPath) == "" {
+		writeResponse(w, http.StatusBadRequest, "file path is required", nil)
+		return
+	}
+
+	objectName := path.Clean(strings.TrimPrefix(rawPath, "/"))
+	if objectName == "." || objectName == "/" || objectName == "" {
+		writeResponse(w, http.StatusBadRequest, "invalid file path", nil)
+		return
+	}
+
+	obj, err := s.minioClient.GetObject(ctx, s.attachmentsBucket, objectName, minio.GetObjectOptions{})
+	if err != nil {
+		writeResponse(w, http.StatusInternalServerError, "failed to fetch file", nil)
+		return
+	}
+	defer obj.Close()
+
+	stat, err := obj.Stat()
+	if err != nil {
+		errResp := minio.ToErrorResponse(err)
+		if errResp.Code == "NoSuchKey" || errResp.StatusCode == http.StatusNotFound {
+			writeResponse(w, http.StatusNotFound, "file not found", nil)
+			return
+		}
+		writeResponse(w, http.StatusInternalServerError, "failed to stat file", nil)
+		return
+	}
+
+	filename := path.Base(objectName)
+	if filename != "" {
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, url.PathEscape(filename)))
+	}
+	if stat.ContentType != "" {
+		w.Header().Set("Content-Type", stat.ContentType)
+	}
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", stat.Size))
+
+	if _, err := io.Copy(w, obj); err != nil {
+		writeResponse(w, http.StatusInternalServerError, "failed to stream file", nil)
+	}
+}
+
+func (s *Server) uploadFileHandler(w http.ResponseWriter, r *http.Request) {
+	if s.minioClient == nil || s.attachmentsBucket == "" {
+		writeResponse(w, http.StatusInternalServerError, "file storage is not configured", nil)
+		return
+	}
+
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		writeResponse(w, http.StatusUnauthorized, "invalid access token", nil)
+		return
+	}
+	ctx := s.addTokenToContext(r.Context(), accessToken)
+
+	// allow uploads up to ~80MB to accommodate 40MB decimal limit plus overhead
+	if err := r.ParseMultipartForm(80_000_000); err != nil {
+		writeResponse(w, http.StatusBadRequest, "failed to parse form", nil)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeResponse(w, http.StatusBadRequest, "no file provided", nil)
+		return
+	}
+	defer file.Close()
+
+	const maxSize = 40_000_000
+	if header.Size > maxSize {
+		writeResponse(w, http.StatusBadRequest, "Не удалось загрузить вложение, размер файла превышает 40 МБ", nil)
+		return
+	}
+
+	objectName := strings.TrimSpace(r.FormValue("path"))
+	if objectName == "" {
+		objectName = path.Join("attachments", fmt.Sprintf("%d", time.Now().UnixNano()), sanitizeFileName(header.Filename))
+	}
+	objectName = strings.TrimPrefix(path.Clean(objectName), "/")
+	if objectName == "." || objectName == "" {
+		writeResponse(w, http.StatusBadRequest, "invalid storage path", nil)
+		return
+	}
+
+	info, err := s.minioClient.PutObject(ctx, s.attachmentsBucket, objectName, file, header.Size, minio.PutObjectOptions{
+		ContentType: header.Header.Get("Content-Type"),
+	})
+	if err != nil {
+		writeResponse(w, http.StatusInternalServerError, "failed to store file", nil)
+		return
+	}
+
+	respBody := map[string]interface{}{
+		"storage_path": objectName,
+		"name":         header.Filename,
+		"size":         info.Size,
+		"file_type":    header.Header.Get("Content-Type"),
+	}
+	respondSuccess(w, respBody)
+}
+
+func sanitizeFileName(name string) string {
+	base := filepath.Base(strings.TrimSpace(name))
+	if base == "" || base == "." || base == string(filepath.Separator) {
+		return "file.bin"
+	}
+	return base
+}
+
+func (s *Server) wsNotificationsHandler(w http.ResponseWriter, r *http.Request) {
+	log := logger.GetLogger(r.Context()).With(slog.String("component", "ws_notifications"))
+
+	accessToken, err := getAccessToken(r)
+	if err != nil {
+		log.Warn("ws auth failed: no token")
+		writeResponse(w, http.StatusUnauthorized, "authentication required", nil)
+		return
+	}
+
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Error("ws upgrade failed", slog.String("error", err.Error()))
+		return
+	}
+	defer conn.Close()
+	log.Info("ws connected")
+
+	ctx, cancel := context.WithCancel(s.addTokenToContext(r.Context(), accessToken))
+	defer cancel()
+
+	// Закрываем зависшие соединения без пингов/понов.
+	conn.SetReadLimit(1024)
+	_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	})
+
+	var lastTotal, lastUnread int64
+
+	type payload struct {
+		Type   string `json:"type"`
+		Total  int64  `json:"total"`
+		Unread int64  `json:"unread"`
+	}
+
+	writeJSON := func(v interface{}) error {
+		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		return conn.WriteJSON(v)
+	}
+
+	send := func(total, unread int64) error {
+		return writeJSON(payload{Type: "mail_update", Total: total, Unread: unread})
+	}
+
+	fetch := func(ctx context.Context) (int64, int64, error) {
+		foldersResp, err := s.messageClient.GetFolders(ctx, &messagesproto.GetFoldersRequest{})
+		if err != nil {
+			log.Warn("get folders failed", slog.String("error", err.Error()))
+			return 0, 0, err
+		}
+		folderID := resolveFolderID(foldersResp.Folders, "inbox")
+		if folderID == "" {
+			return 0, 0, fmt.Errorf("inbox folder not found")
+		}
+		resp, err := s.messageClient.GetFolder(ctx, &messagesproto.GetFolderRequest{FolderId: folderID, Limit: "1"})
+		if err != nil {
+			log.Warn("inbox fetch failed", slog.String("error", err.Error()))
+			return 0, 0, err
+		}
+		total, _ := strconv.ParseInt(resp.MessageTotal, 10, 64)
+		unread, _ := strconv.ParseInt(resp.MessageUnread, 10, 64)
+		return total, unread, nil
+	}
+
+	if total, unread, err := fetch(ctx); err == nil {
+		lastTotal, lastUnread = total, unread
+		_ = send(total, unread)
+	} else {
+		log.Warn("initial fetch failed", slog.String("error", err.Error()))
+	}
+
+	fetchTicker := time.NewTicker(5 * time.Second)
+	defer fetchTicker.Stop()
+
+	pingTicker := time.NewTicker(15 * time.Second)
+	defer pingTicker.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-fetchTicker.C:
+			total, unread, err := fetch(ctx)
+			if err != nil {
+				log.Warn("periodic fetch failed", slog.String("error", err.Error()))
+				_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "fetch failed"))
+				return
+			}
+			if total != lastTotal || unread != lastUnread {
+				lastTotal, lastUnread = total, unread
+				if err := send(total, unread); err != nil {
+					log.Warn("send failed", slog.String("error", err.Error()))
+					return
+				}
+			}
+		case <-pingTicker.C:
+			if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(5*time.Second)); err != nil {
+				log.Warn("ws ping failed", slog.String("error", err.Error()))
+				return
+			}
+		}
+	}
+}
+
+func setAuthCookies(w http.ResponseWriter, access, refresh string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "access_token",
+		Value:    access,
+		MaxAge:   15 * 60,
+		HttpOnly: true,
+		Secure:   false,
+		Path:     "/",
+		SameSite: http.SameSiteNoneMode,
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    refresh,
+		MaxAge:   30 * 24 * 60 * 60,
+		HttpOnly: true,
+		Secure:   false,
+		Path:     "/",
+		SameSite: http.SameSiteNoneMode,
+	})
+
+	if strings.TrimSpace(access) != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "ws_token",
+			Value:    access,
+			MaxAge:   15 * 60,
+			HttpOnly: false,
+			Secure:   false,
+			Path:     "/",
+			SameSite: http.SameSiteNoneMode,
+		})
+	}
+}
+
+func ensureBucket(ctx context.Context, client *minio.Client, bucket string) error {
+	exists, err := client.BucketExists(ctx, bucket)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{})
 }
 
 func (s *Server) Stop(ctx context.Context) error {
@@ -602,7 +937,7 @@ func (s *Server) Stop(ctx context.Context) error {
 func (s *Server) uploadAvatarHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 	ctx := s.addTokenToContext(r.Context(), accessToken)
@@ -633,7 +968,7 @@ func (s *Server) uploadAvatarHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.profileClient.UploadAvatar(ctx, req)
 	if err != nil {
-		writeGrpcAwareError(w, err, "Failed to upload avatar")
+		writeGrpcAwareError(w, err, "Не удалось загрузить аватар")
 		return
 	}
 
@@ -643,7 +978,7 @@ func (s *Server) uploadAvatarHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getAvatarHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 	ctx := s.addTokenToContext(r.Context(), accessToken)
@@ -652,7 +987,7 @@ func (s *Server) getAvatarHandler(w http.ResponseWriter, r *http.Request) {
 	if targetURL == "" {
 		profileResp, err := s.profileClient.GetProfile(ctx, &profileproto.GetProfileRequest{})
 		if err != nil {
-			writeGrpcAwareError(w, err, "Failed to get profile")
+			writeGrpcAwareError(w, err, "Не удалось получить профиль")
 			return
 		}
 		targetURL = strings.TrimSpace(profileResp.GetProfile().GetAvatarPath())
@@ -712,20 +1047,20 @@ func normalizeAvatarURL(raw string) (string, error) {
 func (s *Server) markAsSpamHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 	ctx := s.addTokenToContext(r.Context(), accessToken)
 
 	var req messagesproto.MarkAsSpamRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, "Invalid request body", nil)
+		writeResponse(w, http.StatusBadRequest, "Некорректное тело запроса", nil)
 		return
 	}
 
 	resp, err := s.messageClient.MarkAsSpam(ctx, &req)
 	if err != nil {
-		respondError(w, "Failed to mark as spam")
+		respondError(w, "Не удалось пометить как спам")
 		return
 	}
 
@@ -735,20 +1070,20 @@ func (s *Server) markAsSpamHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) moveToFolderHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 	ctx := s.addTokenToContext(r.Context(), accessToken)
 
 	var req messagesproto.MoveToFolderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, "Invalid request body", nil)
+		writeResponse(w, http.StatusBadRequest, "Некорректное тело запроса", nil)
 		return
 	}
 
 	resp, err := s.messageClient.MoveToFolder(ctx, &req)
 	if err != nil {
-		respondError(w, "Failed to move to folder")
+		respondError(w, "Не удалось переместить письмо")
 		return
 	}
 
@@ -758,20 +1093,20 @@ func (s *Server) moveToFolderHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createFolderHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken, err := getAccessToken(r)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "Access token required", nil)
+		writeResponse(w, http.StatusUnauthorized, "Необходим access token", nil)
 		return
 	}
 	ctx := s.addTokenToContext(r.Context(), accessToken)
 
 	var req messagesproto.CreateFolderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResponse(w, http.StatusBadRequest, "Invalid request body", nil)
+		writeResponse(w, http.StatusBadRequest, "Некорректное тело запроса", nil)
 		return
 	}
 
 	resp, err := s.messageClient.CreateFolder(ctx, &req)
 	if err != nil {
-		writeGrpcAwareError(w, err, "Failed to create folder")
+		writeGrpcAwareError(w, err, "Не удалось создать папку")
 		return
 	}
 
@@ -792,12 +1127,16 @@ func writeResponse(w http.ResponseWriter, status int, message string, body inter
 	if status >= 400 {
 		code = status
 	}
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(apiResponse{
+	resp := apiResponse{
 		Status:  status,
 		Message: message,
 		Body:    body,
-	})
+	}
+
+	w.WriteHeader(code)
+	if _, _, err := easyjson.MarshalToHTTPResponseWriter(resp, w); err != nil {
+		slog.Error("failed to marshal response", slog.String("error", err.Error()))
+	}
 }
 
 func writeGrpcAwareError(w http.ResponseWriter, err error, defaultMessage string) {
@@ -863,35 +1202,27 @@ func resolveFolderID(folders []*messagesproto.Folder, target string) string {
 }
 
 func getAccessToken(r *http.Request) (string, error) {
-	cookie, err := r.Cookie("access_token")
-	if err != nil {
-		return "", err
+	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+		return strings.TrimSpace(authHeader[7:]), nil
 	}
-	return cookie.Value, nil
+	queryToken := strings.TrimSpace(r.URL.Query().Get("token"))
+	if queryToken == "" {
+		queryToken = strings.TrimSpace(r.URL.Query().Get("access_token"))
+	}
+	if queryToken != "" {
+		return queryToken, nil
+	}
+	if cookie, err := r.Cookie("access_token"); err == nil {
+		return cookie.Value, nil
+	}
+	if cookie, err := r.Cookie("ws_token"); err == nil {
+		return cookie.Value, nil
+	}
+	return "", fmt.Errorf("access token not found")
 }
 
 func (s *Server) addTokenToContext(ctx context.Context, token string) context.Context {
 	md := metadata.Pairs("authorization", "Bearer "+token)
 	return metadata.NewOutgoingContext(ctx, md)
-}
-
-func setAuthCookies(w http.ResponseWriter, access, refresh string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     "access_token",
-		Value:    access,
-		MaxAge:   15 * 60,
-		HttpOnly: true,
-		Secure:   true,
-		Path:     "/",
-		SameSite: http.SameSiteNoneMode,
-	})
-	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
-		Value:    refresh,
-		MaxAge:   7 * 24 * 3600,
-		HttpOnly: true,
-		Secure:   true,
-		Path:     "/",
-		SameSite: http.SameSiteNoneMode,
-	})
 }

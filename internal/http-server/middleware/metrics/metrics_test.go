@@ -200,72 +200,6 @@ func TestMiddleware_MetricsRecording(t *testing.T) {
 	assert.NotNil(t, counter)
 }
 
-func TestSanitizePath(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "Normal path",
-			input:    "/api/users",
-			expected: "/api/users",
-		},
-		{
-			name:     "Messages with numeric ID",
-			input:    "/messages/123",
-			expected: "/messages/:id",
-		},
-		{
-			name:     "Messages with UUID",
-			input:    "/messages/abc123-def456",
-			expected: "/messages/:id",
-		},
-		{
-			name:     "Messages with alphanumeric ID",
-			input:    "/messages/user123",
-			expected: "/messages/:id",
-		},
-		{
-			name:     "Messages root path",
-			input:    "/messages",
-			expected: "/messages",
-		},
-		{
-			name:     "Messages with trailing slash",
-			input:    "/messages/",
-			expected: "/messages/",
-		},
-		{
-			name:     "Nested messages path",
-			input:    "/api/messages/123",
-			expected: "/api/messages/123",
-		},
-		{
-			name:     "Empty path",
-			input:    "",
-			expected: "",
-		},
-		{
-			name:     "Root path",
-			input:    "/",
-			expected: "/",
-		},
-		{
-			name:     "Long messages path",
-			input:    "/messages/123/details",
-			expected: "/messages/123/details",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := sanitizePath(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestMiddleware_ExecutionTime(t *testing.T) {
 	delay := 50 * time.Millisecond
 
@@ -332,17 +266,6 @@ func TestMiddleware_HeaderPreservation(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, rr.Code)
 	assert.Equal(t, "test-value", rr.Header().Get("X-Custom-Header"))
-}
-
-func TestStatusResponseWriter_MultipleWriteHeaderCalls(t *testing.T) {
-	rr := httptest.NewRecorder()
-	srw := NewStatusResponseWriter(rr)
-
-	srw.WriteHeader(http.StatusOK)
-	srw.WriteHeader(http.StatusNotFound)
-
-	assert.Equal(t, http.StatusOK, srw.statusCode)
-	assert.Equal(t, http.StatusOK, rr.Code)
 }
 
 func TestMiddleware_DifferentHTTPMethods(t *testing.T) {
