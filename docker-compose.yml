@@ -234,6 +234,7 @@ services:
       MAIL_MINIO_PASSWORD: miniominio
       MAIL_MINIO_BUCKET: mail-ingest
       MAIL_MINIO_ATTACHMENTS_BUCKET: attachments
+      MESSAGES_GRPC_ADDR: messages:8002
       INGEST_DOMAIN: flintmail.ru
     depends_on:
       mail-postgres:

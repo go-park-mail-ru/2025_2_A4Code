@@ -248,14 +248,14 @@ func (s *Server) refreshHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if refreshToken == "" {
-		writeResponse(w, http.StatusUnauthorized, "????????? refresh token", nil)
+		writeResponse(w, http.StatusUnauthorized, "invalid refresh token", nil)
 		return
 	}
 
 	req := &authproto.RefreshRequest{RefreshToken: refreshToken}
 	resp, err := s.authClient.Refresh(r.Context(), req)
 	if err != nil {
-		writeResponse(w, http.StatusUnauthorized, "?? ??????? ???????? ????? ???????", nil)
+		writeResponse(w, http.StatusUnauthorized, "Не авторизован", nil)
 		return
 	}
 
