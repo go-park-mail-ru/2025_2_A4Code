@@ -43,6 +43,7 @@ type Server struct {
 	messageUCase      MessageUsecase
 	avatarUCase       AvatarUsecase
 	JWTSecret         []byte
+	ingestSecret      string
 	smtpAddr          string
 	localDomain       string
 	smtpSkipTLS       bool
@@ -54,7 +55,9 @@ type MessageUsecase interface {
 	// базовые методы для сообщений
 	FindByMessageID(ctx context.Context, messageID int64) (*domain.Message, error)
 	FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
-	SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
+	SaveMessage(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error)
+	EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error)
+	EnsureProfileForBase(ctx context.Context, baseProfileID int64, displayName string) error
 	SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
 
 	// методы для тредов
@@ -112,7 +115,7 @@ var allowedFileTypes = map[string]struct{}{
 	"text/plain":      {},
 }
 
-func New(messageUCase MessageUsecase, avatarUCase AvatarUsecase, secret []byte, minioClient *minio.Client, attachmentsBucket string) *Server {
+func New(messageUCase MessageUsecase, avatarUCase AvatarUsecase, secret []byte, minioClient *minio.Client, attachmentsBucket string, ingestSecret string) *Server {
 	if strings.TrimSpace(attachmentsBucket) == "" {
 		attachmentsBucket = "attachments"
 	}
@@ -120,6 +123,7 @@ func New(messageUCase MessageUsecase, avatarUCase AvatarUsecase, secret []byte, 
 		messageUCase:      messageUCase,
 		avatarUCase:       avatarUCase,
 		JWTSecret:         secret,
+		ingestSecret:      strings.TrimSpace(ingestSecret),
 		smtpAddr:          smtpAddrFromEnv(),
 		localDomain:       localDomainFromEnv(),
 		smtpSkipTLS:       smtpSkipTLSFromEnv(),
@@ -423,6 +427,88 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	return &pb.SendResponse{
 		MessageId: strconv.FormatInt(messageID, 10),
 	}, nil
+}
+
+func (s *Server) Ingest(ctx context.Context, req *pb.IngestRequest) (*pb.IngestResponse, error) {
+	const op = "messagesservice.Ingest"
+	log := logger.GetLogger(ctx)
+
+	if s.ingestSecret != "" {
+		md, _ := metadata.FromIncomingContext(ctx)
+		secret := ""
+		if md != nil {
+			vals := md.Get("ingest-secret")
+			if len(vals) > 0 {
+				secret = strings.TrimSpace(vals[0])
+			}
+		}
+		if secret == "" || secret != s.ingestSecret {
+			return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		}
+	}
+
+	senderEmail := strings.TrimSpace(req.SenderEmail)
+	if senderEmail == "" || len(req.Receivers) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "sender and receivers are required")
+	}
+
+	senderUser, senderDomain, err := splitEmailParts(senderEmail)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid sender email")
+	}
+
+	senderProfileID, err := s.messageUCase.EnsureBaseProfile(ctx, senderUser, senderDomain)
+	if err != nil {
+		log.Error(op+": failed to ensure sender profile: "+err.Error())
+		return nil, status.Error(codes.Internal, "could not ensure sender")
+	}
+	if err := s.messageUCase.EnsureProfileForBase(ctx, senderProfileID, req.SenderName); err != nil {
+		log.Warn(op + ": failed to update sender name: " + err.Error())
+	}
+
+	safeSubject, safeText := sanitizeContent(req.Subject, req.Text)
+
+	seen := make(map[string]struct{})
+	var messageIDs []string
+	for _, rcpt := range req.Receivers {
+		email := strings.TrimSpace(rcpt)
+		if email == "" {
+			continue
+		}
+		key := strings.ToLower(email)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+
+		msgID, err := s.messageUCase.SaveMessage(ctx, email, senderProfileID, safeSubject, safeText)
+		if err != nil {
+			log.Warn(op+": failed to save message: "+err.Error(), slog.String("receiver", email))
+			continue
+		}
+
+		if threadID, err := s.messageUCase.SaveThread(ctx, msgID); err == nil {
+			if err := s.messageUCase.SaveThreadIdToMessage(ctx, msgID, threadID); err != nil {
+				log.Warn(op + ": failed to attach thread id: " + err.Error())
+			}
+		} else {
+			log.Warn(op + ": failed to create thread: " + err.Error())
+		}
+
+		for _, f := range req.Files {
+			size, _ := strconv.ParseInt(f.Size, 10, 64)
+			if _, err := s.messageUCase.SaveFile(ctx, msgID, f.Name, f.FileType, f.StoragePath, size); err != nil {
+				log.Warn(op + ": failed to save file: " + err.Error())
+				continue
+			}
+			metrics.FileSize.WithLabelValues("messages", f.FileType).Observe(float64(size))
+			metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
+		}
+
+		messageIDs = append(messageIDs, strconv.FormatInt(msgID, 10))
+	}
+
+	return &pb.IngestResponse{MessageIds: messageIDs}, nil
 }
 
 func (s *Server) domainSenderToProto(sender *domain.Sender) *pb.Sender {
@@ -1263,6 +1349,19 @@ func (s *Server) isLocalDomain(email string) bool {
 		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(parts[1]), s.localDomain)
+}
+
+func splitEmailParts(email string) (string, string, error) {
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid email")
+	}
+	user := strings.TrimSpace(parts[0])
+	domain := strings.TrimSpace(parts[1])
+	if user == "" || domain == "" {
+		return "", "", fmt.Errorf("invalid email")
+	}
+	return user, domain, nil
 }
 
 func (s *Server) sendExternalMail(from, to, subject, body string, files []*pb.File) error {

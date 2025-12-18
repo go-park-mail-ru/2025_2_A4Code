@@ -18,6 +18,8 @@ type AppConfig struct {
 	Host                string `yaml:"host"`
 	AuthPort            string `yaml:"auth_port"`
 	MessagesPort        string `yaml:"messages_port"`
+	IngestPort          string `yaml:"ingest_port"`
+	IngestSecret        string `yaml:"ingest_secret"`
 	ProfilePort         string `yaml:"profile_port"`
 	GatewayPort         string `yaml:"gateway_port"`
 	GatewayMetricsPort  string `yaml:"gateway_metrics_port"`

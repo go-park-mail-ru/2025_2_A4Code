@@ -41,17 +41,13 @@ func TestMessageRepository_FindByMessageID(t *testing.T) {
 	const query = `
         SELECT
             m.id, m.topic, m.text, m.date_of_dispatch,
-            bp.id, bp.username, bp.domain,
+            p.id, p.username, p.domain,
             p.name, p.surname, p.image_path,
-            pm.read_status
+            false as read_status
         FROM
             message m
         JOIN
-            base_profile bp ON m.sender_base_profile_id = bp.id
-        LEFT JOIN
-            profile p ON bp.id = p.base_profile_id
-        LEFT JOIN
-            profile_message pm ON m.id = pm.message_id
+            profile p ON m.sender_profile_id = p.id
         WHERE
             m.id = $1`
 
@@ -60,7 +56,7 @@ func TestMessageRepository_FindByMessageID(t *testing.T) {
 		WithArgs(mockMessageID).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"m.id", "m.topic", "m.text", "m.date_of_dispatch",
-			"bp.id", "bp.username", "bp.domain",
+			"p.id", "p.username", "p.domain",
 			"p.name", "p.surname", "p.image_path",
 			"pm.read_status",
 		}).AddRow(
@@ -91,16 +87,14 @@ func TestMessageRepository_FindFullByMessageID(t *testing.T) {
 	const messageQuery = `
         SELECT
             m.id, m.topic, m.text, m.date_of_dispatch,
-            bp.id, bp.username, bp.domain,
+            p.id, p.username, p.domain,
             p.name, p.surname, p.image_path,
             t.id, t.root_message_id,
             f.id, f.profile_id, f.folder_name, f.folder_type
         FROM
             message m
         JOIN
-            base_profile bp ON m.sender_base_profile_id = bp.id
-        LEFT JOIN
-            profile p ON bp.id = p.base_profile_id
+            profile p ON m.sender_profile_id = p.id
         LEFT JOIN
             thread t ON m.thread_id = t.id
         LEFT JOIN
@@ -115,7 +109,7 @@ func TestMessageRepository_FindFullByMessageID(t *testing.T) {
 
 	messageRows := sqlmock.NewRows([]string{
 		"m.id", "m.topic", "m.text", "m.date_of_dispatch",
-		"bp.id", "bp.username", "bp.domain",
+		"p.id", "p.username", "p.domain",
 		"p.name", "p.surname", "p.image_path",
 		"t.id", "t.root_message_id",
 		"f.id", "f.profile_id", "f.folder_name", "f.folder_type",
@@ -175,7 +169,7 @@ func TestMessageRepository_SaveMessage(t *testing.T) {
 		mock.ExpectBegin()
 
 		const insertMessage = `
-		INSERT INTO message (topic, text, date_of_dispatch, sender_base_profile_id)
+		INSERT INTO message (topic, text, date_of_dispatch, sender_profile_id)
 		VALUES ($1, $2, $3, $4)
 		RETURNING id`
 		mock.ExpectQuery(quote(insertMessage)).
@@ -187,8 +181,7 @@ func TestMessageRepository_SaveMessage(t *testing.T) {
 		const getReceiverID = `
 		SELECT p.id 
 		FROM profile p
-		JOIN base_profile bp ON p.base_profile_id = bp.id
-		WHERE bp.username = $1 AND bp.domain = $2`
+		WHERE LOWER(p.username) = LOWER($1) AND LOWER(p.domain) = LOWER($2)`
 		mock.ExpectQuery(quote(getReceiverID)).
 			WithArgs(username, domain).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(expectedReceiverProfileID))
@@ -222,7 +215,7 @@ func TestMessageRepository_SaveMessage(t *testing.T) {
 		mock.ExpectBegin()
 
 		const insertMessage = `
-		INSERT INTO message (topic, text, date_of_dispatch, sender_base_profile_id)
+		INSERT INTO message (topic, text, date_of_dispatch, sender_profile_id)
 		VALUES ($1, $2, $3, $4)
 		RETURNING id`
 		mock.ExpectQuery(quote(insertMessage)).
@@ -323,9 +316,7 @@ func TestMessageRepository_MarkMessageAsRead(t *testing.T) {
 
 	const query = `
 		INSERT INTO profile_message (profile_id, message_id, read_status)
-		SELECT p.id, $2, TRUE
-		FROM profile p
-		WHERE p.base_profile_id = $1
+		VALUES ($1, $2, TRUE)
 		ON CONFLICT (profile_id, message_id)
 		DO UPDATE SET read_status = TRUE
 	`
@@ -418,12 +409,8 @@ func TestMessageRepository_SaveDraft(t *testing.T) {
 	t.Run("CreateNewDraft", func(t *testing.T) {
 		mock.ExpectBegin()
 
-		mock.ExpectQuery(`SELECT base_profile_id FROM profile WHERE id = \$1`).
-			WithArgs(profileID).
-			WillReturnRows(sqlmock.NewRows([]string{"base_profile_id"}).AddRow(int64(10)))
-
 		mock.ExpectQuery(`INSERT INTO message`).
-			WithArgs(topic, text, sqlmock.AnyArg(), int64(10)).
+			WithArgs(topic, text, sqlmock.AnyArg(), profileID).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(456)))
 
 		mock.ExpectQuery(`SELECT id FROM folder WHERE profile_id = \$1 AND folder_type = 'draft'`).
@@ -528,10 +515,10 @@ func TestMessageRepository_SendDraft(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		mock.ExpectBegin()
 
-		mock.ExpectQuery(`SELECT m.topic, m.text, m.sender_base_profile_id FROM message m WHERE m.id = \$1`).
+		mock.ExpectQuery(`SELECT m.topic, m.text FROM message m WHERE m.id = \$1`).
 			WithArgs(draftID).
-			WillReturnRows(sqlmock.NewRows([]string{"topic", "text", "sender_base_profile_id"}).
-				AddRow("Topic", "Text", int64(10)))
+			WillReturnRows(sqlmock.NewRows([]string{"topic", "text"}).
+				AddRow("Topic", "Text"))
 
 		mock.ExpectExec(`UPDATE message SET date_of_dispatch = \$1, updated_at = \$2 WHERE id = \$3`).
 			WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), draftID).
@@ -930,37 +917,32 @@ func TestMessageRepository_GetFolderMessagesInfo(t *testing.T) {
 func TestMessageRepository_SaveMessageWithFolderDistribution(t *testing.T) {
 	ctx, repo, mock := setupTest(t)
 	receiverEmail := "receiver@domain.com"
-	senderBaseProfileID := int64(1)
+	senderProfileID := int64(1)
 	topic := "Test Topic"
 	text := "Test Text"
 	expectedMessageID := int64(123)
 	expectedReceiverProfileID := int64(456)
-	expectedSenderProfileID := int64(789)
 
 	t.Run("Success", func(t *testing.T) {
 		mock.ExpectBegin()
 
 		mock.ExpectQuery(`INSERT INTO message`).
-			WithArgs(topic, text, sqlmock.AnyArg(), senderBaseProfileID).
+			WithArgs(topic, text, sqlmock.AnyArg(), senderProfileID).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(expectedMessageID))
 
 		username := strings.Split(receiverEmail, "@")[0]
 		domain := strings.Split(receiverEmail, "@")[1]
 
-		mock.ExpectQuery(`SELECT p.id FROM profile p`).
+		mock.ExpectQuery(`SELECT id FROM profile`).
 			WithArgs(username, domain).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(expectedReceiverProfileID))
-
-		mock.ExpectQuery(`SELECT id FROM profile WHERE base_profile_id = \$1`).
-			WithArgs(senderBaseProfileID).
-			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(expectedSenderProfileID))
 
 		mock.ExpectExec(`INSERT INTO folder_profile_message`).
 			WithArgs(expectedMessageID, expectedReceiverProfileID).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		mock.ExpectExec(`INSERT INTO folder_profile_message`).
-			WithArgs(expectedMessageID, expectedSenderProfileID).
+			WithArgs(expectedMessageID, senderProfileID).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		mock.ExpectExec(`INSERT INTO profile_message`).
@@ -968,12 +950,12 @@ func TestMessageRepository_SaveMessageWithFolderDistribution(t *testing.T) {
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		mock.ExpectExec(`INSERT INTO profile_message`).
-			WithArgs(expectedSenderProfileID, expectedMessageID).
+			WithArgs(senderProfileID, expectedMessageID).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
 		mock.ExpectCommit()
 
-		messageID, err := repo.SaveMessageWithFolderDistribution(ctx, receiverEmail, senderBaseProfileID, topic, text)
+		messageID, err := repo.SaveMessageWithFolderDistribution(ctx, receiverEmail, senderProfileID, topic, text)
 
 		assert.NoError(t, err)
 		assert.Equal(t, expectedMessageID, messageID)
@@ -990,23 +972,18 @@ func TestMessageRepository_ReplyToMessageWithFolderDistribution(t *testing.T) {
 	text := "Reply Text"
 	expectedMessageID := int64(123)
 	expectedReceiverProfileID := int64(456)
-	expectedSenderBaseProfileID := int64(789)
 
 	t.Run("Success", func(t *testing.T) {
 		mock.ExpectBegin()
 
-		mock.ExpectQuery(`SELECT base_profile_id FROM profile WHERE id = \$1`).
-			WithArgs(senderProfileID).
-			WillReturnRows(sqlmock.NewRows([]string{"base_profile_id"}).AddRow(expectedSenderBaseProfileID))
-
 		mock.ExpectQuery(`INSERT INTO message`).
-			WithArgs(topic, text, sqlmock.AnyArg(), expectedSenderBaseProfileID, threadRoot).
+			WithArgs(topic, text, sqlmock.AnyArg(), senderProfileID, threadRoot).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(expectedMessageID))
 
 		username := strings.Split(receiverEmail, "@")[0]
 		domain := strings.Split(receiverEmail, "@")[1]
 
-		mock.ExpectQuery(`SELECT p.id FROM profile p`).
+		mock.ExpectQuery(`SELECT id FROM profile`).
 			WithArgs(username, domain).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(expectedReceiverProfileID))
 
@@ -1091,7 +1068,7 @@ func TestMessageRepository_FindThreadsByProfileID(t *testing.T) {
         JOIN
             profile_message pm ON m.id = pm.message_id AND pm.profile_id = p.id
         WHERE
-            p.base_profile_id = $1
+            p.id = $1
         GROUP BY 
             t.id, t.root_message_id
         ORDER BY

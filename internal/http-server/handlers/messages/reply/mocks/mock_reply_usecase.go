@@ -50,18 +50,18 @@ func (mr *MockMessageUsecaseMockRecorder) SaveFile(ctx, messageID, fileName, fil
 }
 
 // SaveMessage mocks base method.
-func (m *MockMessageUsecase) SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error) {
+func (m *MockMessageUsecase) SaveMessage(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SaveMessage", ctx, receiverProfileEmail, senderBaseProfileID, topic, text)
+	ret := m.ctrl.Call(m, "SaveMessage", ctx, receiverProfileEmail, senderProfileID, topic, text)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SaveMessage indicates an expected call of SaveMessage.
-func (mr *MockMessageUsecaseMockRecorder) SaveMessage(ctx, receiverProfileEmail, senderBaseProfileID, topic, text interface{}) *gomock.Call {
+func (mr *MockMessageUsecaseMockRecorder) SaveMessage(ctx, receiverProfileEmail, senderProfileID, topic, text interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveMessage", reflect.TypeOf((*MockMessageUsecase)(nil).SaveMessage), ctx, receiverProfileEmail, senderBaseProfileID, topic, text)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveMessage", reflect.TypeOf((*MockMessageUsecase)(nil).SaveMessage), ctx, receiverProfileEmail, senderProfileID, topic, text)
 }
 
 // SaveThreadIdToMessage mocks base method.

@@ -27,13 +27,11 @@ func (repo *ProfileRepository) FindByID(ctx context.Context, id int64) (*domain.
 
 	const query = `
 		SELECT 
-			p.id, bp.username, bp.domain, bp.created_at,
+			p.id, p.username, p.domain, p.created_at,
 			p.password_hash, p.auth_version, p.name, p.surname, 
 			p.patronymic, p.gender, p.birthday, p.image_path
 		FROM 
-			base_profile bp
-		JOIN 
-			profile p ON bp.id = p.base_profile_id
+			profile p
 		WHERE 
 			p.id = $1`
 
@@ -85,12 +83,10 @@ func (repo *ProfileRepository) FindSenderByID(ctx context.Context, id int64) (*d
 
 	const query = `
 		SELECT 
-			p.id, bp.username, bp.domain, 
+			p.id, p.username, p.domain, 
 			p.name, p.surname, p.image_path
 		FROM 
-			base_profile bp
-		LEFT JOIN 
-			profile p ON bp.id = p.base_profile_id
+			profile p
 		WHERE 
 			p.id = $1`
 
@@ -142,7 +138,7 @@ func (repo *ProfileRepository) UserExists(ctx context.Context, username string) 
 	const query = `
 		SELECT EXISTS (
 			SELECT 1
-			FROM base_profile 
+			FROM profile 
 			WHERE username = $1 AND domain = 'flintmail.ru'
 		)`
 
@@ -179,33 +175,12 @@ func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Pr
 	}
 	defer tx.Rollback()
 
-	const query1 = `
-		INSERT INTO base_profile (username, domain)
-    	VALUES ($1, $2) 
-		RETURNING id;
-		`
-	stmt, err := tx.PrepareContext(ctx, query1)
-	if err != nil {
-		return 0, e.Wrap(op, err)
-	}
-	defer stmt.Close()
-
-	var newBaseProfileId int64
-
-	log.Debug("Executing CreateBaseProfile query...")
-	err = stmt.QueryRowContext(ctx, profile.Username, profile.Domain).Scan(
-		&newBaseProfileId,
-	)
-	if err != nil {
-		return 0, e.Wrap(op+": failed to create base profile: ", err)
-	}
-
 	const query2 = `
-		INSERT INTO profile (base_profile_id, password_hash, name, surname, patronymic, gender, birthday)
-    	VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO profile (username, domain, password_hash, name, surname, patronymic, gender, birthday)
+    	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id;
 		`
-	stmt, err = tx.PrepareContext(ctx, query2)
+	stmt, err := tx.PrepareContext(ctx, query2)
 	if err != nil {
 		return 0, e.Wrap(op, err)
 	}
@@ -214,7 +189,7 @@ func (repo *ProfileRepository) CreateUser(ctx context.Context, profile domain.Pr
 	var newProfileId int64
 
 	log.Debug("Executing CreateProfile query...")
-	err = stmt.QueryRowContext(ctx, newBaseProfileId, profile.PasswordHash, profile.Name, profile.Surname, profile.Patronymic, profile.Gender, profile.Birthday).Scan(
+	err = stmt.QueryRowContext(ctx, profile.Username, profile.Domain, profile.PasswordHash, profile.Name, profile.Surname, profile.Patronymic, profile.Gender, profile.Birthday).Scan(
 		&newProfileId,
 	)
 
@@ -274,15 +249,13 @@ func (repo *ProfileRepository) FindByUsernameAndDomain(ctx context.Context, user
 
 	const query = `
 		SELECT 
-			p.id, bp.created_at,
+			p.id, p.created_at,
 			p.password_hash, p.auth_version, p.name, p.surname, 
 			p.patronymic, p.gender, p.birthday, p.image_path
 		FROM 
-			base_profile bp
-		JOIN 
-			profile p ON bp.id = p.base_profile_id
+			profile p
 		WHERE 
-			bp.username = $1 AND bp.domain = $2`
+			p.username = $1 AND p.domain = $2`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)
 	if err != nil {
@@ -338,13 +311,11 @@ func (repo *ProfileRepository) FindInfoByID(ctx context.Context, profileID int64
 
 	const query = `
 		SELECT 
-			p.id, bp.username, bp.created_at,
+			p.id, p.username, p.created_at,
 			p.name, p.surname, 
 			p.patronymic, p.gender, p.birthday, p.image_path
 		FROM 
-			base_profile bp
-		JOIN 
-			profile p ON bp.id = p.base_profile_id
+			profile p
 		WHERE 
 			p.id = $1`
 
@@ -397,9 +368,7 @@ func (repo *ProfileRepository) FindSettingsByProfileId(ctx context.Context, prof
             s.id, s.profile_id, s.notification_tolerance, s.language, s.theme, s.signature,
             p.id as actual_profile_id
         FROM 
-            base_profile bp
-        JOIN 
-            profile p ON bp.id = p.base_profile_id
+            profile p
         LEFT JOIN 
             settings s ON p.id = s.profile_id
         WHERE 
@@ -465,7 +434,7 @@ func (repo *ProfileRepository) UpdateProfileInfo(ctx context.Context, profileID 
 			patronymic = $3,
 			gender = $4,
 			birthday = $5
-		WHERE base_profile_id = $6
+		WHERE id = $6
 	`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)
@@ -503,7 +472,7 @@ func (repo *ProfileRepository) InsertProfileAvatar(ctx context.Context, profileI
 	const query = `
 		UPDATE profile
 		SET image_path = $1
-		WHERE base_profile_id = $2
+		WHERE id = $2
 		`
 
 	stmt, err := repo.db.PrepareContext(ctx, query)

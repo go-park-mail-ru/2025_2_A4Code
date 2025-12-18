@@ -17,7 +17,7 @@ import (
 )
 
 type MessageUsecase interface {
-	SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
+	SaveMessage(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error)
 	SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
 	SaveThreadIdToMessage(ctx context.Context, messageID int64, threadID int64) error
 	SaveThread(ctx context.Context, messageID int64) (threadID int64, err error)

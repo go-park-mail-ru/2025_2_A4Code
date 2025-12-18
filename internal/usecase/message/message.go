@@ -10,7 +10,7 @@ type MessageRepository interface {
 	// базовые методы для сообщений
 	FindByMessageID(ctx context.Context, messageID int64) (*domain.Message, error)
 	FindFullByMessageID(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
-	SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
+	SaveMessage(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error)
 	GetProfileEmail(ctx context.Context, profileID int64) (string, error)
 	EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error)
 	EnsureProfileForBase(ctx context.Context, baseProfileID int64, displayName string) error
@@ -47,7 +47,7 @@ type MessageRepository interface {
 	GetFolderMessagesInfo(ctx context.Context, profileID, folderID int64) (domain.Messages, error)
 
 	// методы для отправки сообщений с автоматическим распределением по папкам
-	SaveMessageWithFolderDistribution(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
+	SaveMessageWithFolderDistribution(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error)
 	ReplyToMessageWithFolderDistribution(ctx context.Context, receiverEmail string, senderProfileID int64, threadRoot int64, topic, text string) (int64, error)
 }
 
@@ -68,8 +68,8 @@ func (uc *MessageUcase) FindFullByMessageID(ctx context.Context, messageID int64
 	return uc.repo.FindFullByMessageID(ctx, messageID, profileID)
 }
 
-func (uc *MessageUcase) SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (messageID int64, err error) {
-	return uc.repo.SaveMessage(ctx, receiverProfileEmail, senderBaseProfileID, topic, text)
+func (uc *MessageUcase) SaveMessage(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (messageID int64, err error) {
+	return uc.repo.SaveMessage(ctx, receiverProfileEmail, senderProfileID, topic, text)
 }
 
 func (uc *MessageUcase) EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error) {

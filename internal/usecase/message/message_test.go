@@ -15,7 +15,10 @@ type MockMessageRepository struct {
 	FindByMessageIDFn                                 func(ctx context.Context, messageID int64) (*domain.Message, error)
 	FindByProfileIDFn                                 func(ctx context.Context, profileID int64) ([]domain.Message, error)
 	FindFullByMessageIDFn                             func(ctx context.Context, messageID int64, profileID int64) (domain.FullMessage, error)
-	SaveMessageFn                                     func(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
+	SaveMessageFn                                     func(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error)
+	GetProfileEmailFn                                 func(ctx context.Context, profileID int64) (string, error)
+	EnsureBaseProfileFn                               func(ctx context.Context, username, domain string) (int64, error)
+	EnsureProfileForBaseFn                            func(ctx context.Context, baseProfileID int64, displayName string) error
 	SaveFileFn                                        func(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error)
 	SaveThreadFn                                      func(ctx context.Context, messageID int64) (threadID int64, err error)
 	SaveThreadIdToMessageFn                           func(ctx context.Context, messageID int64, threadID int64) error
@@ -42,8 +45,9 @@ type MockMessageRepository struct {
 	DeleteMessageFromFolderFn                         func(ctx context.Context, profileID, messageID, folderID int64) error
 	GetFolderMessagesWithKeysetPaginationFn           func(ctx context.Context, profileID, folderID, lastMessageID int64, lastDatetime time.Time, limit int) ([]domain.Message, error)
 	GetFolderMessagesInfoFn                           func(ctx context.Context, profileID, folderID int64) (domain.Messages, error)
-	SaveMessageWithFolderDistributionFn               func(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error)
+	SaveMessageWithFolderDistributionFn               func(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error)
 	ReplyToMessageWithFolderDistributionFn            func(ctx context.Context, receiverEmail string, senderProfileID int64, threadRoot int64, topic, text string) (int64, error)
+	SaveOutgoingExternalMessageFn                     func(ctx context.Context, senderProfileID int64, topic, text string) (int64, error)
 }
 
 func (m *MockMessageRepository) FindByMessageID(ctx context.Context, messageID int64) (*domain.Message, error) {
@@ -64,11 +68,29 @@ func (m *MockMessageRepository) FindFullByMessageID(ctx context.Context, message
 	}
 	return domain.FullMessage{}, nil
 }
-func (m *MockMessageRepository) SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error) {
+func (m *MockMessageRepository) SaveMessage(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error) {
 	if m.SaveMessageFn != nil {
-		return m.SaveMessageFn(ctx, receiverProfileEmail, senderBaseProfileID, topic, text)
+		return m.SaveMessageFn(ctx, receiverProfileEmail, senderProfileID, topic, text)
 	}
 	return 0, nil
+}
+func (m *MockMessageRepository) GetProfileEmail(ctx context.Context, profileID int64) (string, error) {
+	if m.GetProfileEmailFn != nil {
+		return m.GetProfileEmailFn(ctx, profileID)
+	}
+	return "", nil
+}
+func (m *MockMessageRepository) EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error) {
+	if m.EnsureBaseProfileFn != nil {
+		return m.EnsureBaseProfileFn(ctx, username, domain)
+	}
+	return 0, nil
+}
+func (m *MockMessageRepository) EnsureProfileForBase(ctx context.Context, baseProfileID int64, displayName string) error {
+	if m.EnsureProfileForBaseFn != nil {
+		return m.EnsureProfileForBaseFn(ctx, baseProfileID, displayName)
+	}
+	return nil
 }
 func (m *MockMessageRepository) SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (fileID int64, err error) {
 	if m.SaveFileFn != nil {
@@ -243,9 +265,9 @@ func (m *MockMessageRepository) GetFolderMessagesInfo(ctx context.Context, profi
 	return domain.Messages{}, nil
 }
 
-func (m *MockMessageRepository) SaveMessageWithFolderDistribution(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error) {
+func (m *MockMessageRepository) SaveMessageWithFolderDistribution(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error) {
 	if m.SaveMessageWithFolderDistributionFn != nil {
-		return m.SaveMessageWithFolderDistributionFn(ctx, receiverProfileEmail, senderBaseProfileID, topic, text)
+		return m.SaveMessageWithFolderDistributionFn(ctx, receiverProfileEmail, senderProfileID, topic, text)
 	}
 	return 0, nil
 }
@@ -253,6 +275,12 @@ func (m *MockMessageRepository) SaveMessageWithFolderDistribution(ctx context.Co
 func (m *MockMessageRepository) ReplyToMessageWithFolderDistribution(ctx context.Context, receiverEmail string, senderProfileID int64, threadRoot int64, topic, text string) (int64, error) {
 	if m.ReplyToMessageWithFolderDistributionFn != nil {
 		return m.ReplyToMessageWithFolderDistributionFn(ctx, receiverEmail, senderProfileID, threadRoot, topic, text)
+	}
+	return 0, nil
+}
+func (m *MockMessageRepository) SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error) {
+	if m.SaveOutgoingExternalMessageFn != nil {
+		return m.SaveOutgoingExternalMessageFn(ctx, senderProfileID, topic, text)
 	}
 	return 0, nil
 }
@@ -343,7 +371,7 @@ func TestMessageUcase_SaveMessage(t *testing.T) {
 	type args struct {
 		ctx                  context.Context
 		receiverProfileEmail string
-		senderBaseProfileID  int64
+		senderProfileID      int64
 		topic                string
 		text                 string
 	}
@@ -358,12 +386,12 @@ func TestMessageUcase_SaveMessage(t *testing.T) {
 			name: "Success",
 			fields: fields{
 				repo: &MockMessageRepository{
-					SaveMessageFn: func(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error) {
+					SaveMessageFn: func(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error) {
 						return 123, nil
 					},
 				},
 			},
-			args:    args{ctx: context.Background(), receiverProfileEmail: "test@test.com", senderBaseProfileID: 1, topic: "Test", text: "Hello"},
+			args:    args{ctx: context.Background(), receiverProfileEmail: "test@test.com", senderProfileID: 1, topic: "Test", text: "Hello"},
 			want:    123,
 			wantErr: false,
 		},
@@ -371,12 +399,12 @@ func TestMessageUcase_SaveMessage(t *testing.T) {
 			name: "Failure",
 			fields: fields{
 				repo: &MockMessageRepository{
-					SaveMessageFn: func(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error) {
+					SaveMessageFn: func(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error) {
 						return 0, mockError
 					},
 				},
 			},
-			args:    args{ctx: context.Background(), receiverProfileEmail: "test@test.com", senderBaseProfileID: 1, topic: "Test", text: "Hello"},
+			args:    args{ctx: context.Background(), receiverProfileEmail: "test@test.com", senderProfileID: 1, topic: "Test", text: "Hello"},
 			want:    0,
 			wantErr: true,
 		},
@@ -386,7 +414,7 @@ func TestMessageUcase_SaveMessage(t *testing.T) {
 			uc := &MessageUcase{
 				repo: tt.fields.repo,
 			}
-			got, err := uc.SaveMessage(tt.args.ctx, tt.args.receiverProfileEmail, tt.args.senderBaseProfileID, tt.args.topic, tt.args.text)
+			got, err := uc.SaveMessage(tt.args.ctx, tt.args.receiverProfileEmail, tt.args.senderProfileID, tt.args.topic, tt.args.text)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SaveMessage() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -1689,7 +1717,7 @@ func TestMessageUcase_SendMessage(t *testing.T) {
 			name: "Success",
 			fields: fields{
 				repo: &MockMessageRepository{
-					SaveMessageWithFolderDistributionFn: func(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error) {
+					SaveMessageWithFolderDistributionFn: func(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error) {
 						return 999, nil
 					},
 				},
@@ -1702,7 +1730,7 @@ func TestMessageUcase_SendMessage(t *testing.T) {
 			name: "Failure",
 			fields: fields{
 				repo: &MockMessageRepository{
-					SaveMessageWithFolderDistributionFn: func(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error) {
+					SaveMessageWithFolderDistributionFn: func(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error) {
 						return 0, mockError
 					},
 				},

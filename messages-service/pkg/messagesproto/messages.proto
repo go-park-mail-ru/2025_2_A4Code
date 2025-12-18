@@ -58,6 +58,19 @@ message MessagesInfo {
   string message_unread = 2;
 }
 
+message IngestRequest {
+  string sender_email = 1;
+  string sender_name = 2;
+  repeated string receivers = 3;
+  string subject = 4;
+  string text = 5;
+  repeated File files = 6;
+}
+
+message IngestResponse {
+  repeated string message_ids = 1;
+}
+
 service MessagesService {
   // Основные методы для сообщений
   rpc Inbox(InboxRequest) returns (InboxResponse);
@@ -65,6 +78,7 @@ service MessagesService {
   rpc Reply(ReplyRequest) returns (ReplyResponse);
   rpc Send(SendRequest) returns (SendResponse);
   rpc Sent(SentRequest) returns (SentResponse);
+  rpc Ingest(IngestRequest) returns (IngestResponse);
 
   // Методы для работы с сообщениями
   rpc MarkAsSpam(MarkAsSpamRequest) returns (MarkAsSpamResponse);

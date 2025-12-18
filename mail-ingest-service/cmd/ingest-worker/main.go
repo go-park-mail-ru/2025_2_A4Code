@@ -5,7 +5,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,24 +14,28 @@ import (
 	"net/mail"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
-	messageRepository "2025_2_a4code/internal/storage/postgres/message-repository"
-	"2025_2_a4code/internal/usecase/message"
+	pb "2025_2_a4code/messages-service/pkg/messagesproto"
 
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 type config struct {
 	MailDBDSN         string
-	MainDBDSN         string
 	Minio             minioConfig
 	BucketName        string
 	AttachmentsBucket string
 	DomainFilter      string
+	MessagesGRPCAddr  string
+	IngestSecret      string
 }
 
 type minioConfig struct {
@@ -53,7 +56,6 @@ func loadConfig() config {
 	return config{
 		// Локальный запуск по умолчанию смотрит на проброшенные порты docker-compose.
 		MailDBDSN: envOr("MAIL_DB_DSN", "postgres://postgres:postgresql@localhost:8017/maildb?sslmode=disable"),
-		MainDBDSN: envOr("MAIN_DB_DSN", "postgres://postgres:postgresql@localhost:8004/a4code_db?sslmode=disable"),
 		Minio: minioConfig{
 			Endpoint:  envOr("MAIL_MINIO_ENDPOINT", "localhost:8005"),
 			AccessKey: envOr("MAIL_MINIO_USER", "minio"),
@@ -63,6 +65,8 @@ func loadConfig() config {
 		BucketName:        envOr("MAIL_MINIO_BUCKET", "mail-ingest"),
 		AttachmentsBucket: envOr("MAIL_MINIO_ATTACHMENTS_BUCKET", "attachments"),
 		DomainFilter:      envOr("INGEST_DOMAIN", "flintmail.ru"),
+		MessagesGRPCAddr:  envOr("MESSAGES_GRPC_ADDR", "localhost:8002"),
+		IngestSecret:      envOr("INGEST_SECRET", "secret"),
 	}
 }
 
@@ -72,6 +76,22 @@ type ingestMessage struct {
 	RcptTo  string
 	Subject string
 	Path    string
+}
+
+type ingestPayload struct {
+	SenderEmail string        `json:"sender_email"`
+	SenderName  string        `json:"sender_name"`
+	Receivers   []string      `json:"receivers"`
+	Subject     string        `json:"subject"`
+	Text        string        `json:"text"`
+	Files       []ingestFile  `json:"files"`
+}
+
+type ingestFile struct {
+	Name        string `json:"name"`
+	FileType    string `json:"file_type"`
+	Size        int64  `json:"size"`
+	StoragePath string `json:"storage_path"`
 }
 
 func main() {
@@ -92,13 +112,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	mainDB, err := sql.Open("pgx", cfg.MainDBDSN)
-	if err != nil {
-		log.Error("failed to connect main db", "err", err)
-		os.Exit(1)
-	}
-	defer mainDB.Close()
-
 	minioClient, err := minio.New(cfg.Minio.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.Minio.AccessKey, cfg.Minio.SecretKey, ""),
 		Secure: cfg.Minio.UseSSL,
@@ -112,18 +125,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	msgRepo := messageRepository.New(mainDB)
-	msgUcase := message.New(msgRepo)
+	conn, err := grpc.Dial(cfg.MessagesGRPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.WaitForReady(true)))
+	if err != nil {
+		log.Error("failed to dial messages-service", "err", err)
+		os.Exit(1)
+	}
+	defer conn.Close()
+
+	client := pb.NewMessagesServiceClient(conn)
 
 	for {
-		if err := processBatch(ctx, cfg, mailDB, mainDB, minioClient, msgUcase, log); err != nil {
+		if err := processBatch(ctx, cfg, mailDB, minioClient, client, log); err != nil {
 			log.Error("batch error", "err", err)
 		}
 		time.Sleep(2 * time.Second)
 	}
 }
 
-func processBatch(ctx context.Context, cfg config, mailDB, mainDB *sql.DB, minioClient *minio.Client, msgUcase *message.MessageUcase, log *slog.Logger) error {
+func processBatch(ctx context.Context, cfg config, mailDB *sql.DB, minioClient *minio.Client, client pb.MessagesServiceClient, log *slog.Logger) error {
 	rows, err := mailDB.QueryContext(ctx, `
 		SELECT id, mail_from, rcpt_to, subject, raw_path
 		FROM ingest_messages
@@ -150,7 +169,7 @@ func processBatch(ctx context.Context, cfg config, mailDB, mainDB *sql.DB, minio
 	}
 
 	for _, m := range msgs {
-		if err := handleMessage(ctx, cfg, mainDB, minioClient, msgUcase, m, log); err != nil {
+		if err := handleMessage(ctx, cfg, minioClient, client, m, log); err != nil {
 			log.Error("failed to handle message", "id", m.ID, "err", err)
 			continue
 		}
@@ -161,7 +180,7 @@ func processBatch(ctx context.Context, cfg config, mailDB, mainDB *sql.DB, minio
 	return nil
 }
 
-func handleMessage(ctx context.Context, cfg config, mainDB *sql.DB, minioClient *minio.Client, msgUcase *message.MessageUcase, m ingestMessage, log *slog.Logger) error {
+func handleMessage(ctx context.Context, cfg config, minioClient *minio.Client, client pb.MessagesServiceClient, m ingestMessage, log *slog.Logger) error {
 	raw, err := downloadRaw(ctx, minioClient, cfg.BucketName, m.Path)
 	if err != nil {
 		return fmt.Errorf("download raw: %w", err)
@@ -199,20 +218,15 @@ func handleMessage(ctx context.Context, cfg config, mainDB *sql.DB, minioClient 
 
 	senderDisplayName := strings.TrimSpace(addr.Name)
 	senderLocal, senderDomain := splitEmail(addr.Address)
-	senderBaseID, err := msgUcase.EnsureBaseProfile(ctx, senderLocal, senderDomain)
-	if err != nil {
-		return fmt.Errorf("ensure sender base profile: %w", err)
-	}
-	if err := msgUcase.EnsureProfileForBase(ctx, senderBaseID, senderDisplayName); err != nil {
-		log.Warn("failed to ensure sender profile name", "err", err)
-	}
-	senderProfileID, err := getProfileIDByBase(ctx, mainDB, senderBaseID)
-	if err != nil {
-		return fmt.Errorf("resolve sender profile id: %w", err)
+
+	payload := ingestPayload{
+		SenderEmail: fmt.Sprintf("%s@%s", senderLocal, senderDomain),
+		SenderName:  senderDisplayName,
+		Subject:     subject,
+		Text:        textBody,
 	}
 
 	rcpts := splitRcpts(m.RcptTo)
-	seen := make(map[string]struct{})
 	for _, rcpt := range rcpts {
 		rcptLocal, rcptDomain := splitEmail(rcpt)
 		if strings.ToLower(rcptDomain) != strings.ToLower(cfg.DomainFilter) {
@@ -221,43 +235,31 @@ func handleMessage(ctx context.Context, cfg config, mainDB *sql.DB, minioClient 
 		if rcptLocal == "" {
 			continue
 		}
-
 		receiverEmail := fmt.Sprintf("%s@%s", rcptLocal, rcptDomain)
-		key := strings.ToLower(strings.TrimSpace(receiverEmail))
-		if key == "" {
-			continue
-		}
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
+		payload.Receivers = append(payload.Receivers, receiverEmail)
+	}
 
-		// Пропускаем, если у нас нет такого пользователя.
-		exists, err := profileExists(ctx, mainDB, rcptLocal, rcptDomain)
+	for _, att := range attachments {
+		storagePath, size, ct, err := storeAttachment(ctx, minioClient, cfg.AttachmentsBucket, att)
 		if err != nil {
-			log.Warn("failed to check receiver existence", "email", receiverEmail, "err", err)
+			log.Warn("failed to store attachment", "err", err)
 			continue
 		}
-		if !exists {
-			log.Warn("receiver not found, skipping", "email", receiverEmail)
-			continue
-		}
+		payload.Files = append(payload.Files, ingestFile{
+			Name:        att.Name,
+			FileType:    ct,
+			Size:        size,
+			StoragePath: storagePath,
+		})
+	}
 
-		msgID, err := msgUcase.SaveMessage(ctx, receiverEmail, senderProfileID, subject, textBody)
-		if err != nil {
-			return fmt.Errorf("save message for %s: %w", receiverEmail, err)
-		}
+	if len(payload.Receivers) == 0 {
+		log.Warn("no receivers matched domain, skipping message", "from", payload.SenderEmail)
+		return nil
+	}
 
-		for _, att := range attachments {
-			storagePath, size, ct, err := storeAttachment(ctx, minioClient, cfg.AttachmentsBucket, att)
-			if err != nil {
-				log.Warn("failed to store attachment", "err", err)
-				continue
-			}
-			if _, err := msgUcase.SaveFile(ctx, msgID, att.Name, ct, storagePath, size); err != nil {
-				log.Warn("failed to save attachment record", "err", err)
-			}
-		}
+	if err := sendToMessagesService(ctx, cfg, client, payload, log); err != nil {
+		return fmt.Errorf("send to messages-service: %w", err)
 	}
 
 	return nil
@@ -273,37 +275,6 @@ func splitRcpts(rcpt string) []string {
 		}
 	}
 	return res
-}
-
-func getProfileIDByBase(ctx context.Context, db *sql.DB, baseID int64) (int64, error) {
-	var id int64
-	err := db.QueryRowContext(ctx, `
-		SELECT id FROM profile
-		WHERE base_profile_id = $1
-		ORDER BY id
-		LIMIT 1`, baseID).Scan(&id)
-	if err != nil {
-		return 0, err
-	}
-	return id, nil
-}
-
-func profileExists(ctx context.Context, db *sql.DB, username, domain string) (bool, error) {
-	var dummy int
-	err := db.QueryRowContext(ctx, `
-		SELECT 1
-		FROM profile p
-		JOIN base_profile bp ON p.base_profile_id = bp.id
-		WHERE bp.username = $1 AND bp.domain = $2
-		LIMIT 1`, strings.ToLower(strings.TrimSpace(username)), strings.ToLower(strings.TrimSpace(domain))).Scan(&dummy)
-	switch {
-	case err == nil:
-		return true, nil
-	case errors.Is(err, sql.ErrNoRows):
-		return false, nil
-	default:
-		return false, err
-	}
 }
 
 func splitEmail(email string) (string, string) {
@@ -554,6 +525,36 @@ func storeAttachment(ctx context.Context, client *minio.Client, bucket string, a
 		return "", 0, ct, err
 	}
 	return objectName, info.Size, ct, nil
+}
+
+func sendToMessagesService(ctx context.Context, cfg config, client pb.MessagesServiceClient, payload ingestPayload, log *slog.Logger) error {
+	var files []*pb.File
+	for _, f := range payload.Files {
+		files = append(files, &pb.File{
+			Name:        f.Name,
+			FileType:    f.FileType,
+			Size:        strconv.FormatInt(f.Size, 10),
+			StoragePath: f.StoragePath,
+		})
+	}
+
+	req := &pb.IngestRequest{
+		SenderEmail: payload.SenderEmail,
+		SenderName:  payload.SenderName,
+		Receivers:   payload.Receivers,
+		Subject:     payload.Subject,
+		Text:        payload.Text,
+		Files:       files,
+	}
+
+	md := metadata.New(nil)
+	if strings.TrimSpace(cfg.IngestSecret) != "" {
+		md.Set("ingest-secret", cfg.IngestSecret)
+	}
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
+	_, err := client.Ingest(ctx, req, grpc.WaitForReady(true))
+	return err
 }
 
 func sanitizeFileName(name string) string {

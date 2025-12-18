@@ -35,9 +35,19 @@ func (m *MockMessageUsecase) FindFullByMessageID(ctx context.Context, messageID 
 	return args.Get(0).(domain.FullMessage), args.Error(1)
 }
 
-func (m *MockMessageUsecase) SaveMessage(ctx context.Context, receiverProfileEmail string, senderBaseProfileID int64, topic, text string) (int64, error) {
-	args := m.Called(ctx, receiverProfileEmail, senderBaseProfileID, topic, text)
+func (m *MockMessageUsecase) SaveMessage(ctx context.Context, receiverProfileEmail string, senderProfileID int64, topic, text string) (int64, error) {
+	args := m.Called(ctx, receiverProfileEmail, senderProfileID, topic, text)
 	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockMessageUsecase) EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error) {
+	args := m.Called(ctx, username, domain)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockMessageUsecase) EnsureProfileForBase(ctx context.Context, baseProfileID int64, displayName string) error {
+	args := m.Called(ctx, baseProfileID, displayName)
+	return args.Error(0)
 }
 
 func (m *MockMessageUsecase) SaveFile(ctx context.Context, messageID int64, fileName, fileType, storagePath string, size int64) (int64, error) {
@@ -88,6 +98,21 @@ func (m *MockMessageUsecase) IsDraftBelongsToUser(ctx context.Context, draftID, 
 func (m *MockMessageUsecase) DeleteDraft(ctx context.Context, draftID, profileID int64) error {
 	args := m.Called(ctx, draftID, profileID)
 	return args.Error(0)
+}
+
+func (m *MockMessageUsecase) EnsureBaseProfile(ctx context.Context, username, domain string) (int64, error) {
+	args := m.Called(ctx, username, domain)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockMessageUsecase) EnsureProfileForBase(ctx context.Context, baseProfileID int64, displayName string) error {
+	args := m.Called(ctx, baseProfileID, displayName)
+	return args.Error(0)
+}
+
+func (m *MockMessageUsecase) GetProfileEmail(ctx context.Context, profileID int64) (string, error) {
+	args := m.Called(ctx, profileID)
+	return args.String(0), args.Error(1)
 }
 
 func (m *MockMessageUsecase) SendDraft(ctx context.Context, draftID, profileID int64) error {
@@ -189,7 +214,7 @@ func setupTestServer() (*Server, *MockMessageUsecase, *MockAvatarUsecase) {
 	mockMessageUsecase := &MockMessageUsecase{}
 	mockAvatarUsecase := &MockAvatarUsecase{}
 	jwtSecret := []byte("test-secret-key-very-long-for-testing")
-	server := New(mockMessageUsecase, mockAvatarUsecase, jwtSecret)
+	server := New(mockMessageUsecase, mockAvatarUsecase, jwtSecret, nil, "", "")
 	return server, mockMessageUsecase, mockAvatarUsecase
 }
 

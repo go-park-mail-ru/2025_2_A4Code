@@ -105,8 +105,21 @@ func MessagesInit() {
 		),
 	)
 
-	messagesService := messagesservice.New(messageUCase, avatarUCase, SECRET, client, attachmentsBucket)
+	messagesService := messagesservice.New(messageUCase, avatarUCase, SECRET, client, attachmentsBucket, cfg.AppConfig.IngestSecret)
 	pb.RegisterMessagesServiceServer(grpcServer, messagesService)
+
+	ingestPort := strings.TrimSpace(cfg.AppConfig.IngestPort)
+	if ingestPort == "" {
+		ingestPort = "8016"
+	}
+	go func() {
+		addr := ":" + ingestPort
+		log.Info("Starting ingest HTTP endpoint", "addr", addr)
+		handler := newIngestHandler(cfg.AppConfig.IngestSecret, messageUCase, log)
+		if err := http.ListenAndServe(addr, handler); err != nil {
+			log.Error("ingest http server failed: " + err.Error())
+		}
+	}()
 
 	lis, err := net.Listen("tcp", cfg.AppConfig.Host+":"+cfg.AppConfig.MessagesPort)
 	if err != nil {

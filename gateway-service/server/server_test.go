@@ -99,6 +99,14 @@ type MockMessageClient struct {
 	mock.Mock
 }
 
+func (m *MockMessageClient) Ingest(ctx context.Context, in *messagesproto.IngestRequest, opts ...grpc.CallOption) (*messagesproto.IngestResponse, error) {
+	args := m.Called(ctx, in)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*messagesproto.IngestResponse), args.Error(1)
+}
+
 func (m *MockMessageClient) Inbox(ctx context.Context, in *messagesproto.InboxRequest, opts ...grpc.CallOption) (*messagesproto.InboxResponse, error) {
 	args := m.Called(ctx, in)
 	if args.Get(0) == nil {
