@@ -76,7 +76,7 @@ type MessageUsecase interface {
 	DeleteDraft(ctx context.Context, draftID, profileID int64) error
 	SendDraft(ctx context.Context, draftID, profileID int64) error
 	GetDraft(ctx context.Context, draftID, profileID int64) (domain.FullMessage, error)
-	SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error)
+	SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string, receivers []string) (int64, error)
 	GetProfileEmail(ctx context.Context, profileID int64) (string, error)
 
 	// методы для папок
@@ -292,7 +292,7 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
 				return nil, status.Error(codes.Internal, "could not send external reply")
 			}
-			msgID, err := s.messageUCase.SaveOutgoingExternalMessage(ctx, profileID, safeTopic, safeText)
+			msgID, err := s.messageUCase.SaveOutgoingExternalMessage(ctx, profileID, safeTopic, safeText, []string{email})
 			if err != nil {
 				log.Error(op + ": failed to save external outgoing reply: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
@@ -399,7 +399,7 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 				return nil, status.Error(codes.Internal, "could not send external message")
 			}
 
-			msgID, err := s.messageUCase.SaveOutgoingExternalMessage(ctx, profileID, safeTopic, safeText)
+			msgID, err := s.messageUCase.SaveOutgoingExternalMessage(ctx, profileID, safeTopic, safeText, []string{email})
 			if err != nil {
 				log.Error(op + ": failed to save external outgoing message: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
@@ -459,7 +459,7 @@ func (s *Server) Ingest(ctx context.Context, req *pb.IngestRequest) (*pb.IngestR
 
 	senderProfileID, err := s.messageUCase.EnsureBaseProfile(ctx, senderUser, senderDomain)
 	if err != nil {
-		log.Error(op+": failed to ensure sender profile: "+err.Error())
+		log.Error(op + ": failed to ensure sender profile: " + err.Error())
 		return nil, status.Error(codes.Internal, "could not ensure sender")
 	}
 	if err := s.messageUCase.EnsureProfileForBase(ctx, senderProfileID, req.SenderName); err != nil {

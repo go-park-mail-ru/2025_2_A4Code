@@ -32,7 +32,7 @@ type MessageRepository interface {
 	DeleteDraft(ctx context.Context, draftID, profileID int64) error
 	SendDraft(ctx context.Context, draftID, profileID int64) error
 	GetDraft(ctx context.Context, draftID, profileID int64) (domain.FullMessage, error)
-	SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error)
+	SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string, receivers []string) (int64, error)
 
 	// методы для папок
 	MoveToFolder(ctx context.Context, profileID, messageID, folderID int64) error
@@ -127,8 +127,8 @@ func (uc *MessageUcase) GetDraft(ctx context.Context, draftID, profileID int64) 
 	return uc.repo.GetDraft(ctx, draftID, profileID)
 }
 
-func (uc *MessageUcase) SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error) {
-	return uc.repo.SaveOutgoingExternalMessage(ctx, senderProfileID, topic, text)
+func (uc *MessageUcase) SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string, receivers []string) (int64, error) {
+	return uc.repo.SaveOutgoingExternalMessage(ctx, senderProfileID, topic, text, receivers)
 }
 
 func (uc *MessageUcase) GetProfileEmail(ctx context.Context, profileID int64) (string, error) {

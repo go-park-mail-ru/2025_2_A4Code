@@ -91,8 +91,8 @@ func (repo *MessageRepository) GetProfileEmail(ctx context.Context, profileID in
 	return fmt.Sprintf("%s@%s", username, domain), nil
 }
 
-// SaveOutgoingExternalMessage stores a message from senderProfileID into sender's sent folder without resolving receiver.
-func (repo *MessageRepository) SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string) (int64, error) {
+// SaveOutgoingExternalMessage stores a message from senderProfileID into sender's sent folder and remembers external receivers.
+func (repo *MessageRepository) SaveOutgoingExternalMessage(ctx context.Context, senderProfileID int64, topic, text string, receivers []string) (int64, error) {
 	const op = "storage.postgresql.message.SaveOutgoingExternalMessage"
 	log := logger.GetLogger(ctx).With(slog.String("op", op))
 
@@ -144,6 +144,22 @@ func (repo *MessageRepository) SaveOutgoingExternalMessage(ctx context.Context, 
 		senderProfileID, messageID)
 	if err != nil {
 		return 0, e.Wrap(op+": failed to insert profile_message for sender: ", err)
+	}
+
+	if len(receivers) > 0 {
+		insertExternalReceiver := `
+        INSERT INTO external_message_receiver (message_id, email)
+        VALUES ($1, $2)
+        ON CONFLICT DO NOTHING`
+		for _, rcpt := range receivers {
+			email := strings.ToLower(strings.TrimSpace(rcpt))
+			if email == "" {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, insertExternalReceiver, messageID, email); err != nil {
+				return 0, e.Wrap(op+": failed to insert external receiver: ", err)
+			}
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -343,9 +359,12 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 
 	msg.Files = files
 
-	// Получаем получателей (другие владельцы папок этого письма)
+	// Получаем получателей (другие владельцы папок этого письма + внешние адресаты).
+	receiversSet := make(map[string]struct{})
+	normalizedSender := strings.ToLower(strings.TrimSpace(msg.Sender.Email))
+
 	receiversRows, err := repo.db.QueryContext(ctx, `
-        SELECT DISTINCT p.username, p.domain
+        SELECT DISTINCT LOWER(p.username) || '@' || LOWER(p.domain) AS email
         FROM folder_profile_message fpm
         JOIN folder f ON fpm.folder_id = f.id
         JOIN profile p ON f.profile_id = p.id
@@ -356,15 +375,38 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 	defer receiversRows.Close()
 
 	for receiversRows.Next() {
-		var username, domainStr string
-		if err := receiversRows.Scan(&username, &domainStr); err != nil {
+		var email string
+		if err := receiversRows.Scan(&email); err != nil {
 			return domain.FullMessage{}, e.Wrap(op, err)
 		}
-		username = strings.TrimSpace(username)
-		domainStr = strings.TrimSpace(domainStr)
-		if username != "" && domainStr != "" {
-			msg.Receivers = append(msg.Receivers, fmt.Sprintf("%s@%s", username, domainStr))
+		email = strings.ToLower(strings.TrimSpace(email))
+		if email != "" && email != normalizedSender {
+			receiversSet[email] = struct{}{}
 		}
+	}
+
+	externalRows, err := repo.db.QueryContext(ctx, `
+        SELECT email
+        FROM external_message_receiver
+        WHERE message_id = $1`, messageID)
+	if err != nil {
+		return domain.FullMessage{}, e.Wrap(op, err)
+	}
+	defer externalRows.Close()
+
+	for externalRows.Next() {
+		var email string
+		if err := externalRows.Scan(&email); err != nil {
+			return domain.FullMessage{}, e.Wrap(op, err)
+		}
+		email = strings.ToLower(strings.TrimSpace(email))
+		if email != "" && email != normalizedSender {
+			receiversSet[email] = struct{}{}
+		}
+	}
+
+	for email := range receiversSet {
+		msg.Receivers = append(msg.Receivers, email)
 	}
 
 	if err := tx.Commit(); err != nil {
