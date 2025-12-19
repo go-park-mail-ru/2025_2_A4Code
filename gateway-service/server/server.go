@@ -358,7 +358,47 @@ func (s *Server) messagePageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondSuccess(w, resp)
+	msg := resp.GetMessage()
+	if msg == nil {
+		respondSuccess(w, map[string]interface{}{"message": nil})
+		return
+	}
+
+	receivers := make([]map[string]string, 0, len(msg.Receivers))
+	for _, r := range msg.Receivers {
+		receivers = append(receivers, map[string]string{"email": r.GetEmail()})
+	}
+
+	files := make([]map[string]string, 0, len(msg.Files))
+	for _, f := range msg.Files {
+		files = append(files, map[string]string{
+			"name":         f.GetName(),
+			"file_type":    f.GetFileType(),
+			"size":         f.GetSize(),
+			"storage_path": f.GetStoragePath(),
+		})
+	}
+
+	var sender map[string]string
+	if s := msg.GetSender(); s != nil {
+		sender = map[string]string{
+			"email":    s.GetEmail(),
+			"username": s.GetUsername(),
+			"avatar":   s.GetAvatar(),
+		}
+	}
+
+	respondSuccess(w, map[string]interface{}{
+		"message": map[string]interface{}{
+			"topic":     msg.GetTopic(),
+			"text":      msg.GetText(),
+			"datetime":  msg.GetDatetime(),
+			"thread_id": msg.GetThreadId(),
+			"sender":    sender,
+			"files":     files,
+			"receivers": receivers,
+		},
+	})
 }
 
 func (s *Server) replyHandler(w http.ResponseWriter, r *http.Request) {
