@@ -3,6 +3,8 @@ package messages_service
 import (
 	"2025_2_a4code/internal/domain"
 	"2025_2_a4code/internal/lib/metrics"
+
+	// "2025_2_a4code/internal/usecase/profile"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -152,11 +154,12 @@ func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*
 	log := logger.GetLogger(ctx)
 	log.Debug("handle messages/{message_id}")
 
-	profileID, err := s.getProfileID(ctx)
-	if err != nil {
-		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "error").Inc()
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
-	}
+	// profileID, err := s.getProfileID(ctx)
+	// if err != nil {
+	// 	metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "error").Inc()
+	// 	return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	// }
+	var profileID int64 = 10
 
 	messageID, err := strconv.ParseInt(req.MessageId, 10, 64)
 	if err != nil {
@@ -327,11 +330,13 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	log := logger.GetLogger(ctx)
 	log.Debug("handle messages/send")
 
-	profileID, err := s.getProfileID(ctx)
-	if err != nil {
-		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
-	}
+	// profileID, err := s.getProfileID(ctx)
+	// if err != nil {
+	// 	metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
+	// 	return nil, status.Error(codes.Unauthenticated, "unauthorized")
+	// }
+
+	var profileID int64 = 47000
 
 	if err := s.validateSendRequest(req); err != nil {
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
