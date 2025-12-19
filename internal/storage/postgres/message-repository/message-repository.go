@@ -345,11 +345,11 @@ func (repo *MessageRepository) FindFullByMessageID(ctx context.Context, messageI
 
 	// Получаем получателей (другие владельцы папок этого письма)
 	receiversRows, err := repo.db.QueryContext(ctx, `
-        SELECT p.username, p.domain
+        SELECT DISTINCT p.username, p.domain
         FROM folder_profile_message fpm
         JOIN folder f ON fpm.folder_id = f.id
         JOIN profile p ON f.profile_id = p.id
-        WHERE fpm.message_id = $1 AND f.profile_id <> $2`, messageID, profileID)
+        WHERE fpm.message_id = $1`, messageID)
 	if err != nil {
 		return domain.FullMessage{}, e.Wrap(op, err)
 	}
