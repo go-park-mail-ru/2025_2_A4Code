@@ -135,12 +135,12 @@ func New(messageUCase MessageUsecase, avatarUCase AvatarUsecase, secret []byte, 
 func (s *Server) getProfileID(ctx context.Context) (int64, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return 0, status.Error(codes.Unauthenticated, "metadata is not provided")
+		return 0, status.Error(codes.Unauthenticated, "Метаданные отсутствуют")
 	}
 
 	tokens := md.Get("authorization")
 	if len(tokens) == 0 {
-		return 0, status.Error(codes.Unauthenticated, "authorization token is not provided")
+		return 0, status.Error(codes.Unauthenticated, "Отсутствует токен авторизации")
 	}
 
 	tokenString := strings.TrimPrefix(tokens[0], "Bearer ")
@@ -159,32 +159,32 @@ func (s *Server) MessagePage(ctx context.Context, req *pb.MessagePageRequest) (*
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "error").Inc()
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	messageID, err := strconv.ParseInt(req.MessageId, 10, 64)
 	if err != nil {
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "error").Inc()
-		return nil, status.Error(codes.InvalidArgument, "invalid message id")
+		return nil, status.Error(codes.InvalidArgument, "Некорректный идентификатор сообщения")
 	}
 
 	ok, err := s.messageUCase.IsUsersMessage(ctx, messageID, profileID)
 	if err != nil {
 		log.Error(op + ": failed to check if it is users message: " + err.Error())
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "error").Inc()
-		return nil, status.Error(codes.Internal, "could not get message")
+		return nil, status.Error(codes.Internal, "Не удалось получить письмо")
 	}
 	if !ok {
 		log.Debug(op + ": unpermitted access to message")
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "error").Inc()
-		return nil, status.Error(codes.PermissionDenied, "access denied")
+		return nil, status.Error(codes.PermissionDenied, "Доступ запрещен")
 	}
 
 	fullMessage, err := s.messageUCase.FindFullByMessageID(ctx, messageID, profileID)
 	if err != nil {
 		log.Error(op + ": failed to get message: " + err.Error())
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "get_message", "error").Inc()
-		return nil, status.Error(codes.Internal, "could not get message")
+		return nil, status.Error(codes.Internal, "Не удалось получить письмо")
 	}
 
 	// Помечаем как прочитанное без дополнительной проверки, чтобы не пропускать обновление статуса
@@ -237,7 +237,7 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	if err := s.validateReplyRequest(req); err != nil {
@@ -258,7 +258,7 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 	if err != nil {
 		log.Error(op + ": failed to resolve sender email: " + err.Error())
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
-		return nil, status.Error(codes.Internal, "could not resolve sender")
+		return nil, status.Error(codes.Internal, "Не удалось определить отправителя")
 	}
 
 	for _, receiver := range req.Receivers {
@@ -268,7 +268,7 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 			if err != nil {
 				log.Error(op + ": failed to reply to message: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not reply to message")
+				return nil, status.Error(codes.Internal, "Не удалось отправить ответ")
 			}
 
 			for _, file := range req.Files {
@@ -277,7 +277,7 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 				if err != nil {
 					log.Error(op + ": failed to save file: " + err.Error())
 					metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
-					return nil, status.Error(codes.Internal, "could not save file")
+					return nil, status.Error(codes.Internal, "Не удалось сохранить файл")
 				}
 
 				metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
@@ -290,13 +290,13 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 			if err := s.sendExternalMail(senderEmail, email, safeTopic, safeText, req.Files); err != nil {
 				log.Error(op + ": failed to send external reply: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not send external reply")
+				return nil, status.Error(codes.Internal, "Не удалось отправить внешний ответ")
 			}
 			msgID, err := s.messageUCase.SaveOutgoingExternalMessage(ctx, profileID, safeTopic, safeText, []string{email})
 			if err != nil {
 				log.Error(op + ": failed to save external outgoing reply: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not save external reply")
+				return nil, status.Error(codes.Internal, "Не удалось сохранить внешний ответ")
 			}
 
 			for _, file := range req.Files {
@@ -304,7 +304,7 @@ func (s *Server) Reply(ctx context.Context, req *pb.ReplyRequest) (*pb.ReplyResp
 				if _, err := s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size); err != nil {
 					log.Error(op + ": failed to save external reply file: " + err.Error())
 					metrics.MessagesOperationsTotal.WithLabelValues("messages", "reply", "error").Inc()
-					return nil, status.Error(codes.Internal, "could not save external reply file")
+					return nil, status.Error(codes.Internal, "Не удалось сохранить файл внешнего ответа")
 				}
 				metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
 				metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
@@ -334,7 +334,7 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	if err := s.validateSendRequest(req); err != nil {
@@ -349,7 +349,7 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	if err != nil {
 		log.Error(op + ": failed to resolve sender email: " + err.Error())
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-		return nil, status.Error(codes.Internal, "could not resolve sender")
+		return nil, status.Error(codes.Internal, "Не удалось определить отправителя")
 	}
 
 	for _, receiver := range req.Receivers {
@@ -359,7 +359,7 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 			if err != nil {
 				log.Error(op + ": failed to send message: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not send message")
+				return nil, status.Error(codes.Internal, "Не удалось отправить письмо")
 			}
 
 			if messageID == 0 {
@@ -367,13 +367,13 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 				if err != nil {
 					log.Error(op + ": failed to save thread: " + err.Error())
 					metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-					return nil, status.Error(codes.Internal, "could not save thread")
+					return nil, status.Error(codes.Internal, "Не удалось создать цепочку")
 				}
 
 				if err := s.messageUCase.SaveThreadIdToMessage(ctx, msgID, threadID); err != nil {
 					log.Error(op + ": failed to save thread id: " + err.Error())
 					metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-					return nil, status.Error(codes.Internal, "could not save thread id")
+					return nil, status.Error(codes.Internal, "Не удалось привязать цепочку")
 				}
 			}
 
@@ -383,7 +383,7 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 				if err != nil {
 					log.Error(op + ": failed to save file: " + err.Error())
 					metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-					return nil, status.Error(codes.Internal, "could not save file")
+					return nil, status.Error(codes.Internal, "Не удалось сохранить файл")
 				}
 
 				metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
@@ -396,14 +396,14 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 			if err := s.sendExternalMail(senderEmail, email, safeTopic, safeText, req.Files); err != nil {
 				log.Error(op + ": failed to send external message: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not send external message")
+				return nil, status.Error(codes.Internal, "Не удалось отправить внешнее письмо")
 			}
 
 			msgID, err := s.messageUCase.SaveOutgoingExternalMessage(ctx, profileID, safeTopic, safeText, []string{email})
 			if err != nil {
 				log.Error(op + ": failed to save external outgoing message: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not save external message")
+				return nil, status.Error(codes.Internal, "Не удалось сохранить внешнее письмо")
 			}
 
 			for _, file := range req.Files {
@@ -411,7 +411,7 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 				if _, err := s.messageUCase.SaveFile(ctx, msgID, file.Name, file.FileType, file.StoragePath, size); err != nil {
 					log.Error(op + ": failed to save external file: " + err.Error())
 					metrics.MessagesOperationsTotal.WithLabelValues("messages", "send", "error").Inc()
-					return nil, status.Error(codes.Internal, "could not save external file")
+					return nil, status.Error(codes.Internal, "Не удалось сохранить внешний файл")
 				}
 				metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
 				metrics.FileOperations.WithLabelValues("messages", "upload", "ok").Inc()
@@ -443,24 +443,24 @@ func (s *Server) Ingest(ctx context.Context, req *pb.IngestRequest) (*pb.IngestR
 			}
 		}
 		if secret == "" || secret != s.ingestSecret {
-			return nil, status.Error(codes.Unauthenticated, "unauthorized")
+			return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 		}
 	}
 
 	senderEmail := strings.TrimSpace(req.SenderEmail)
 	if senderEmail == "" || len(req.Receivers) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "sender and receivers are required")
+		return nil, status.Error(codes.InvalidArgument, "Требуются отправитель и получатели")
 	}
 
 	senderUser, senderDomain, err := splitEmailParts(senderEmail)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid sender email")
+		return nil, status.Error(codes.InvalidArgument, "Некорректный email отправителя")
 	}
 
 	senderProfileID, err := s.messageUCase.EnsureBaseProfile(ctx, senderUser, senderDomain)
 	if err != nil {
 		log.Error(op + ": failed to ensure sender profile: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not ensure sender")
+		return nil, status.Error(codes.Internal, "Не удалось сохранить отправителя")
 	}
 	if err := s.messageUCase.EnsureProfileForBase(ctx, senderProfileID, req.SenderName); err != nil {
 		log.Warn(op + ": failed to update sender name: " + err.Error())
@@ -568,12 +568,12 @@ func sanitizeContent(topic, text string) (string, string) {
 func (s *Server) resolveThreadRoot(ctx context.Context, req *pb.ReplyRequest, profileID int64, log *slog.Logger) (int64, error) {
 	rootMessageRaw := strings.TrimSpace(req.RootMessageId)
 	if rootMessageRaw == "" {
-		return 0, status.Error(codes.InvalidArgument, "thread root is required")
+		return 0, status.Error(codes.InvalidArgument, "Не указан корень цепочки")
 	}
 
 	rootMessageID, err := strconv.ParseInt(rootMessageRaw, 10, 64)
 	if err != nil {
-		return 0, status.Error(codes.InvalidArgument, "invalid root message id")
+		return 0, status.Error(codes.InvalidArgument, "Некорректный идентификатор корневого письма")
 	}
 
 	threadRootRaw := strings.TrimSpace(req.ThreadRoot)
@@ -603,12 +603,12 @@ func (s *Server) resolveThreadRoot(ctx context.Context, req *pb.ReplyRequest, pr
 	threadRoot, err := s.messageUCase.SaveThread(ctx, rootMessageID)
 	if err != nil {
 		log.Error("failed to create thread for reply: " + err.Error())
-		return 0, status.Error(codes.Internal, "could not create thread")
+		return 0, status.Error(codes.Internal, "Не удалось создать цепочку")
 	}
 
 	if err := s.messageUCase.SaveThreadIdToMessage(ctx, rootMessageID, threadRoot); err != nil {
 		log.Error("failed to attach thread to message: " + err.Error())
-		return 0, status.Error(codes.Internal, "could not attach thread to message")
+		return 0, status.Error(codes.Internal, "Не удалось привязать цепочку к письму")
 	}
 
 	return threadRoot, nil
@@ -750,18 +750,18 @@ func (s *Server) MarkAsSpam(ctx context.Context, req *pb.MarkAsSpamRequest) (*pb
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	messageID, err := strconv.ParseInt(req.MessageId, 10, 64)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid message id")
+		return nil, status.Error(codes.InvalidArgument, "Некорректный идентификатор сообщения")
 	}
 
 	if err := s.messageUCase.MarkMessageAsSpam(ctx, messageID, profileID); err != nil {
 		log.Warn("failed to mark message as spam: " + err.Error())
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "mark_spam", "error").Inc()
-		return nil, status.Error(codes.Internal, "could not mark message as spam")
+		return nil, status.Error(codes.Internal, "Не удалось пометить письмо как спам")
 	}
 
 	metrics.MessagesOperationsTotal.WithLabelValues("messages", "mark_spam", "ok").Inc()
@@ -1102,7 +1102,7 @@ func (s *Server) SaveDraft(ctx context.Context, req *pb.SaveDraftRequest) (*pb.S
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "save_draft", "error").Inc()
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	if err := s.validateDraftRequest(req); err != nil {
@@ -1124,7 +1124,7 @@ func (s *Server) SaveDraft(ctx context.Context, req *pb.SaveDraftRequest) (*pb.S
 		if err != nil {
 			log.Error(op + ": failed to save draft: " + err.Error())
 			metrics.MessagesOperationsTotal.WithLabelValues("messages", "save_draft", "error").Inc()
-			return nil, status.Error(codes.Internal, "could not save draft")
+			return nil, status.Error(codes.Internal, "Не удалось сохранить черновик")
 		}
 		draftID = msgID
 
@@ -1134,29 +1134,29 @@ func (s *Server) SaveDraft(ctx context.Context, req *pb.SaveDraftRequest) (*pb.S
 				threadID, err = strconv.ParseInt(req.ThreadId, 10, 64)
 				if err != nil {
 					log.Error(op + ": invalid thread id: " + err.Error())
-					return nil, status.Error(codes.InvalidArgument, "invalid thread id")
+					return nil, status.Error(codes.InvalidArgument, "Некорректный идентификатор цепочки")
 				}
 			} else {
 				threadID, err = s.messageUCase.SaveThread(ctx, draftID)
 				if err != nil {
 					log.Error(op + ": failed to save thread: " + err.Error())
-					return nil, status.Error(codes.Internal, "could not save thread")
+					return nil, status.Error(codes.Internal, "Не удалось создать цепочку")
 				}
 			}
 			if err := s.messageUCase.SaveThreadIdToMessage(ctx, draftID, threadID); err != nil {
 				log.Error(op + ": failed to save thread id: " + err.Error())
-				return nil, status.Error(codes.Internal, "could not save thread id")
+				return nil, status.Error(codes.Internal, "Не удалось привязать цепочку")
 			}
 
 			draftFolderID, err := s.messageUCase.GetFolderByType(ctx, profileID, "draft")
 			if err != nil {
 				log.Error(op + ": failed to get draft folder: " + err.Error())
-				return nil, status.Error(codes.Internal, "could not get draft folder")
+				return nil, status.Error(codes.Internal, "Не удалось получить папку черновиков")
 			}
 
 			if err := s.messageUCase.MoveToFolder(ctx, profileID, draftID, draftFolderID); err != nil {
 				log.Error(op + ": failed to put draft to folder: " + err.Error())
-				return nil, status.Error(codes.Internal, "could not save draft to folder")
+				return nil, status.Error(codes.Internal, "Не удалось сохранить черновик в папку")
 			}
 		}
 
@@ -1166,7 +1166,7 @@ func (s *Server) SaveDraft(ctx context.Context, req *pb.SaveDraftRequest) (*pb.S
 			if err != nil {
 				log.Error(op + ": failed to save file: " + err.Error())
 				metrics.MessagesOperationsTotal.WithLabelValues("messages", "save_draft", "error").Inc()
-				return nil, status.Error(codes.Internal, "could not save file")
+				return nil, status.Error(codes.Internal, "Не удалось сохранить файл")
 			}
 
 			metrics.FileSize.WithLabelValues("messages", file.FileType).Observe(float64(size))
@@ -1242,32 +1242,32 @@ func (s *Server) DeleteDraft(ctx context.Context, req *pb.DeleteDraftRequest) (*
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	if req.DraftId == "" {
-		return nil, status.Error(codes.InvalidArgument, "draft id is required")
+		return nil, status.Error(codes.InvalidArgument, "Не указан идентификатор черновика")
 	}
 
 	draftID, err := strconv.ParseInt(req.DraftId, 10, 64)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid draft id format")
+		return nil, status.Error(codes.InvalidArgument, "Некорректный формат идентификатора черновика")
 	}
 
 	belongs, err := s.messageUCase.IsDraftBelongsToUser(ctx, draftID, profileID)
 	if err != nil {
 		log.Error(op + ": failed to check draft ownership: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not verify draft ownership")
+		return nil, status.Error(codes.Internal, "Не удалось подтвердить права на черновик")
 	}
 
 	if !belongs {
-		return nil, status.Error(codes.PermissionDenied, "draft not found or access denied")
+		return nil, status.Error(codes.PermissionDenied, "Черновик не найден или доступ запрещен")
 	}
 
 	err = s.messageUCase.DeleteDraft(ctx, draftID, profileID)
 	if err != nil {
 		log.Error(op + ": failed to delete draft: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not delete draft")
+		return nil, status.Error(codes.Internal, "Не удалось удалить черновик")
 	}
 
 	log.Debug("draft deleted successfully", "draft_id", draftID)
@@ -1288,31 +1288,31 @@ func (s *Server) SendDraft(ctx context.Context, req *pb.SendDraftRequest) (*pb.S
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send_draft", "error").Inc()
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	draftID, err := strconv.ParseInt(req.DraftId, 10, 64)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid draft id")
+		return nil, status.Error(codes.InvalidArgument, "Некорректный идентификатор черновика")
 	}
 
 	belongs, err := s.messageUCase.IsDraftBelongsToUser(ctx, draftID, profileID)
 	if err != nil {
 		log.Error(op + ": failed to check draft ownership: " + err.Error())
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send_draft", "error").Inc()
-		return nil, status.Error(codes.Internal, "could not verify draft ownership")
+		return nil, status.Error(codes.Internal, "Не удалось подтвердить права на черновик")
 	}
 
 	if !belongs {
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send_draft", "error").Inc()
-		return nil, status.Error(codes.PermissionDenied, "draft not found or access denied")
+		return nil, status.Error(codes.PermissionDenied, "Черновик не найден или доступ запрещен")
 	}
 
 	err = s.messageUCase.SendDraft(ctx, draftID, profileID)
 	if err != nil {
 		log.Error(op + ": failed to send draft: " + err.Error())
 		metrics.MessagesOperationsTotal.WithLabelValues("messages", "send_draft", "error").Inc()
-		return nil, status.Error(codes.Internal, "could not send draft")
+		return nil, status.Error(codes.Internal, "Не удалось отправить черновик")
 	}
 
 	metrics.MessagesSentTotal.WithLabelValues("draft_send").Inc()

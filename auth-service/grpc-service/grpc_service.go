@@ -45,7 +45,7 @@ func (s *Server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 	if req.Login == "" || req.Password == "" {
 		metrics.AuthLoginAttempts.WithLabelValues("error").Inc()
 		metrics.BusinessErrorsTotal.WithLabelValues("auth-service", "login", "validation_error").Inc()
-		return nil, status.Error(codes.InvalidArgument, "login and password are required")
+		return nil, status.Error(codes.InvalidArgument, "Требуются логин и пароль")
 	}
 
 	req.Login = strings.TrimSpace(req.Login)
@@ -59,7 +59,7 @@ func (s *Server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 		log.Debug(op + ": login failed: " + err.Error())
 		metrics.AuthLoginAttempts.WithLabelValues("error").Inc()
 		metrics.BusinessErrorsTotal.WithLabelValues("auth-service", "login", "auth_failed").Inc()
-		return nil, status.Error(codes.Unauthenticated, "invalid login or password")
+		return nil, status.Error(codes.Unauthenticated, "Неверный логин или пароль")
 	}
 
 	accToken, refToken, err := s.generateTokenPair(userID)
@@ -67,7 +67,7 @@ func (s *Server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 		log.Error(op + ": failed to generate token pair: " + err.Error())
 		metrics.AuthLoginAttempts.WithLabelValues("error").Inc()
 		metrics.BusinessErrorsTotal.WithLabelValues("auth-service", "login", "token_generation_error").Inc()
-		return nil, status.Error(codes.Internal, "could not process login")
+		return nil, status.Error(codes.Internal, "Не удалось выполнить вход")
 	}
 
 	metrics.AuthLoginAttempts.WithLabelValues("success").Inc()
@@ -86,7 +86,7 @@ func (s *Server) Signup(ctx context.Context, req *pb.SignupRequest) (*pb.SignupR
 	if req.Username == "" || req.Password == "" {
 		metrics.AuthSignupAttempts.WithLabelValues("error").Inc()
 		metrics.BusinessErrorsTotal.WithLabelValues("auth-service", "signup", "validation_error").Inc()
-		return nil, status.Error(codes.InvalidArgument, "all fields are required")
+		return nil, status.Error(codes.InvalidArgument, "Заполните все поля")
 	}
 
 	signupReq := profile.SignupRequest{
@@ -103,10 +103,10 @@ func (s *Server) Signup(ctx context.Context, req *pb.SignupRequest) (*pb.SignupR
 		metrics.AuthSignupAttempts.WithLabelValues("error").Inc()
 		if errors.Is(err, profile.ErrUserAlreadyExists) {
 			metrics.BusinessErrorsTotal.WithLabelValues("auth-service", "signup", "user_exists").Inc()
-			return nil, status.Error(codes.AlreadyExists, "user with this username already exists")
+			return nil, status.Error(codes.AlreadyExists, "Пользователь с таким логином уже существует")
 		}
 		metrics.BusinessErrorsTotal.WithLabelValues("auth-service", "signup", "internal_error").Inc()
-		return nil, status.Error(codes.Internal, "could not process signup")
+		return nil, status.Error(codes.Internal, "Не удалось завершить регистрацию")
 	}
 
 	accToken, refToken, err := s.generateTokenPair(userID)
@@ -114,7 +114,7 @@ func (s *Server) Signup(ctx context.Context, req *pb.SignupRequest) (*pb.SignupR
 		log.Error(op + ": failed to generate token pair: " + err.Error())
 		metrics.AuthSignupAttempts.WithLabelValues("error").Inc()
 		metrics.BusinessErrorsTotal.WithLabelValues("auth-service", "signup", "token_generation_error").Inc()
-		return nil, status.Error(codes.Internal, "could not process signup")
+		return nil, status.Error(codes.Internal, "Не удалось завершить регистрацию")
 	}
 
 	metrics.AuthSignupAttempts.WithLabelValues("success").Inc()
@@ -133,7 +133,7 @@ func (s *Server) Refresh(ctx context.Context, req *pb.RefreshRequest) (*pb.Refre
 	if refreshToken == "" {
 		metrics.AuthTokenRefreshes.WithLabelValues("error").Inc()
 		metrics.BusinessErrorsTotal.WithLabelValues("auth-service", "refresh", "empty_token").Inc()
-		return nil, status.Error(codes.Unauthenticated, "refresh token is required")
+		return nil, status.Error(codes.Unauthenticated, "Требуется refresh token")
 	}
 
 	validationStart := time.Now()
@@ -155,7 +155,7 @@ func (s *Server) Refresh(ctx context.Context, req *pb.RefreshRequest) (*pb.Refre
 		metrics.JWTValidationErrors.WithLabelValues("refresh", errorType).Inc()
 
 		metrics.BusinessErrorsTotal.WithLabelValues("auth-service", "refresh", "invalid_token").Inc()
-		return nil, status.Error(codes.Unauthenticated, "invalid refresh token")
+		return nil, status.Error(codes.Unauthenticated, "Некорректный refresh token")
 	}
 
 	newAccessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -169,7 +169,7 @@ func (s *Server) Refresh(ctx context.Context, req *pb.RefreshRequest) (*pb.Refre
 		log.Error("failed to sign new access token", slog.String("error", err.Error()))
 		metrics.AuthTokenRefreshes.WithLabelValues("error").Inc()
 		metrics.BusinessErrorsTotal.WithLabelValues("auth-service", "refresh", "token_signing_error").Inc()
-		return nil, status.Error(codes.Internal, "failed to generate access token")
+		return nil, status.Error(codes.Internal, "Не удалось сформировать access token")
 	}
 
 	metrics.AuthTokenRefreshes.WithLabelValues("success").Inc()

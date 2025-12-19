@@ -56,12 +56,12 @@ func New(profileUCase ProfileUsecase, avatarUCase AvatarUsecase, secret []byte) 
 func (s *Server) getProfileID(ctx context.Context) (int64, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return 0, status.Error(codes.Unauthenticated, "metadata is not provided")
+		return 0, status.Error(codes.Unauthenticated, "Метаданные отсутствуют")
 	}
 
 	tokens := md.Get("authorization")
 	if len(tokens) == 0 {
-		return 0, status.Error(codes.Unauthenticated, "authorization token is not provided")
+		return 0, status.Error(codes.Unauthenticated, "Отсутствует токен авторизации")
 	}
 
 	tokenString := strings.TrimPrefix(tokens[0], "Bearer ")
@@ -75,16 +75,16 @@ func (s *Server) GetProfile(ctx context.Context, req *pb.GetProfileRequest) (*pb
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	profileInfo, err := s.profileUCase.FindInfoByID(ctx, profileID)
 	if err != nil {
 		log.Error(op + ": failed to get profile: " + err.Error())
 		if errors.Is(err, commonE.ErrNotFound) {
-			return nil, status.Error(codes.NotFound, "profile not found")
+			return nil, status.Error(codes.NotFound, "Профиль не найден")
 		}
-		return nil, status.Error(codes.Internal, "could not get profile")
+		return nil, status.Error(codes.Internal, "Не удалось получить профиль")
 	}
 
 	if err := s.enrichAvatarURL(ctx, &profileInfo); err != nil {
@@ -103,7 +103,7 @@ func (s *Server) UpdateProfile(ctx context.Context, req *pb.UpdateProfileRequest
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	updateReq := profile.UpdateProfileRequest{
@@ -116,16 +116,16 @@ func (s *Server) UpdateProfile(ctx context.Context, req *pb.UpdateProfileRequest
 
 	if err := s.profileUCase.UpdateProfileInfo(ctx, profileID, updateReq); err != nil {
 		log.Error(op + ": failed to update profile: " + err.Error())
-		return nil, status.Error(codes.InvalidArgument, "could not update profile")
+		return nil, status.Error(codes.InvalidArgument, "Не удалось обновить профиль")
 	}
 
 	profileInfo, err := s.profileUCase.FindInfoByID(ctx, profileID)
 	if err != nil {
 		log.Error(op + ": failed to get updated profile: " + err.Error())
 		if errors.Is(err, commonE.ErrNotFound) {
-			return nil, status.Error(codes.NotFound, "profile not found")
+			return nil, status.Error(codes.NotFound, "Профиль не найден")
 		}
-		return nil, status.Error(codes.Internal, "could not get updated profile")
+		return nil, status.Error(codes.Internal, "Не удалось получить обновленный профиль")
 	}
 
 	if err := s.enrichAvatarURL(ctx, &profileInfo); err != nil {
@@ -144,13 +144,13 @@ func (s *Server) Settings(ctx context.Context, req *pb.SettingsRequest) (*pb.Set
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	settings, err := s.profileUCase.FindSettingsByProfileId(ctx, profileID)
 	if err != nil {
 		log.Error(op + ": failed to get settings: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not get settings")
+		return nil, status.Error(codes.Internal, "Не удалось получить настройки")
 	}
 
 	return &pb.SettingsResponse{
@@ -171,12 +171,12 @@ func (s *Server) UploadAvatar(ctx context.Context, req *pb.UploadAvatarRequest) 
 
 	profileID, err := s.getProfileID(ctx)
 	if err != nil {
-		return nil, status.Error(codes.Unauthenticated, "unauthorized")
+		return nil, status.Error(codes.Unauthenticated, "Не авторизован")
 	}
 
 	// Проверка размера файла
 	if len(req.AvatarData) > maxAvatarSize {
-		return nil, status.Error(codes.InvalidArgument, "file too large")
+		return nil, status.Error(codes.InvalidArgument, "Файл слишком большой")
 	}
 
 	metrics.FileSize.WithLabelValues("profile-service", "avatar").Observe(float64(len(req.AvatarData)))
@@ -187,13 +187,13 @@ func (s *Server) UploadAvatar(ctx context.Context, req *pb.UploadAvatarRequest) 
 	objectName, presignedURL, err := s.avatarUCase.UploadAvatar(ctx, stringID, fileReader, int64(len(req.AvatarData)), req.FileName)
 	if err != nil {
 		log.Error(op + ": failed to upload avatar: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not upload avatar")
+		return nil, status.Error(codes.Internal, "Не удалось загрузить аватар")
 	}
 
 	err = s.profileUCase.InsertProfileAvatar(ctx, profileID, objectName)
 	if err != nil {
 		log.Error(op + ": failed to insert avatar: " + err.Error())
-		return nil, status.Error(codes.Internal, "could not save avatar")
+		return nil, status.Error(codes.Internal, "Не удалось сохранить аватар")
 	}
 
 	opStatus = "success"
