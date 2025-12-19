@@ -528,23 +528,30 @@ func storeAttachment(ctx context.Context, client *minio.Client, bucket string, a
 }
 
 func sendToMessagesService(ctx context.Context, cfg config, client pb.MessagesServiceClient, payload ingestPayload, log *slog.Logger) error {
+	safe := func(s string) string {
+		return strings.ToValidUTF8(s, "")
+	}
+
 	var files []*pb.File
 	for _, f := range payload.Files {
 		files = append(files, &pb.File{
-			Name:        f.Name,
-			FileType:    f.FileType,
+			Name:        safe(f.Name),
+			FileType:    safe(f.FileType),
 			Size:        strconv.FormatInt(f.Size, 10),
-			StoragePath: f.StoragePath,
+			StoragePath: safe(f.StoragePath),
 		})
 	}
 
 	req := &pb.IngestRequest{
-		SenderEmail: payload.SenderEmail,
-		SenderName:  payload.SenderName,
-		Receivers:   payload.Receivers,
-		Subject:     payload.Subject,
-		Text:        payload.Text,
+		SenderEmail: safe(payload.SenderEmail),
+		SenderName:  safe(payload.SenderName),
+		Receivers:   nil,
+		Subject:     safe(payload.Subject),
+		Text:        safe(payload.Text),
 		Files:       files,
+	}
+	for _, r := range payload.Receivers {
+		req.Receivers = append(req.Receivers, safe(r))
 	}
 
 	md := metadata.New(nil)
