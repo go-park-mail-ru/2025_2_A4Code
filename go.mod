@@ -17,7 +17,6 @@ require (
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/golang-migrate/migrate/v4 v4.19.0
-	github.com/golang/mock v1.6.0
 	github.com/jackc/pgx/v4 v4.18.3
 	github.com/minio/minio-go/v7 v7.0.97
 	github.com/prometheus/client_golang v1.23.2
