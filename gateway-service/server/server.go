@@ -118,9 +118,8 @@ func (s *Server) Start(ctx context.Context) error {
 	log := logger.GetLogger(ctx)
 	slog.SetDefault(log)
 
-	// Р—Р°РїСѓСЃРє СЃРµСЂРІРµСЂР° РјРµС‚СЂРёРє
 	go func() {
-		http.Handle("/metrics", promhttp.Handler()) // promhttp СЌРєСЃРїРѕСЂС‚РёСЂСѓРµС‚ CPU/Mem Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё
+		http.Handle("/metrics", promhttp.Handler())
 		metricsAddr := ":" + s.cfg.AppConfig.GatewayMetricsPort
 		log.Info("Gateway metrics server started on " + metricsAddr)
 		if err := http.ListenAndServe(metricsAddr, nil); err != nil {
